@@ -32,6 +32,16 @@ export const EQUITY_UNIVERSES = {
   demo: new Set(["stock"]),
 };
 
+// ETFs and exchange indices are analysed (charts, screens, alerts) but never
+// enter the CW / EW index construction, breadth or Weight Watcher.
+export const FUND_UNIVERSES = { us_etfs: "ETF", india_etfs: "ETF", global_etfs: "ETF", demo_etfs: "ETF", us_indices: "Index", india_indices: "Index", global_indices: "Index", demo_indices: "Index" };
+const UNIVERSE_COUNTRY = { us_etfs: "United States", us_indices: "United States", india_etfs: "India", india_indices: "India" };
+
+export function isAnalysableRow(row) {
+  if (FUND_UNIVERSES[row.universe]) return true;
+  return isEquityRow(row);
+}
+
 export function isEquityRow(row) {
   const types = EQUITY_UNIVERSES[row.universe];
   if (!types || !types.has(row.type)) return false;
@@ -48,8 +58,9 @@ export function toSecurity(row, indiaMap = null) {
   let industry = row.industry ?? null;
   if (universe === "us_stocks") industry = INDUSTRY_MAP[row.symbol] ?? industry;
   if (universe === "india_stocks" && indiaMap) industry = indiaMap[row.symbol] ?? indiaMap[nseBaseSymbol(row.symbol)] ?? industry;
-  const g = classifyGics({ symbol: row.symbol, industry, sector: row.sector, universe });
-  const country = canonicalCountry(row.country) || (universe === "india_stocks" ? "India" : universe === "us_stocks" ? "United States" : null);
+  const fund = FUND_UNIVERSES[universe] || null;
+  const g = fund ? { sector: fund, industryGroup: row.etf_category || fund, source: "asset_class" } : classifyGics({ symbol: row.symbol, industry, sector: row.sector, universe });
+  const country = canonicalCountry(row.country) || UNIVERSE_COUNTRY[universe] || (universe === "india_stocks" ? "India" : universe === "us_stocks" ? "United States" : null);
   const meta = countryMeta(country);
   const currency = row.currency || meta.currency || "USD";
   const { major, divisor } = majorCurrency(currency);
@@ -80,6 +91,7 @@ export function toSecurity(row, indiaMap = null) {
     capCurrency: capCurrency ? majorCurrency(capCurrency).major : null,
     capUsd: row.market_cap_usd != null ? Number(row.market_cap_usd) : null,
     active: row.is_active !== false,
+    assetClass: fund || "Stock",
   };
 }
 

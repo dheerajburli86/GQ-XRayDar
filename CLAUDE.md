@@ -19,10 +19,22 @@ NOT part of the heatmap dashboard and must not be wired into it.
   carried FX and stale constituents are estimated / flagged; keep it that way.
 - The demo is synthetic and must keep its "DEMO DATA" banner.
 
+- **The server sends, the GQ agent polls.** `server/` uses the GQ agent's bot token for
+  `sendMessage` only. Never add `getUpdates` / a webhook here: Telegram allows one poller.
+- **Alerts fire on an edge, once.** `tas_alert_event`'s UNIQUE key is the de-duplication and
+  the row is inserted BEFORE anything is sent; template rules seed silently on first sight.
+  Do not move either into memory or reorder them.
+- **User tables are server-only.** `tas_user*`, `tas_alert_event`, `tas_task`, `tas_push_sub`,
+  `tas_digest_log` have RLS on and no policies; the browser reaches them only through
+  `server/` (Supabase login + @gquants.com, or the agent secret).
+- **Shared maths stays in `engine/`**: the chart read (`chartRead.js`) and the report card
+  (`scorecard.js`) run in the browser and on the server from the same file.
+
 ## Checks before committing
 
 ```
 npm test && npm run lint && npm run build
+npm run test:server   # needs the local Postgres below with an engine run + 20261114 migration
 ```
 
 Local end-to-end check of the batch engine against a throw-away Postgres:

@@ -4,7 +4,10 @@ A standalone dashboard and calculation engine for global equity technical analys
 CW / EW index hierarchy (local currency and USD), EWCW, Weight Watcher, the four
 stacked RSIACC / RSCACC / RSIMMA / RSCMMA screens, relative strength, early-stage
 scanning, sector rotation, market breadth, heatmaps, explainable AI setup scores,
-a natural-language and voice command layer, alerts, backtesting and briefs.
+a natural-language and voice command layer, a chart lab (Heikin-Ashi, Renko, Kagi,
+Point & Figure, key levels, drawings, busiest prices), 13 scanners, indicator alerts
+on Telegram, morning / weekly summaries, tasks, the GQ Agent, a practice portfolio,
+backtesting and briefs. Light, dark or device theme; installable on a phone.
 
 It is **independent of the heatmap dashboard**: its own repository, its own web app,
 its own tables. It only *reads* market data from the heatmap's Supabase database.
@@ -17,8 +20,15 @@ its own tables. It only *reads* market data from the heatmap's Supabase database
         ┌───────▼────────┐  writes tas_* tables   ┌──────────▼─────────┐
         │ cli/run.mjs    │ ─────────────────────► │ web app (Vite/React)│
         │ engine/ (JS)   │                        │ reads tas_* + bars  │
-        └────────────────┘                        └─────────────────────┘
+        └────────────────┘                        └─────────┬───────────┘
+                                                            │ login, alerts, tasks, agent
+                         ┌──────────────────┐  ta_* tools  ┌─▼────────────────┐
+         Telegram ◄──────│ GQ agent (bot)   │◄────────────►│ server/ (Node)   │
+                         └──────────────────┘   sends alerts└──────────────────┘
 ```
+
+**Deploying everything (Railway servers, Vercel, Telegram): see [docs/DEPLOY.md](docs/DEPLOY.md).**
+Where each point of the feature PDF lives: [docs/PDF_FEATURES.md](docs/PDF_FEATURES.md).
 
 Until the database is connected the app runs on a **synthetic demo universe**
 (generated in the browser and pushed through the exact same engine), with a
@@ -90,10 +100,18 @@ Everything below only **adds** `tas_*` tables. Nothing the heatmap owns is alter
    add `DATABASE_URL` as a repository secret). Do not schedule it during the India
    refresh window the heatmap documents (10:00–11:00 UTC).
 
-## 4. Deploy the web app
+## 4. Deploy (web app, TA server, engine, Telegram)
 
-Any static host. On Vercel: import the repo, framework *Vite*, add the two
-`VITE_SUPABASE_*` variables, deploy. `vercel.json` is included.
+Step by step in [docs/DEPLOY.md](docs/DEPLOY.md): the engine and the TA server on
+Railway, the web app on Vercel, and the GQ agent patch that brings the technical
+analysis tools and `/ta link` to Telegram.
+
+Run the TA server locally against a test database:
+
+```bash
+AUTH_MODE=dev DATABASE_URL=postgres://postgres@localhost:5433/postgres TA_API_SECRET=dev node server/index.mjs
+npm run test:server      # end-to-end server test (needs that local database with an engine run)
+```
 
 ---
 
@@ -113,10 +131,13 @@ Any static host. On Vercel: import the repo, framework *Vite*, add the two
 | Database schema (tas_* only) | `supabase/migrations/` |
 | Web app | `src/` (pages in `src/pages/`) |
 | Requirement traceability (all 116) | `docs/REQUIREMENTS_TRACE.md`, in-app *Data centre → Requirement trace* |
+| Alert rules, report card, chart read, chart styles | `engine/rules.js`, `engine/scorecard.js`, `engine/chartRead.js`, `engine/chartTools.js`, `engine/candles.js` |
+| TA server (auth, alerts, digests, tasks, agent proxy) | `server/` (`server/index.mjs` lists every route) |
+| Login, account sync, agent panel, push | `src/lib/server.js`, `src/components/Account.jsx`, `src/components/AgentPanel.jsx`, `public/sw.js` |
 
 ## Not yet connected (by design)
 
 Finxray feed, IMB framework, LOCOM (and the GLOCOM formula itself) need definitions
-or credentials; Telegram and the GQ agent come next. Each has a documented plug-in
-point — see *Data centre → Integrations*. Watchlists, notes, saved screens, layouts
-and alerts are stored in the browser until user accounts are added.
+or credentials. Each has a documented plug-in point — see *Data centre → Integrations*.
+Without the TA server the app still works: watchlists, notes and alerts stay in the
+browser and alerts are previewed in the app instead of sent on Telegram.

@@ -169,6 +169,26 @@ export function generateDemo({ seed = 20261113, from = "2016-01-04", to = "2026-
       fundamentals.set(sid, makeFundamentals(rnd, N, capLocal, maj, days[lastT], shares));
     }
   }
+  // a few ETFs and exchange indices: analysed like stocks, never inside the CW / EW indices
+  const FUNDS = [["United States", "USD", "demo_etfs", "SPDEMO", "Demo US Large Cap ETF", 1.0], ["India", "INR", "demo_etfs", "NIFDEMO", "Demo India 50 ETF", 1.1],
+    ["Japan", "JPY", "demo_etfs", "JPDEMO", "Demo Japan ETF", 0.9], ["United States", "USD", "demo_indices", "^DEMO500", "Demo 500 Index", 1.0],
+    ["India", "INR", "demo_indices", "^DEMONIFTY", "Demo Nifty Index", 1.05], ["Germany", "EUR", "demo_indices", "^DEMODAX", "Demo DAX Index", 1.0]];
+  for (const [country, ccy, uni, sym, nm, beta] of FUNDS) {
+    id++;
+    const sid = `demo-${String(id).padStart(4, "0")}`;
+    const tm = { time: [], open: [], high: [], low: [], close: [], volume: [] };
+    let p = uni === "demo_indices" ? 10000 : 100;
+    for (let t = 0; t < T; t++) {
+      const d = days[t];
+      if (holidays[country].has(d)) continue;
+      const r = beta * gF[t] + cF[country][t] * 0.8 + N() * 0.003;
+      const prev = p; p *= Math.exp(r);
+      tm.time.push(d); tm.open.push(rd(prev)); tm.high.push(rd(Math.max(prev, p) * (1 + Math.abs(N()) * 0.002))); tm.low.push(rd(Math.min(prev, p) * (1 - Math.abs(N()) * 0.002))); tm.close.push(rd(p));
+      tm.volume.push(uni === "demo_indices" ? 0 : Math.round(2e6 * Math.exp(N() * 0.3)));
+    }
+    bars.set(sid, tm);
+    rows.push({ id: sid, symbol: sym, name: nm, universe: uni, type: uni === "demo_indices" ? "index" : "etf", sector: null, industry: null, country, region: null, currency: ccy, exchange: "DEMO", etf_category: uni === "demo_etfs" ? "Equity - country" : null, market_cap_local: null, market_cap_currency: null, market_cap_usd: null, is_active: true, isin: null });
+  }
   return { days, rows, bars, fxHistory, fxLatest, fundamentals, corporateActions, generated: new Date().toISOString(), seed };
 }
 

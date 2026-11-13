@@ -12,14 +12,15 @@ import {
   aggregate, ema, emaStrict, rsi, macd, atr, rollingMax, rollingMin, mmaState, rsc, slopeSign, sma, isFiniteNum,
 } from "./indicators.js";
 import { HORIZONS, lowerBound } from "./calendar.js";
+import { candleSummary } from "./candles.js";
 
 const num = isFiniteNum;
 const r4 = (v) => (num(v) ? Math.round(v * 1e4) / 1e4 : null);
 const r2 = (v) => (num(v) ? Math.round(v * 100) / 100 : null);
 const pct = (a, b) => (num(a) && num(b) && b !== 0 ? (a / b - 1) * 100 : null);
 
-const N52 = { D: 252, W: 52, M: 12 };
-const TREND_EMA = { D: 50, W: 10, M: 6 };
+const N52 = { D: 252, W: 52, M: 12, Q: 8, Y: 5 };
+const TREND_EMA = { D: 50, W: 10, M: 6, Q: 4, Y: 3 };
 
 /** Bars-per-timeframe analysis. Returns the per-bar arrays the snapshot and events need. */
 export function analyzeTimeframe(daily, tf, m = METHODOLOGY) {
@@ -106,7 +107,7 @@ export function analyzeRsc(times, closes, bench, tf, m = METHODOLOGY) {
 export function analyzeSecurity(daily, usdClose, ccClose, bench, ctx = {}, m = METHODOLOGY) {
   const n = daily.time.length;
   if (n < 30) return null;
-  const tfs = { D: analyzeTimeframe(daily, "D", m), W: analyzeTimeframe(daily, "W", m), M: analyzeTimeframe(daily, "M", m) };
+  const tfs = { D: analyzeTimeframe(daily, "D", m), W: analyzeTimeframe(daily, "W", m), M: analyzeTimeframe(daily, "M", m), Q: analyzeTimeframe(daily, "Q", m), Y: analyzeTimeframe(daily, "Y", m) };
   const D = tfs.D, i = n - 1, c = daily.close;
 
   // --- returns (local and USD) ---
@@ -116,6 +117,8 @@ export function analyzeSecurity(daily, usdClose, ccClose, bench, ctx = {}, m = M
     retUsd[k] = i - h >= 0 ? r2(pct(usdClose[i], usdClose[i - h])) : null;
   }
   ret.YTD = r2(pct(c[i], c[lastIndexBeforeYear(daily.time, daily.time[i].slice(0, 4))] ?? null));
+  ret["1D"] = i >= 1 ? r2(pct(c[i], c[i - 1])) : null;
+  retUsd["1D"] = i >= 1 ? r2(pct(usdClose[i], usdClose[i - 1])) : null;
 
   // --- per-timeframe states ---
   const tfState = {};
@@ -135,8 +138,20 @@ export function analyzeSecurity(daily, usdClose, ccClose, bench, ctx = {}, m = M
     const slopes20 = Array.from({ length: Math.min(20, k - 5) }, (_, j) => slopeSign(A.trendE, k - 1 - j, 5));
     const reversalUp = trendSlope > 0 && slopes20.filter((x) => x < 0).length >= 15 && A.c[k] > A.trendE[k];
     const reversalDown = trendSlope < 0 && slopes20.filter((x) => x > 0).length >= 15 && A.c[k] < A.trendE[k];
+    // RSI divergence: price at a 60-candle closing high while RSI is below its reading at the prior high (bearish), or the mirror (bullish)
+    let rsiDiv = null;
+    if (k >= 40) {
+      const w0 = Math.max(0, k - 60);
+      let jH = -1, jL = -1;
+      for (let j = w0; j <= k - 5; j++) { if (jH < 0 || A.c[j] > A.c[jH]) jH = j; if (jL < 0 || A.c[j] < A.c[jL]) jL = j; }
+      if (jH >= 0 && A.c[k] >= A.c[jH] && num(A.r1[k]) && num(A.r1[jH]) && A.r1[k] < A.r1[jH] - 3) rsiDiv = "bearish";
+      else if (jL >= 0 && A.c[k] <= A.c[jL] && num(A.r1[k]) && num(A.r1[jL]) && A.r1[k] > A.r1[jL] + 3) rsiDiv = "bullish";
+    }
+    const cs = tf === "D" || tf === "W" ? candleSummary(A.b) : null;
     tfState[tf] = {
       t: A.b.time[k],
+      rsiDivergence: rsiDiv,
+      candles: cs ? cs.patterns : [], candleBull: cs ? cs.bullish : false, candleBear: cs ? cs.bearish : false,
       close: r4(A.c[k]),
       rsi: r2(A.r1[k]), rsi2: r2(A.r2[k]), rsi3: r2(A.r3[k]),
       rsiPrev: r2(A.r1[k - 1]),

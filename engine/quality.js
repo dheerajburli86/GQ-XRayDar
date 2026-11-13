@@ -45,8 +45,9 @@ export function securityIssues(sec, daily, ctx) {
       add("info", "ohlc_inconsistent", `${daily.time[i]} close outside high-low range`); break;
     }
   }
-  if (!sec.capLocal && !sec.capUsd) add("warn", "missing_market_cap", "No market cap: excluded from CW and EW indices");
-  if (sec.sector === "Others") add("info", "unclassified_sector", `No GICS sector (evidence: ${sec.classSource})`);
+  const stock = !sec.assetClass || sec.assetClass === "Stock";
+  if (stock && !sec.capLocal && !sec.capUsd) add("warn", "missing_market_cap", "No market cap: excluded from CW and EW indices");
+  if (stock && sec.sector === "Others") add("info", "unclassified_sector", `No GICS sector (evidence: ${sec.classSource})`);
   if (!sec.geoAssigned) add("warn", "unassigned_geography", `Country "${sec.country}" has no region / classification mapping`);
   if (sec.countryCurrency && sec.currencyMajor !== sec.countryCurrency) add("info", "foreign_currency_listing", `Quoted in ${sec.currency}; country currency ${sec.countryCurrency} (converted via FX)`);
   return out;

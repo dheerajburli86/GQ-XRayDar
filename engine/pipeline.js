@@ -14,7 +14,7 @@
 import { METHODOLOGY, methodologyHash } from "./methodology.js";
 import { quarterEndIndices, lowerBound, addDays } from "./calendar.js";
 import { buildFxTable, fxProvenance } from "./fx.js";
-import { toSecurity, isEquityRow } from "./classification.js";
+import { toSecurity, isAnalysableRow } from "./classification.js";
 import { countryMeta } from "./geography.js";
 import { IndexBuilder, indexKey, compactSeries } from "./indexEngine.js";
 import { computeWeightWatcher, wwTrend } from "./weightWatcher.js";
@@ -46,7 +46,8 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
   const dIdx = new Map(dates.map((d, i) => [d, i]));
   const rawRows = await source.securities();
   const indiaMap = source.indiaMap ? await source.indiaMap() : null;
-  const secs = rawRows.filter(isEquityRow).map((r) => toSecurity(r, indiaMap));
+  const secs = rawRows.filter(isAnalysableRow).map((r) => toSecurity(r, indiaMap));
+  const isStock = (sec) => sec.assetClass === "Stock";
   const byCountry = new Map();
   for (const s of secs) {
     if (!s.country) continue;
@@ -136,7 +137,8 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
     progress("indices", ci++, countries.length, country);
     const stocks = await loadCountry(country);
     if (!stocks.length) continue;
-    builder.addCountry(country, countryCcy(country, byCountry.get(country)), stocks, geo[country].region, geo[country].classification);
+    const equities = stocks.filter((x) => isStock(x.sec));
+    if (equities.length) builder.addCountry(country, countryCcy(country, byCountry.get(country)), equities, geo[country].region, geo[country].classification);
     await drainSeries();
   }
   builder.finish();
@@ -188,7 +190,7 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
 
     // country session set (>= 80% of listed stocks traded) for missing-session checks
     const cnt = new Int32Array(T), listed = new Int32Array(T);
-    for (const s of stocks) for (let t = s.first; t <= s.last; t++) { listed[t]++; if (s.traded[t]) cnt[t]++; }
+    for (const s of stocks) { if (!isStock(s.sec)) continue; for (let t = s.first; t <= s.last; t++) { listed[t]++; if (s.traded[t]) cnt[t]++; } }
     const sessions = []; let countryLatest = null;
     for (let t = 0; t < T; t++) if (listed[t] >= 3 && cnt[t] >= 0.8 * listed[t]) { sessions.push(dates[t]); }
     for (let t = T - 1; t >= 0; t--) if (cnt[t] > 0) { countryLatest = dates[t]; break; }
@@ -196,6 +198,7 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
     const recentFrom = addDays(lastDate, -365);
 
     const snaps = [], events = new Map(), issues = [];
+    const secOfId = new Map(stocks.map((x) => [x.sec.id, x.sec]));
     for (const s of stocks) {
       const { sec } = s;
       const b = toPlain(s.bars); // sources may hand over typed arrays; analysis maps with nulls
@@ -233,7 +236,7 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
       ev.sort((x, y) => (x.date < y.date ? -1 : 1));
       events.set(sec.id, ev);
       const scopes = ["G", `R:${sec.region}`, `C:${country}`];
-      for (const e of ev) bt.add(e, scopes);
+      if (isStock(sec)) for (const e of ev) bt.add(e, scopes);
 
       // breadth
       const W = an.tfs.W;
@@ -243,12 +246,12 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
         while (k + 1 < W.n && W.b.time[k + 1] < dates[t]) k++;
         if (k >= 0 && W.states[k]) wb[t] = W.states[k].bull ? 1 : 0;
       }
-      breadth.add({ firstT: s.first, lastT: s.last, barAt: s.barAt, traded: s.traded, close: b.close, e20: an.dayEma.e20, e50: an.dayEma.e50, e200: an.dayEma.e200, hi52: an.dayEma.hi52, lo52: an.dayEma.lo52, weeklyBullAt: wb },
+      if (isStock(sec)) breadth.add({ firstT: s.first, lastT: s.last, barAt: s.barAt, traded: s.traded, close: b.close, e20: an.dayEma.e20, e50: an.dayEma.e50, e200: an.dayEma.e200, hi52: an.dayEma.hi52, lo52: an.dayEma.lo52, weeklyBullAt: wb },
         ["G", `R:${sec.region}`, `M:${sec.classification}`, `C:${country}`],
         [`G|S:${sec.sector}`, `R:${sec.region}|S:${sec.sector}`, `C:${country}|S:${sec.sector}`]);
     }
     // RS rank within country (percentile of 3M RSC change vs the country index)
-    const vals = snaps.map((x) => x.snap.rsc?.country?.D?.chg?.["3M"]).filter((v) => v != null).sort((a, b) => a - b);
+    const vals = snaps.filter((x) => isStock(secOfId.get(x.id))).map((x) => x.snap.rsc?.country?.D?.chg?.["3M"]).filter((v) => v != null).sort((a, b) => a - b);
     for (const x of snaps) {
       const v = x.snap.rsc?.country?.D?.chg?.["3M"];
       x.rsRank = v == null || !vals.length ? null : Math.round((lowerBoundNum(vals, v) / vals.length) * 100);

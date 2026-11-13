@@ -21,7 +21,7 @@ export const nameColumn = { key: "name", label: "Name", value: (r) => r.sec.name
 export const idColumns = (keys = ["country", "sector", "cap"]) => [symbolColumn, nameColumn, ...keys.map((k) => fieldColumn(k))];
 
 /** Region / country / sector / cap filter controls bound to a scope object. */
-export function ScopeFilter({ scope, onChange, show = ["region", "country", "sector", "cap"] }) {
+export function ScopeFilter({ scope, onChange, show = ["region", "country", "sector", "cap", "asset"] }) {
   const d = useData();
   const set = (k, v) => onChange({ ...scope, [k]: v || null });
   const countries = scope.region ? d.countries.filter((c) => d.secs.some((s) => s.country === c && s.region === scope.region)) : d.countries;
@@ -32,13 +32,15 @@ export function ScopeFilter({ scope, onChange, show = ["region", "country", "sec
       {show.includes("country") && <Select label="Country" value={scope.country} options={countries} onChange={(v) => set("country", v)} allowEmpty />}
       {show.includes("sector") && <Select label="Sector" value={scope.sector} options={d.sectors} onChange={(v) => set("sector", v)} allowEmpty />}
       {show.includes("cap") && <Select label="Cap" value={scope.cap} options={CAPS} onChange={(v) => set("cap", v)} allowEmpty />}
+      {show.includes("asset") && <Select label="Type" value={scope.assetClass} options={["Stock", "ETF", "Index"]} onChange={(v) => set("assetClass", v)} allowEmpty="All types" />}
     </div>
   );
 }
 export function applyScope(rows, scope) {
   return rows.filter((r) => (!scope.region || r.sec.region === scope.region) && (!scope.classification || r.sec.classification === scope.classification)
     && (!scope.country || r.sec.country === scope.country) && (!scope.sector || r.sec.sector === scope.sector)
-    && (!scope.industryGroup || r.sec.industryGroup === scope.industryGroup) && (!scope.cap || r.sec.capSegment === scope.cap));
+    && (!scope.industryGroup || r.sec.industryGroup === scope.industryGroup) && (!scope.cap || r.sec.capSegment === scope.cap)
+    && (!scope.assetClass || (r.sec.assetClass || "Stock") === scope.assetClass));
 }
 
 /** Search box over securities and indices. value: {kind:'sec'|'index', id|key, label} */

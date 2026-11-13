@@ -1,0 +1,572 @@
+From 068b97034bda3d304cbb522d737dc2b8dab30022 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 13 Nov 2026 11:22:38 +0000
+Subject: [PATCH] GQ Technical Analysis: ta_* tools, /ta link, web agent
+ endpoint
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TrS21sqoLLMLL9k1WW1fVD
+---
+ DEPLOY.md                |  38 +++++++++
+ package.json             |   2 +-
+ server.js                |  20 ++++-
+ src/bot.js               |  30 +++++++-
+ src/config.js            |   4 +
+ src/prompt.js            |   2 +-
+ src/tools/index.js       |   9 ++-
+ src/tools/technical.js   | 162 +++++++++++++++++++++++++++++++++++++++
+ src/webchat.js           |  43 +++++++++++
+ tests/technical.test.cjs |  70 +++++++++++++++++
+ 10 files changed, 374 insertions(+), 6 deletions(-)
+ create mode 100644 src/tools/technical.js
+ create mode 100644 src/webchat.js
+ create mode 100644 tests/technical.test.cjs
+
+diff --git a/DEPLOY.md b/DEPLOY.md
+index 6cf8ccc..79257aa 100644
+--- a/DEPLOY.md
++++ b/DEPLOY.md
+@@ -374,3 +374,41 @@ Team members (Telegram linked in BusyBee) can ask the bot to change things. What
+ 
+ `/changes` lists the last changes made through the bot. Nothing extra to configure: the
+ database keys you already set are used, and the bot never touches credential tables.
++
++## GQ Technical Analysis (alerts, screens and chart reads on Telegram)
++
++The bot can use the GQ Technical Analysis software: stored technical
++calculations for India, US and global stocks, ETFs and indices. Every number
++comes from the Technical Analysis server; the bot only asks it.
++
++1. Deploy the Technical Analysis server first (see that repo's
++   `docs/DEPLOY.md`). Note its public URL and the `TA_API_SECRET` you chose.
++2. In this service on Railway, Variables, add:
++
++   ```
++   TA_API_URL=https://<technical-analysis-server>.up.railway.app
++   TA_API_SECRET=<the same long random string as on the TA server>
++   TA_APP_URL=https://<technical-analysis-app>.vercel.app
++   ```
++
++   and redeploy. `/ta` in Telegram now answers, and the `ta_*` tools appear.
++3. Each person links once: in the app open **Alerts → Telegram → Get code**,
++   then send the bot `/ta link 123456` in a private chat. After that their
++   alerts, morning summary and task results arrive in this chat, and "my
++   alerts" / "my watchlist" mean their own Technical Analysis account.
++
++The Technical Analysis server SENDS messages with this same bot token
++(`sendMessage` only) and never polls, so it does not conflict with this bot.
++
++The app's agent panel calls `POST /api/chat` on this service, so give this
++service a public domain (Settings → Networking → Generate Domain) and put that
++URL into the TA server's `GQAGENT_URL`.
++
++Things people can ask:
++
++- analyse HDFCBANK / read the weekly chart of Reliance
++- India stocks with weekly MMA bullish and rising RSC vs India
++- how is the Japan market's breadth
++- alert me when TCS weekly RSI crosses above 60
++- tell me when anything in my Core list makes a golden cross
++- every weekday at 8:45 tell me which of my Core list are rising
+diff --git a/package.json b/package.json
+index 7117e22..3ecef9b 100644
+--- a/package.json
++++ b/package.json
+@@ -9,7 +9,7 @@
+   },
+   "scripts": {
+     "start": "node server.js",
+-    "test": "node --test tests/writes.test.cjs tests/boot.test.cjs tests/projects_data.test.cjs tests/engines.test.cjs tests/open_files.test.cjs tests/macro.test.cjs tests/simple.test.cjs tests/watchlists_filings.test.cjs tests/core.test.cjs tests/agent.test.cjs tests/tools.test.cjs tests/more.test.cjs tests/telegram.test.cjs tests/grok.test.cjs tests/tasks.test.cjs",
++    "test": "node --test tests/writes.test.cjs tests/boot.test.cjs tests/projects_data.test.cjs tests/engines.test.cjs tests/open_files.test.cjs tests/macro.test.cjs tests/simple.test.cjs tests/watchlists_filings.test.cjs tests/core.test.cjs tests/agent.test.cjs tests/tools.test.cjs tests/more.test.cjs tests/telegram.test.cjs tests/grok.test.cjs tests/tasks.test.cjs tests/technical.test.cjs",
+     "doctor": "node scripts/doctor.js",
+     "ask": "node scripts/ask.js",
+     "evals": "node scripts/evals.js",
+diff --git a/server.js b/server.js
+index e930975..6a8f794 100644
+--- a/server.js
++++ b/server.js
+@@ -3,7 +3,8 @@
+ // One process, ONE replica (Telegram allows one poller per token; the
+ // per-person limits and the in-RAM conversation memory live here too).
+ //
+-//   GET /health   the only HTTP route: Railway's health check
++//   GET /health   Railway's health check
++//   POST /api/chat the GQ Technical Analysis web app's agent panel (TA_API_SECRET)
+ //   Telegram      long polling, no public URL needed
+ const http = require("http");
+ const os = require("os");
+@@ -78,9 +79,26 @@ const server = http.createServer((req, res) => {
+     res.end(JSON.stringify({ ok: true, model: provider ? provider.model : null, live: Object.keys(live).length > 0, telegram: bot.me ? `@${bot.me.username}` : "starting" }));
+     return;
+   }
++  // GQ Technical Analysis web app -> agent panel. Off unless TA_API_SECRET is set.
++  if (req.method === "POST" && req.url.split("?")[0] === "/api/chat") return webChat(req, res);
+   res.writeHead(404, { "content-type": "text/plain" }).end("not found");
+ });
+ 
++const { answerWeb, secretOk } = require("./src/webchat");
++async function webChat(req, res) {
++  const reply = (status, body) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
++  if (!cfg.taApiSecret || !cfg.taApiUrl) return reply(404, { error: "the Technical Analysis connection is not configured" });
++  if (!secretOk(cfg, req.headers["x-ta-secret"])) return reply(401, { error: "wrong secret" });
++  if (!provider) return reply(503, { error: "the agent's model is not configured (DEEPINFRA_API_KEY)" });
++  let raw = "";
++  for await (const c of req) { raw += c; if (raw.length > 200000) return reply(413, { error: "too large" }); }
++  let body;
++  try { body = JSON.parse(raw || "{}"); } catch { return reply(400, { error: "invalid JSON" }); }
++  if (!body.message) return reply(400, { error: "message required" });
++  try { reply(200, await answerWeb({ cfg, engines, store, researchTool, log }, body)); }
++  catch (e) { log(`[webchat] ${String(e.message).slice(0, 300)}`); reply(e.status || (e.userFacing ? 400 : 500), { error: e.status || e.userFacing ? e.message : "the agent could not answer" }); }
++}
++
+ (async () => {
+   await new Promise((r) => server.listen(cfg.port, r));
+   log(`[agent] health on ${cfg.port}; model: ${provider ? `${provider.name}/${provider.model}` : "NOT CONFIGURED"}${researchTool ? `; research: grok/${cfg.grokResearchModel}` : ""}`);
+diff --git a/src/bot.js b/src/bot.js
+index 83c6770..fbca5ac 100644
+--- a/src/bot.js
++++ b/src/bot.js
+@@ -7,6 +7,7 @@ const { runAgent } = require("./agent");
+ const { parseEngines, runWithEngines, LABEL: ENGINE_LABEL } = require("./engines");
+ const dbwrite = require("./tools/dbwrite");
+ const { buildTools } = require("./tools/index");
++const technical = require("./tools/technical");
+ const { buildSystemPrompt, withProjectsFooter } = require("./prompt");
+ const { toTelegramMessages, esc } = require("./format");
+ const { extractAll, kindOf } = require("./documents");
+@@ -57,6 +58,7 @@ const ADVANCED_HELP = `<b>Shortcuts</b> (optional; you can always just type in p
+ /new  start a fresh conversation
+ /projects  which GQuants projects I may read (for tech questions)
+ /whoami  your Telegram ID
++/ta  GQ Technical Analysis: link your account, alerts, screens
+ 
+ <b>Admins</b>
+ /updates all  every chat's updates
+@@ -77,6 +79,7 @@ class Bot {
+     this.history = new Map();  // chatId -> [{role, content}] (RAM only)
+     this.files = new Map();    // chatId -> [{doc, at}] files sent recently, for follow-up questions (RAM only)
+     this.liveOn = Object.keys(live || {}).length > 0;
++    this.taOn = !!(cfg && cfg.taApiUrl && cfg.taApiSecret);
+   }
+ 
+   get engines() { return this._engines || { deepinfra: this.provider || null, grok: null }; }
+@@ -146,6 +149,28 @@ class Bot {
+     return next;
+   }
+ 
++  // ---------------------------------------------------------------- /ta
++  async taCommand(m, args) {
++    if (!this.taOn) return this.reply(m, "The GQ Technical Analysis app is not connected to this bot yet (TA_API_URL and TA_API_SECRET).");
++    const ta = { url: this.cfg.taApiUrl, secret: this.cfg.taApiSecret };
++    const sub = String(args[0] || "").toLowerCase();
++    if (sub === "link") {
++      if (m.chat.type !== "private") return this.reply(m, "Link your account in a private chat with me, not in a group.");
++      const code = String(args[1] || "").trim();
++      if (!/^\d{6}$/.test(code)) return this.reply(m, "Send /ta link followed by the 6-digit code from the app (Alerts -> Telegram -> Get code).");
++      const name = [m.from.first_name, m.from.last_name].filter(Boolean).join(" ") || m.from.username || null;
++      const r = await technical.link(ta, { code, telegramUserId: m.from.id, chatId: m.chat.id, name });
++      if (r.error) return this.reply(m, r.error);
++      return this.reply(m, `Linked to ${r.email}. Your Technical Analysis alerts, morning summary and task results will arrive here.\nTry: "alert me when TCS weekly RSI crosses above 60" or "which of my Core watchlist are rising".`);
++    }
++    if (sub === "unlink") {
++      const r = await technical.unlink(ta, m.from.id);
++      return this.reply(m, r.error ? r.error : "Unlinked. You will no longer get Technical Analysis alerts here.");
++    }
++    const app = this.cfg.taAppUrl ? `\nApp: ${this.cfg.taAppUrl}` : "";
++    return this.reply(m, `GQ Technical Analysis${app}\n\n/ta link 123456  connect your app login (code from Alerts -> Telegram)\n/ta unlink  stop alerts here\n\nThen just ask, e.g.\n- analyse HDFCBANK\n- read the weekly chart of Reliance\n- India stocks with weekly MMA bullish and rising RSC\n- alert me when AAPL crosses its 200-day average\n- every weekday 8:45 tell me which of my Core list are rising`);
++  }
++
+   // ---------------------------------------------------------------- commands
+   async command(m, text, access) {
+     const [raw, ...rest] = text.split(/\s+/);
+@@ -160,6 +185,8 @@ class Bot {
+         return this.tg.sendMessage(chatId, ADVANCED_HELP, { reply_to_message_id: m.message_id }).catch(() => {});
+       case "/market":
+         return this.menuAction(m, "market", access);
++      case "/ta":
++        return this.taCommand(m, rest);
+       case "/whoami":
+         return this.reply(m, `Telegram ID: ${m.from.id}\nChat ID: ${chatId}\nAdmin: ${access.admin ? "yes" : "no"}`);
+       case "/clear":
+@@ -604,6 +631,7 @@ class Bot {
+       store: this.snapshots, live: this.live, selected, githubToken: this.cfg.githubToken, // repo tools read ctx.store = the snapshot store
+       attachments: attached, fetch, projectsUsed: new Set(), usage: { in: 0, out: 0 },
+       lists: this.store, secUserAgent: this.cfg.secUserAgent || undefined,
++      ta: this.taOn ? { url: this.cfg.taApiUrl, secret: this.cfg.taApiSecret, appUrl: this.cfg.taAppUrl } : null,
+       user: { id: userId, label: userLabel },
+       audit: async ({ tool, ok, ms }) => this.log(`[tool] user=${userId} tool=${tool} ok=${ok} ms=${ms}`),
+       task: this.runner && !scheduled ? { runner: this.runner, chatId: String(chatId), userId, userLabel, admin: !!access.admin, chatProjects: selected, engine } : null,
+@@ -612,7 +640,7 @@ class Bot {
+       const hist = sysMode ? [] : (this.history.get(String(chatId)) || []);
+       const out = await runWithEngines({
+         mode: engine, engines: this.engines, researchTool: this.researchTool,
+-        buildTools: (research) => buildTools({ selected, user: { isAdmin: !!access.admin }, attached, liveOn: this.liveOn, researchTool: research, taskTools: !!ctx.task, projectDbs: this.projectDbs, busybeeActions: !!busybeeApi, writeActions: !scheduled }),
++        buildTools: (research) => buildTools({ selected, user: { isAdmin: !!access.admin }, attached, liveOn: this.liveOn, researchTool: research, taskTools: !!ctx.task, projectDbs: this.projectDbs, busybeeActions: !!busybeeApi, writeActions: !scheduled, taOn: this.taOn }),
+         buildSystem: (toolNames) => buildSystemPrompt({ user: { label: userLabel }, member, selected, attached, toolNames, telegram: true }),
+         ctx, history: hist, message: text,
+         maxSteps: this.cfg.maxSteps, deadline: started + this.cfg.requestDeadlineMs,
+diff --git a/src/config.js b/src/config.js
+index c29d84f..3b59f0e 100644
+--- a/src/config.js
++++ b/src/config.js
+@@ -33,6 +33,10 @@ function load(e = process.env) {
+     heatmapSupabaseUrl: (e.HEATMAP_SUPABASE_URL || "").replace(/\/$/, ""),
+     heatmapSupabaseKey: e.HEATMAP_SUPABASE_KEY || "",
+     githubToken: e.GITHUB_READ_TOKEN || "",
++    // GQ Technical Analysis server (optional). With both set, the ta_* tools and /ta link are on.
++    taApiUrl: (e.TA_API_URL || "").replace(/\/$/, ""),
++    taApiSecret: e.TA_API_SECRET || "",
++    taAppUrl: (e.TA_APP_URL || "").replace(/\/$/, ""),
+     // Project databases (read in full; see src/projectdb.js). Each pair is optional.
+     busybeeSupabaseUrl: (e.BUSYBEE_SUPABASE_URL || "").replace(/\/$/, ""),
+     busybeeSupabaseKey: e.BUSYBEE_SUPABASE_KEY || "",
+diff --git a/src/prompt.js b/src/prompt.js
+index 1d8b299..9c32167 100644
+--- a/src/prompt.js
++++ b/src/prompt.js
+@@ -39,7 +39,7 @@ How to work
+ - calculate for any non-trivial arithmetic, percentages, statistics, unit conversions or finance maths (CAGR, NPV, IRR, EMI/loan payments, SIP values). Do not do multi-step arithmetic in your head.
+ - company_filings for what a company itself disclosed: India (NSE, then BSE) results, concall transcripts, investor presentations, board outcomes, ratings, management changes, orders; US (SEC EDGAR) 10-K/10-Q/8-K and, with financials=true, reported revenue, profit, balance sheet and cash flow by period. Prefer it to news for disclosures and reported numbers, then read the document with web_fetch. For India balance-sheet and ratio data also try the heatmap fundamentals tool when selected.
+ - macro_news for macro and economy news by country (central-bank decisions, inflation, GDP, jobs, trade, budgets), taken from each country's central bank, statistics office and finance ministry first. Default country 'tile' covers every country on the dashboard's Global Indices tile; India and the US are supported too. Group the answer by country, give the date and link for each item, and say plainly which countries had nothing new. Open an official release with web_fetch before quoting its numbers.
+-${has("project_query") ? "- project_tables and project_query read the projects' live databases in full (every table, read-only): BusyBee's tasks, people, projects, OKRs, timesheets, comments and activity; FinXray's alerts, filings, summaries, poller runs and fund data; the heatmap's instruments, prices and pipeline runs. Use them for any question about what is in a project right now (who has which tasks, what is overdue, what FinXray sent today, which pipeline failed). Look up table and column names with project_tables when unsure, use count_only for 'how many', and join names instead of showing raw ids. Give dates in IST.\n" : ""}${has("project_change") ? "- project_change proposes a change to a project's database (insert, update or delete) and does not run it: the person must tap Confirm. Always look the exact rows up with project_query first, change only what was asked, and use 'where' on exact ids. After calling it, say what will change and that nothing has changed until they confirm; do not call it again for the same change.\n" : ""}${has("dashboard_watchlist") ? "- dashboard_watchlist reads or changes the ASKER'S OWN lists on the heatmap dashboard website (add or remove a stock, create a list). It acts immediately. If it returns candidates or several lists, ask which one, then call it again.\n" : ""}${has("busybee_create_task") ? "- busybee_create_task and busybee_update_task act in BusyBee as this person, under BusyBee's own permissions. Assign or change work when the person clearly asks; when the assignee, deadline or project is unclear, ask one short question first. Find task ids with project_query before updating. Confirm what you did in one or two plain sentences.\n" : ""}- watchlists holds the team's saved lists (holdings in India and abroad, companies of interest, sectors, countries). Read it whenever the user says 'our holdings', 'our portfolio', 'our watchlist', 'what we own or track', or names a list — never guess what the team owns.${has("edit_watchlist") ? " edit_watchlist changes a list when an admin asks (add, remove, replace, create, delete); pick a short lower-case name such as india-holdings, global-holdings or interest, write items as 'Company (EXCHANGE: TICKER)' when you know the ticker, and confirm the list in plain words." : " Only admins can change these lists; if someone else asks, say so kindly."}
++${has("project_query") ? "- project_tables and project_query read the projects' live databases in full (every table, read-only): BusyBee's tasks, people, projects, OKRs, timesheets, comments and activity; FinXray's alerts, filings, summaries, poller runs and fund data; the heatmap's instruments, prices and pipeline runs. Use them for any question about what is in a project right now (who has which tasks, what is overdue, what FinXray sent today, which pipeline failed). Look up table and column names with project_tables when unsure, use count_only for 'how many', and join names instead of showing raw ids. Give dates in IST.\n" : ""}${has("project_change") ? "- project_change proposes a change to a project's database (insert, update or delete) and does not run it: the person must tap Confirm. Always look the exact rows up with project_query first, change only what was asked, and use 'where' on exact ids. After calling it, say what will change and that nothing has changed until they confirm; do not call it again for the same change.\n" : ""}${has("dashboard_watchlist") ? "- dashboard_watchlist reads or changes the ASKER'S OWN lists on the heatmap dashboard website (add or remove a stock, create a list). It acts immediately. If it returns candidates or several lists, ask which one, then call it again.\n" : ""}${has("busybee_create_task") ? "- busybee_create_task and busybee_update_task act in BusyBee as this person, under BusyBee's own permissions. Assign or change work when the person clearly asks; when the assignee, deadline or project is unclear, ask one short question first. Find task ids with project_query before updating. Confirm what you did in one or two plain sentences.\n" : ""}${has("ta_analyze") ? `- The ta_* tools are the GQ Technical Analysis software: stored technical calculations for India, US and global stocks, ETFs and indices (MMA, RSI, MACD, relative strength, breadth, rotation, Weight Watcher, stages, setup scores, signal history). For ANY technical question about a stock or market (trend, chart, support/resistance, RSI, moving averages, momentum, breakout, screen, compare, market breadth) use them instead of web search or memory, and quote the 'as of' date. Use ta_screen for "find/which stocks" questions, ta_analyze for one name, ta_chart_read for "read the chart", ta_market for a market or country, ta_review for "which of these are rising".${has("ta_alerts") ? " ta_alerts, ta_watchlist and ta_tasks act on the ASKER'S OWN Technical Analysis account; if a tool says the account is not linked, tell them to open the app (Alerts -> Telegram -> Get code) and send /ta link <code>. Confirm alerts and tasks in one sentence with the rule, timeframe and target." : ""} Describe what the data shows; never say buy, sell or hold, never give price targets or predictions. Include the app link the tool returns when there is one.\n` : ""}- watchlists holds the team's saved lists (holdings in India and abroad, companies of interest, sectors, countries). Read it whenever the user says 'our holdings', 'our portfolio', 'our watchlist', 'what we own or track', or names a list — never guess what the team owns.${has("edit_watchlist") ? " edit_watchlist changes a list when an admin asks (add, remove, replace, create, delete); pick a short lower-case name such as india-holdings, global-holdings or interest, write items as 'Company (EXCHANGE: TICKER)' when you know the ticker, and confirm the list in plain words." : " Only admins can change these lists; if someone else asks, say so kindly."}
+ - public_data for exchange rates (ECB), crypto prices and weather. For stocks, ETFs and indices use the heatmap-dashboard live tools when that project is selected; otherwise web_search.
+ - web_fetch also reads PDFs (annual reports, filings, papers): page through long ones with offset.
+ - For a project: the one-line summaries above are only for routing. Before stating facts about a project, read it: read_docs first (overview and doc list), then grep_code / list_files to find things, then read_file for detail. Cite file paths (and line numbers where useful) and the snapshot commit. Snapshots may lag the latest push by a few hours. recent_changes / show_commit answer "what changed, when, by whom".
+diff --git a/src/tools/index.js b/src/tools/index.js
+index 3de9b5b..5abbacf 100644
+--- a/src/tools/index.js
++++ b/src/tools/index.js
+@@ -14,6 +14,8 @@
+ //   data     project_tables, project_query: every configured project database, SELECT only, team members
+ //   write    project_change (confirm first), dashboard_watchlist: live chats, team members
+ //   busybee  busybee_create_task, busybee_update_task: through BusyBee's own API, as the asker
++//   ta       ta_* tools: the GQ Technical Analysis server (read; the asker's alerts,
++//            watchlists and tasks in live chats). Only when TA_API_URL is set
+ //   tasks    schedule_task, list_scheduled_tasks, manage_scheduled_task,    live chats only; write the bot's own task list
+ //            edit_watchlist (admins)                                        and watchlists
+ const web = require("./web");
+@@ -32,6 +34,7 @@ const macro = require("./macro");
+ const database = require("./database");
+ const busybee = require("./busybee");
+ const dbwrite = require("./dbwrite");
++const technical = require("./technical");
+ const { byId } = require("../projects");
+ 
+ const timeTool = {
+@@ -52,7 +55,7 @@ const NO_DB = (t) => ({ ...t, run: (a, ctx) => t.run(a, { ...ctx, sb: null }) })
+ 
+ /** buildTools({selected, user, attached, liveOn}). user.isAdmin unlocks adminOnly tools (none today). */
+ /** taskTools: true only in a live conversation where a TaskRunner exists (never in scheduled runs). */
+-function buildTools({ selected, user = {}, attached = [], liveOn = false, researchTool = null, taskTools = false, projectDbs = null, busybeeActions = false, writeActions = false }) {
++function buildTools({ selected, user = {}, attached = [], liveOn = false, researchTool = null, taskTools = false, projectDbs = null, busybeeActions = false, writeActions = false, taOn = false }) {
+   const visible = (t) => !t.adminOnly || user.isAdmin;
+   const general = [timeTool, ...search.makeTools(), ...web.makeTools(), calc.tool, publicData.tool, filings.tool, macro.tool, watchlists.readTool]
+     .filter(visible).map((t) => ({ ...NO_DB(t), kind: "general" }));
+@@ -67,7 +70,9 @@ function buildTools({ selected, user = {}, attached = [], liveOn = false, resear
+   const bbTools = busybeeActions && taskTools && selected.includes("busybee") ? busybee.tools.map((t) => ({ ...t, kind: "busybee" })) : [];
+   // Changes to project data (with Confirm / Cancel) and the asker's own dashboard watchlists: live chats only.
+   const writeTools = writeActions ? dbwrite.makeTools(selected, projectDbs).map((t) => ({ ...t, kind: "write" })) : [];
+-  return [...general, ...researchTools, ...files, ...repoTools, ...liveTools, ...dataTools, ...bbTools, ...writeTools, ...tasks];
++  // GQ Technical Analysis: read tools everywhere; personal (alerts, watchlists, tasks) in live chats.
++  const taTools = taOn ? technical.makeTools({ personal: writeActions }).map((t) => ({ ...t, kind: "ta" })) : [];
++  return [...general, ...taTools, ...researchTools, ...files, ...repoTools, ...liveTools, ...dataTools, ...bbTools, ...writeTools, ...tasks];
+ }
+ 
+ module.exports = { buildTools, timeTool, research };
+diff --git a/src/tools/technical.js b/src/tools/technical.js
+new file mode 100644
+index 0000000..00126c9
+--- /dev/null
++++ b/src/tools/technical.js
+@@ -0,0 +1,162 @@
++"use strict";
++// GQ Technical Analysis tools. The agent never computes indicators itself: every
++// number comes from the Technical Analysis server (TA_API_URL), which reads the
++// TA engine's stored calculations. Calls carry TA_API_SECRET, plus the asker's
++// Telegram id so "my alerts", "my watchlist" and "my tasks" mean THEIR
++// Technical Analysis account (linked once with /ta link <code>).
++//
++//   read     ta_analyze, ta_chart_read, ta_screen, ta_compare, ta_market,
++//            ta_review, ta_signal_stats, ta_alert_scorecard
++//   personal ta_alerts, ta_watchlist, ta_tasks (live chats, linked users only)
++
++const TFS = ["D", "W", "M"];
++
++async function call(ctx, method, path, body) {
++  const ta = ctx.ta;
++  if (!ta || !ta.url) return { error: "The Technical Analysis app is not connected to this bot (TA_API_URL / TA_API_SECRET)." };
++  const tg = ctx.taTelegramUser !== undefined ? ctx.taTelegramUser : ctx.user && /^\d+$/.test(String(ctx.user.id)) ? String(ctx.user.id) : null;
++  const headers = { "content-type": "application/json", "x-ta-secret": ta.secret };
++  if (tg) headers["x-telegram-user"] = tg;
++  let r;
++  try {
++    r = await (ctx.fetch || fetch)(`${ta.url}${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(60000) });
++  } catch (e) {
++    return { error: `The Technical Analysis server did not answer (${e.name === "TimeoutError" ? "timeout" : e.message}).` };
++  }
++  let j = {};
++  try { j = await r.json(); } catch { /* not JSON */ }
++  if (r.status === 401) return { error: "The Technical Analysis server rejected the agent: TA_API_SECRET differs between the two services." };
++  if (r.status === 403) return { error: j.error || "Not allowed.", needs_link: true, how_to_link: "In the Technical Analysis app open Alerts -> Telegram, press 'Get code', then send this bot: /ta link <code>" };
++  if (!r.ok) return { error: j.error || `Technical Analysis server answered HTTP ${r.status}` };
++  return j;
++}
++const qs = (o) => Object.entries(o).filter(([, v]) => v != null && v !== "").map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&");
++
++const RULE_HELP = "rsi_cross_above {level}, rsi_cross_below {level}, macd_bull_cross, macd_bear_cross, price_cross_above_sma {period}, price_cross_below_sma {period}, price_cross_above_ema {period}, price_cross_below_ema {period}, price_above {price}, price_below {price}, golden_cross, death_cross, bb_break_upper, bb_break_lower, new_high_n {bars}, new_low_n {bars}, mma_compression {pct}";
++
++const readTools = [
++  {
++    name: "ta_analyze",
++    description: "Full stored technical analysis of ONE stock, ETF or index from the GQ Technical Analysis software: trend and MMA alignment on daily/weekly/monthly/quarterly/yearly, RSI and RSI of RSI, divergences, MACD, relative strength vs country/sector/region/global, stage, 52-week and all-time-high distance, volume, Weight Watcher, fundamentals, setup score, recent signals with what followed, and links to the charts. Use it for 'analyse X', 'how does X look', 'is X in an uptrend', 'explain X'. If it returns candidates, ask which one.",
++    parameters: { type: "object", properties: { symbol: { type: "string", description: "ticker or company name, e.g. TCS, HDFCBANK, AAPL, 'Infosys'; exchange prefix allowed (NSE:TCS)" } }, required: ["symbol"] },
++    run: (a, ctx) => call(ctx, "GET", `/api/stock/${encodeURIComponent(String(a.symbol).trim())}`),
++  },
++  {
++    name: "ta_chart_read",
++    description: "A plain-English read of a stock's chart: per timeframe the MMA state, squeeze, RSI, MACD, consolidation/breakout, the latest candlestick pattern and the support/resistance levels price has turned at. Use for 'read the chart of X', 'what is the weekly chart saying', 'support and resistance for X'.",
++    parameters: { type: "object", properties: { symbol: { type: "string" }, timeframes: { type: "string", description: "comma list of D,W,M,Q,Y (default D,W)" } }, required: ["symbol"] },
++    run: (a, ctx) => call(ctx, "GET", `/api/chart-read/${encodeURIComponent(String(a.symbol).trim())}?${qs({ tfs: a.timeframes || "D,W" })}`),
++  },
++  {
++    name: "ta_screen",
++    description: "Run a technical screen over the whole universe (India, US, global stocks, ETFs and indices) and return matches. Write the query in plain English, e.g. 'India stocks weekly MMA bullish and RSC vs country rising', 'US large caps at 52 week high on volume', 'Japan stocks in a weekly MMA squeeze', 'top 20 by score in Financials'. Returns what it understood, the total and the top results with a link.",
++    parameters: { type: "object", properties: { query: { type: "string" }, limit: { type: "number", description: "default 25, max 100" } }, required: ["query"] },
++    run: (a, ctx) => call(ctx, "POST", "/api/screen", { query: a.query, limit: a.limit || 25 }),
++  },
++  {
++    name: "ta_compare",
++    description: "Side-by-side technical comparison of two instruments (returns, MMA, RSI, relative strength, stage, distance from high, score, fundamentals).",
++    parameters: { type: "object", properties: { a: { type: "string" }, b: { type: "string" } }, required: ["a", "b"] },
++    run: (a, ctx) => call(ctx, "GET", `/api/compare?${qs({ a: a.a, b: a.b })}`),
++  },
++  {
++    name: "ta_market",
++    description: "Market health for a scope from the GQ indices: cap-weighted and equal-weighted index moves, breadth (advancers, % above 50/200-day, new highs/lows, % bullish weekly MMA), breadth divergence, regime and sector rotation quadrants. scope: 'G' global, 'R:<region>' e.g. R:Asia Pacific, 'C:<country>' e.g. C:India, C:United States.",
++    parameters: { type: "object", properties: { scope: { type: "string", description: "G, R:<region> or C:<country>" } } },
++    run: (a, ctx) => call(ctx, "GET", `/api/market?${qs({ scope: a.scope || "G" })}`),
++  },
++  {
++    name: "ta_review",
++    description: "Review a list of stocks: which are rising (weekly MMA bullish, or weekly uptrend above the 50-day EMA) and which are not, with returns, relative strength and stage. Give symbols, or the name of the asker's watchlist in the Technical Analysis app.",
++    parameters: { type: "object", properties: { symbols: { type: "array", items: { type: "string" } }, watchlist: { type: "string", description: "name of the asker's watchlist in the TA app" }, question: { type: "string" } } },
++    run: (a, ctx) => call(ctx, "POST", "/api/review", { symbols: a.symbols, watchlist: a.watchlist, question: a.question }),
++  },
++  {
++    name: "ta_signal_stats",
++    description: "How the engine's stored signal types (breakouts, MMA turns, RSC inflections, ...) behaved historically: count, mean and median forward returns, hit rate and excess return at 1M/3M/6M/12M. Use for 'how reliable is a weekly breakout', 'what happened after RSC turned up'.",
++    parameters: { type: "object", properties: { note: { type: "string", description: "optional, ignored" } } },
++    run: (a, ctx) => call(ctx, "GET", "/api/signal-stats"),
++  },
++  {
++    name: "ta_alert_scorecard",
++    description: `Report card for an alert rule: replays every past firing over a sample of large caps (or given symbols' ids) and returns how often the expected move followed and the average move after. Rules: ${RULE_HELP}.`,
++    parameters: { type: "object", properties: { rule: { type: "string" }, params: { type: "object" }, timeframe: { type: "string", enum: TFS } }, required: ["rule"] },
++    run: (a, ctx) => call(ctx, "GET", `/api/alerts/scorecard?${qs({ rule: a.rule, params: JSON.stringify(a.params || {}), tf: a.timeframe || "D" })}`),
++  },
++];
++
++const personalTools = [
++  {
++    name: "ta_alerts",
++    description: `The asker's alerts in the GQ Technical Analysis app; fired alerts are sent to them on Telegram. Actions: list, add, pause, resume, delete, pause_all, resume_all, recent (alerts that fired). To add, give rule + params + timeframe (D daily, W weekly, M monthly) + either a symbol or one of their watchlists. Rules: ${RULE_HELP}. Examples: 'alert me when TCS weekly RSI crosses above 60' -> rule rsi_cross_above, params {level:60}, timeframe W, symbol TCS. 'tell me when anything in my Core list makes a golden cross' -> golden_cross, watchlist Core. Confirm what was set in one sentence.`,
++    parameters: {
++      type: "object",
++      properties: {
++        action: { type: "string", enum: ["list", "add", "pause", "resume", "delete", "pause_all", "resume_all", "recent"] },
++        rule: { type: "string" }, params: { type: "object" }, timeframe: { type: "string", enum: TFS },
++        symbol: { type: "string" }, watchlist: { type: "string" },
++        id: { type: "string", description: "alert id from list, for pause/resume/delete" },
++      },
++      required: ["action"],
++    },
++    async run(a, ctx) {
++      switch (a.action) {
++        case "list": return call(ctx, "GET", "/api/alerts/rules");
++        case "recent": return call(ctx, "GET", "/api/alerts/events?limit=30");
++        case "add":
++          if (!a.rule) return { error: "which rule? " + RULE_HELP };
++          if (!a.symbol && !a.watchlist) return { error: "give a symbol or a watchlist" };
++          return call(ctx, "POST", "/api/alerts/rules", { rule: a.rule, params: a.params || {}, tf: a.timeframe || "D", instrument: a.symbol, watchlist: a.watchlist, source: "telegram" });
++        case "pause": case "resume":
++          if (!a.id) return { error: "which alert? list them first" };
++          return call(ctx, "PATCH", `/api/alerts/rules/${encodeURIComponent(a.id)}`, { enabled: a.action === "resume" });
++        case "delete":
++          if (!a.id) return { error: "which alert? list them first" };
++          return call(ctx, "DELETE", `/api/alerts/rules/${encodeURIComponent(a.id)}`);
++        case "pause_all": case "resume_all":
++          return call(ctx, "POST", "/api/alerts/pause", { paused: a.action === "pause_all" });
++        default: return { error: "unknown action" };
++      }
++    },
++  },
++  {
++    name: "ta_watchlist",
++    description: "The asker's OWN watchlists inside the GQ Technical Analysis app (not the team lists, not the heatmap website). Actions: list, create, add, remove, delete. Symbols can be tickers or names; if a symbol is ambiguous the result lists candidates, so ask which one.",
++    parameters: { type: "object", properties: { action: { type: "string", enum: ["list", "create", "add", "remove", "delete"] }, watchlist: { type: "string" }, symbols: { type: "array", items: { type: "string" } } }, required: ["action"] },
++    run(a, ctx) {
++      if (a.action === "list") return call(ctx, "GET", "/api/watchlists");
++      if (!a.watchlist) return Promise.resolve({ error: "which watchlist?" });
++      return call(ctx, "POST", "/api/watchlists", { action: a.action, watchlist: a.watchlist, symbols: a.symbols || [] });
++    },
++  },
++  {
++    name: "ta_tasks",
++    description: "Background jobs in the Technical Analysis app that report back on Telegram. Actions: list, create, pause, resume, run, delete. Kinds: review_list {watchlist} (which names in a list are rising), screen {query}, summary {scope}, compare {a, b}, analyze {symbol}. schedule (IST): 'daily HH:MM', 'weekdays HH:MM' or 'weekly mon HH:MM'; leave it empty to run once now. Example: 'every weekday at 8:45 tell me which stocks in my Core list are rising' -> create, kind review_list, params {watchlist:'Core'}, schedule 'weekdays 08:45'.",
++    parameters: { type: "object", properties: { action: { type: "string", enum: ["list", "create", "pause", "resume", "run", "delete"] }, kind: { type: "string", enum: ["review_list", "screen", "summary", "compare", "analyze"] }, title: { type: "string" }, params: { type: "object" }, schedule: { type: "string" }, id: { type: "string" } }, required: ["action"] },
++    run(a, ctx) {
++      switch (a.action) {
++        case "list": return call(ctx, "GET", "/api/tasks");
++        case "create": return call(ctx, "POST", "/api/tasks", { kind: a.kind, title: a.title, params: a.params || {}, schedule: a.schedule || null });
++        case "pause": return call(ctx, "PATCH", `/api/tasks/${encodeURIComponent(a.id)}`, { status: "paused" });
++        case "resume": return call(ctx, "PATCH", `/api/tasks/${encodeURIComponent(a.id)}`, { status: "pending" });
++        case "run": return call(ctx, "PATCH", `/api/tasks/${encodeURIComponent(a.id)}`, { runNow: true });
++        case "delete": return call(ctx, "DELETE", `/api/tasks/${encodeURIComponent(a.id)}`);
++        default: return Promise.resolve({ error: "unknown action" });
++      }
++    },
++  },
++];
++
++/** personal: live conversations only (never in the bot's own scheduled runs). */
++function makeTools({ personal = true } = {}) { return [...readTools, ...(personal ? personalTools : [])]; }
++
++/** /ta link <code>: connects this Telegram account to a Technical Analysis login. */
++async function link(ta, { code, telegramUserId, chatId, name }, fetchImpl = fetch) {
++  const r = await call({ ta, fetch: fetchImpl, taTelegramUser: String(telegramUserId) }, "POST", "/api/telegram/link", { code, telegramUserId: String(telegramUserId), chatId: String(chatId), name });
++  return r;
++}
++async function unlink(ta, telegramUserId, fetchImpl = fetch) {
++  return call({ ta, fetch: fetchImpl, taTelegramUser: String(telegramUserId) }, "POST", "/api/telegram/unlink");
++}
++
++module.exports = { makeTools, link, unlink, call, readTools, personalTools };
+diff --git a/src/webchat.js b/src/webchat.js
+new file mode 100644
+index 0000000..8c21382
+--- /dev/null
++++ b/src/webchat.js
+@@ -0,0 +1,43 @@
++"use strict";
++// The GQ Technical Analysis web app's agent panel talks to THIS agent through
++// POST /api/chat (see server.js), so the website and Telegram share one model,
++// one prompt and one tool set. The TA server calls it with TA_API_SECRET and
++// says who is asking (their app login, and their Telegram id when linked).
++const crypto = require("crypto");
++const { runWithEngines } = require("./engines");
++const { buildTools } = require("./tools/index");
++const { buildSystemPrompt } = require("./prompt");
++
++function secretOk(cfg, got) {
++  const a = Buffer.from(String(got || "")), b = Buffer.from(String(cfg.taApiSecret || ""));
++  return b.length > 0 && a.length === b.length && crypto.timingSafeEqual(a, b);
++}
++
++async function answerWeb({ cfg, engines, store, researchTool, log = console.log }, body) {
++  const user = body.user || {};
++  const label = user.name || user.email || "a Technical Analysis user";
++  const userId = `ta:${String(user.email || "unknown").toLowerCase()}`;
++  const page = body.context && typeof body.context === "object"
++    ? `\n\nThe person is looking at this page of the Technical Analysis app: ${JSON.stringify(body.context).slice(0, 1500)}. "This stock", "this chart" and "here" refer to it.`
++    : "";
++  const ctx = {
++    fetch, projectsUsed: new Set(), usage: { in: 0, out: 0 }, selected: [], attachments: [], lists: store,
++    user: { id: userId, label },
++    ta: { url: cfg.taApiUrl, secret: cfg.taApiSecret, appUrl: cfg.taAppUrl },
++    taTelegramUser: user.telegramUserId ? String(user.telegramUserId) : null,
++    audit: async ({ tool, ok, ms }) => log(`[tool] user=${userId} tool=${tool} ok=${ok} ms=${ms}`),
++  };
++  const history = Array.isArray(body.history) ? body.history.filter((h) => h && (h.role === "user" || h.role === "assistant") && typeof h.content === "string").slice(-10).map((h) => ({ role: h.role, content: h.content.slice(0, 4000) })) : [];
++  const out = await runWithEngines({
++    mode: "default", engines, researchTool,
++    buildTools: (research) => buildTools({ selected: [], user: { isAdmin: false }, attached: [], liveOn: false, researchTool: research, taskTools: false, projectDbs: null, busybeeActions: false, writeActions: !!ctx.taTelegramUser, taOn: true }),
++    buildSystem: (toolNames) => buildSystemPrompt({ user: { label }, selected: [], attached: [], toolNames, telegram: false }) + page,
++    ctx, history, message: String(body.message || "").slice(0, 4000),
++    maxSteps: cfg.maxSteps, deadline: Date.now() + Math.min(cfg.requestDeadlineMs, 160000),
++    checkBudget: () => store.check(userId, cfg, new Date()),
++  });
++  if (ctx.usage.in || ctx.usage.out) store.record(userId, ctx.usage.in, ctx.usage.out, new Date());
++  return { answer: out.answer };
++}
++
++module.exports = { answerWeb, secretOk };
+diff --git a/tests/technical.test.cjs b/tests/technical.test.cjs
+new file mode 100644
+index 0000000..06d746a
+--- /dev/null
++++ b/tests/technical.test.cjs
+@@ -0,0 +1,70 @@
++/** GQ Technical Analysis integration: tools, /ta link, web chat auth. No network. */
++const { test } = require("node:test");
++const assert = require("node:assert/strict");
++const technical = require("../src/tools/technical.js");
++const { buildTools } = require("../src/tools/index.js");
++const { buildSystemPrompt } = require("../src/prompt.js");
++const { secretOk } = require("../src/webchat.js");
++const cfgMod = require("../src/config.js");
++
++const ok = (j, status = 200) => new Response(JSON.stringify(j), { status, headers: { "content-type": "application/json" } });
++
++test("config reads TA_API_URL / TA_API_SECRET / TA_APP_URL", () => {
++  const c = cfgMod.load({ TA_API_URL: "https://ta.example/", TA_API_SECRET: "s", TA_APP_URL: "https://app.example/" });
++  assert.equal(c.taApiUrl, "https://ta.example");
++  assert.equal(c.taApiSecret, "s");
++  assert.equal(c.taAppUrl, "https://app.example");
++});
++
++test("ta tools are declared only when TA is on; personal tools only in live chats", () => {
++  const names = (o) => buildTools({ selected: [], ...o }).map((t) => t.name);
++  assert.ok(!names({}).some((n) => n.startsWith("ta_")));
++  const live = names({ taOn: true, writeActions: true });
++  for (const n of ["ta_analyze", "ta_screen", "ta_chart_read", "ta_market", "ta_alerts", "ta_watchlist", "ta_tasks"]) assert.ok(live.includes(n), n);
++  const sched = names({ taOn: true, writeActions: false });
++  assert.ok(sched.includes("ta_analyze") && !sched.includes("ta_alerts"));
++  for (const t of technical.makeTools()) { assert.equal(t.parameters.type, "object"); assert.ok(t.description.length > 40); }
++});
++
++test("prompt explains the TA tools and keeps them neutral", () => {
++  const p = buildSystemPrompt({ user: { label: "x" }, selected: [], toolNames: ["ta_analyze", "ta_alerts"] });
++  assert.match(p, /GQ Technical Analysis/);
++  assert.match(p, /never say buy, sell or hold/);
++  assert.match(p, /\/ta link/);
++  assert.doesNotMatch(buildSystemPrompt({ user: { label: "x" }, selected: [], toolNames: [] }), /ta_screen/);
++});
++
++test("calls carry the secret and the asker's Telegram id; 403 explains linking", async () => {
++  const seen = [];
++  const fetchImpl = async (url, init) => { seen.push({ url, init }); return url.includes("/api/alerts/rules") ? ok({ error: "not linked" }, 403) : ok({ instrument: { symbol: "TCS" } }); };
++  const ctx = { ta: { url: "https://ta", secret: "s3" }, fetch: fetchImpl, user: { id: "777" } };
++  const a = technical.makeTools().find((t) => t.name === "ta_analyze");
++  assert.equal((await a.run({ symbol: "NSE:TCS" }, ctx)).instrument.symbol, "TCS");
++  assert.equal(seen[0].url, "https://ta/api/stock/NSE%3ATCS");
++  assert.equal(seen[0].init.headers["x-ta-secret"], "s3");
++  assert.equal(seen[0].init.headers["x-telegram-user"], "777");
++  const al = technical.makeTools().find((t) => t.name === "ta_alerts");
++  const r = await al.run({ action: "add", rule: "rsi_cross_above", params: { level: 60 }, timeframe: "W", symbol: "TCS" }, ctx);
++  assert.equal(r.needs_link, true);
++  assert.match(r.how_to_link, /\/ta link/);
++  assert.deepEqual(JSON.parse(seen[1].init.body), { rule: "rsi_cross_above", params: { level: 60 }, tf: "W", instrument: "TCS", source: "telegram" });
++  // the bot's own scheduled runs ("brief") never claim to be a user
++  await a.run({ symbol: "X" }, { ...ctx, user: { id: "brief" } });
++  assert.equal(seen[2].init.headers["x-telegram-user"], undefined);
++  // not configured
++  assert.match((await a.run({ symbol: "X" }, { user: { id: "1" } })).error, /not connected/);
++});
++
++test("/ta link posts the code with the Telegram ids", async () => {
++  let body;
++  const r = await technical.link({ url: "https://ta", secret: "s" }, { code: "123456", telegramUserId: 9, chatId: 9, name: "Dee" }, async (u, i) => { body = JSON.parse(i.body); return ok({ ok: true, email: "d@gquants.com" }); });
++  assert.equal(r.email, "d@gquants.com");
++  assert.deepEqual(body, { code: "123456", telegramUserId: "9", chatId: "9", name: "Dee" });
++});
++
++test("web chat secret check is exact and constant-time", () => {
++  assert.equal(secretOk({ taApiSecret: "abc" }, "abc"), true);
++  assert.equal(secretOk({ taApiSecret: "abc" }, "abd"), false);
++  assert.equal(secretOk({ taApiSecret: "abc" }, ""), false);
++  assert.equal(secretOk({ taApiSecret: "" }, ""), false);
++});
+-- 
+2.43.0
+

@@ -94,6 +94,7 @@ create table if not exists tas_security (
   cap_usd_now     double precision,
   shares_est      double precision,
   cap_segment     text,
+  asset_class     text,                         -- Stock | ETF | Index (ETFs and indices are analysed, never inside CW / EW)
   active          boolean,
   run_id          text references tas_calc_run(run_id) on delete set null,
   updated_at      timestamptz not null default now()
@@ -272,3 +273,4 @@ begin
 end $$;
 
 commit;
+alter table tas_security add column if not exists asset_class text;

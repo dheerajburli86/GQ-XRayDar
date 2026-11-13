@@ -134,3 +134,30 @@ table.tbl { border-collapse: collapse; width: 100%; font-size: 12.5px; }
 .msg.user { background: var(--gq-soft); align-self: flex-end; }
 .msg.bot { background: var(--panel); border: 1px solid var(--line); }
 textarea.notes { width: 100%; min-height: 70px; }
+
+/* ---- GQ Agent panel ---- */
+.agent-fab { position: fixed; right: 18px; bottom: 18px; z-index: 50; background: var(--gq); color: #fff; border: 0; border-radius: 999px; padding: 10px 16px; font-weight: 700; box-shadow: 0 6px 20px rgba(0,0,0,.25); cursor: pointer; }
+.agent-panel { position: fixed; right: 14px; bottom: 14px; top: 64px; width: min(430px, calc(100vw - 28px)); z-index: 50; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 10px 40px rgba(0,0,0,.35); }
+.agent-log { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px; }
+.agent-log .msg p { margin: 3px 0; }
+.agent-log ul { margin: 4px 0; padding-left: 18px; }
+/* ---- scanners ---- */
+.scanner-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.scanner-tabs button { background: var(--panel); border: 1px solid var(--line); color: var(--text); border-radius: 999px; padding: 5px 12px; cursor: pointer; font-size: 12.5px; }
+.scanner-tabs button.on { background: var(--gq); border-color: var(--gq); color: #fff; }
+.scanner-tabs button.on .muted { color: rgba(255,255,255,.8); }
+/* ---- chart lab ---- */
+.vp-overlay { position: absolute; top: 0; right: 62px; width: 22%; height: 420px; pointer-events: none; }
+.vp-overlay > div { position: absolute; right: 0; border-radius: 2px 0 0 2px; }
+.sep { width: 1px; height: 20px; background: var(--line); display: inline-block; }
+.theme-seg button { min-width: 28px; }
+@media (max-width: 760px) {
+  .agent-panel { top: 10px; right: 6px; left: 6px; bottom: 6px; width: auto; }
+  .scanner-tabs button { padding: 4px 9px; }
+}
+@media (min-width: 1100px) { body.agent-open .main { margin-right: 444px; } }
+@media (max-width: 760px) {
+  .topbar { flex-wrap: wrap; }
+  .topbar .cmd { flex: 1 1 100%; max-width: none; }
+  .banner.demo { font-size: 11px; }
+}

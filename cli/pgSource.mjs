@@ -12,6 +12,8 @@ import { addDays } from "../engine/calendar.js";
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 export const STOCK_UNIVERSES = ["us_stocks", "global", "india_stocks"];
+// Analysed (charts, screens, alerts) but never part of index construction or breadth.
+export const FUND_UNIVERSES = ["us_etfs", "india_etfs", "global_etfs", "us_indices", "india_indices", "global_indices"];
 // Inactive rows are kept (delisted companies matter for survivorship-free
 // history) EXCEPT in India, where is_active=false is also how the heatmap mutes
 // ETFs, bonds and fund codes that sit in the stock universe.
@@ -35,9 +37,10 @@ export function pgSource(pool, { warmupDays = 400, minCalendarCount = 50, log = 
     async securities() {
       const { rows } = await pool.query(
         `select id::text, symbol, name, universe, type, sector, industry, country, region, currency, exchange, isin,
-                is_active, market_cap_local, market_cap_currency, market_cap_usd, market_cap_inr
-           from instruments where universe = any($1)`, [STOCK_UNIVERSES]);
-      const kept = rows.filter((r) => r.is_active !== false || INCLUDE_INACTIVE.has(r.universe));
+                is_active, market_cap_local, market_cap_currency, market_cap_usd, market_cap_inr, etf_category
+           from instruments where universe = any($1)`, [[...STOCK_UNIVERSES, ...FUND_UNIVERSES]]);
+      // Funds and indices: active only (an inactive ETF row is a muted or closed product).
+      const kept = rows.filter((r) => r.is_active !== false || (INCLUDE_INACTIVE.has(r.universe)));
       log(`securities: ${kept.length} rows (${rows.length - kept.length} inactive India rows skipped)`);
       return kept;
     },

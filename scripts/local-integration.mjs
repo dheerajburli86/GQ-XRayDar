@@ -16,8 +16,13 @@ await pool.query(fs.readFileSync(new URL("./heatmap_schema_stub.sql", import.met
 await pool.query(fs.readFileSync(new URL("../supabase/migrations/20261113000000_tas_schema.sql", import.meta.url), "utf8"));
 await pool.query("truncate instruments, price_history, fundamentals, fx_rates, glocom_latest, tas_fx_history, tas_corporate_action");
 const d = generateDemo();
-const uni = (c) => (c === "United States" ? "us_stocks" : c === "India" ? "india_stocks" : "global");
-const rows = d.rows.map((r) => ({ ...r, id: uuid(r.id), universe: uni(r.country), type: uni(r.country) === "us_stocks" ? "CS" : "stock" }));
+const uni = (r) => {
+  const c = r.country;
+  if (r.universe === "demo_etfs") return c === "United States" ? "us_etfs" : c === "India" ? "india_etfs" : "global_etfs";
+  if (r.universe === "demo_indices") return c === "United States" ? "us_indices" : c === "India" ? "india_indices" : "global_indices";
+  return c === "United States" ? "us_stocks" : c === "India" ? "india_stocks" : "global";
+};
+const rows = d.rows.map((r) => { const u = uni(r); return { ...r, id: uuid(r.id), universe: u, type: u === "us_stocks" ? "CS" : u.endsWith("_etfs") ? "ETF" : u.endsWith("_indices") ? "index" : "stock" }; });
 await pool.query(`insert into instruments select * from json_populate_recordset(null::instruments, $1::json)`, [JSON.stringify(rows)]);
 for (const r of d.rows) {
   const b = d.bars.get(r.id);

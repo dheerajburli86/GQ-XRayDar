@@ -46,7 +46,7 @@ export function createSupabaseApi(url, key) {
         id: r.id, symbol: r.symbol, name: r.name, universe: r.universe, exchange: r.exchange, isin: r.isin, country: r.country, region: r.region,
         classification: r.classification, geoAssigned: r.geo_assigned, currency: r.currency, currencyMajor: r.currency_major, currencyDivisor: r.currency_divisor,
         countryCurrency: r.country_currency, sector: r.sector, industryGroup: r.industry_group, industry: r.industry, classSource: r.class_source,
-        capLocal: r.cap_local, capCurrency: r.cap_currency, capUsd: r.cap_usd, capUsdNow: r.cap_usd_now, capSegment: r.cap_segment, active: r.active,
+        capLocal: r.cap_local, capCurrency: r.cap_currency, capUsd: r.cap_usd, capUsdNow: r.cap_usd_now, capSegment: r.cap_segment, assetClass: r.asset_class || "Stock", active: r.active,
       }));
     },
     async screenRows() { return (await all("tas_snapshot", "id,flat,rs_rank", undefined, "id")).map((r) => ({ id: r.id, flat: r.flat, rsRank: r.rs_rank })); },

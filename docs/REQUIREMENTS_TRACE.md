@@ -2,7 +2,7 @@
 
 Generated from `src/requirements.js` (`npm run trace`). Also shown in the app: *Data centre → Requirement trace*.
 
-**Built, with a stated limit:** 13 · **Built:** 94 · **Enhancement, not started:** 1 · **Built on a default awaiting confirmation [C]:** 4 · **Needs an external input:** 4
+**Built, with a stated limit:** 12 · **Built:** 95 · **Enhancement, not started:** 1 · **Built on a default awaiting confirmation [C]:** 4 · **Needs an external input:** 4
 
 | # | Tag | Requirement | Status | Where / notes |
 |---|---|---|---|---|
@@ -119,6 +119,6 @@ Generated from `src/requirements.js` (`npm run trace`). Also shown in the app: *
 | 111 | M | Rebuild / replay capability | Built | Re-running the engine recomputes history deterministically and logs every change. |
 | 112 | M | Actual vs estimated data labels | Built | Estimated caps, carried FX, stale constituents and demo data are labelled. |
 | 113 | M | Reusable calculation services | Built | One engine (engine/) for indices, RSC, WW, FX, charts and heatmaps, in batch and in the browser. |
-| 114 | E | APIs and structured exports | Built, with a stated limit | CSV / Excel exports; Supabase REST on tas_* tables and tas_index_series(). No separate authenticated API. |
+| 114 | E | APIs and structured exports | Built | CSV / Excel / PDF / PNG exports; Supabase REST on tas_* tables and tas_index_series(); the TA server's authenticated /api (login or agent secret) for analysis, screens, alerts, tasks and watchlists. |
 | 115 | E | Performance and caching | Built | Precomputed batch results, compact screen rows, cached series, Web Worker in demo. |
 | 116 | C | Integration feasibility | Built on a default awaiting confirmation [C] | Checklist in Data centre → Integrations and docs/METHODOLOGY.md. |

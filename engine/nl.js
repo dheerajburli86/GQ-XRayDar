@@ -105,6 +105,7 @@ export function parseCommand(text, ctx = {}) {
   // theme
   if (/dark (mode|theme)/.test(t)) { out.intent = "theme"; out.theme = "dark"; understood.push("switch to dark mode"); return out; }
   if (/light (mode|theme)/.test(t)) { out.intent = "theme"; out.theme = "light"; understood.push("switch to light mode"); return out; }
+  if (/(system|device|auto(matic)?) (mode|theme)/.test(t)) { out.intent = "theme"; out.theme = "system"; understood.push("follow the device theme"); return out; }
 
   // security mention
   const secs = ctx.securities || [];

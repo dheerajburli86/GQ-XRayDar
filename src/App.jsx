@@ -4,6 +4,9 @@ import { useRoute, navigate, href } from "./lib/router.js";
 import { parseCommand } from "../engine/nl.js";
 import { Loading } from "./components/ui.jsx";
 import { usePersistent } from "./lib/storage.js";
+import { AccountProvider, useAccount } from "./components/Account.jsx";
+import { AgentPanel } from "./components/AgentPanel.jsx";
+import { resolveTheme, watchSystemTheme } from "./lib/theme.js";
 
 const pages = {
   home: lazy(() => import("./pages/CommandCentre.jsx")),
@@ -29,15 +32,19 @@ const pages = {
   notes: lazy(() => import("./pages/Notes.jsx")),
   data: lazy(() => import("./pages/DataCentre.jsx")),
   stock: lazy(() => import("./pages/Stock.jsx")),
+  chart: lazy(() => import("./pages/ChartLab.jsx")),
+  scanners: lazy(() => import("./pages/Scanners.jsx")),
+  tasks: lazy(() => import("./pages/Tasks.jsx")),
+  paper: lazy(() => import("./pages/Paper.jsx")),
 };
 
 const NAV = [
   ["Overview", [["home", "◎", "Command centre"], ["explorer", "⇣", "Top-down explorer"], ["heatmap", "▦", "Heatmap"]]],
   ["Indices", [["indices", "≋", "CW / EW indices"], ["ewcw", "⇋", "EW vs CW (EWCW)"], ["ww", "◔", "Weight Watcher"]]],
-  ["Charts", [["screens/RSIACC", "∿", "RSIACC"], ["screens/RSCACC", "∿", "RSCACC"], ["screens/RSIMMA", "≡", "RSIMMA"], ["screens/RSCMMA", "≡", "RSCMMA"], ["workspace", "⊞", "Multi-chart workspace"]]],
-  ["Discovery", [["rs", "↗", "Relative strength"], ["screener", "⚲", "Screener"], ["early", "◷", "Early-stage scanner"], ["funnel", "▽", "Opportunity funnel"], ["rotation", "↻", "Sector rotation"], ["breadth", "▥", "Market breadth"]]],
-  ["Research", [["scores", "★", "AI setup scores"], ["assistant", "✦", "Research assistant"], ["briefs", "✎", "Market briefs"], ["backtest", "⟲", "Backtest & patterns"]]],
-  ["My work", [["alerts", "◉", "Alerts"], ["watchlists", "☰", "Watchlists & portfolio"], ["notes", "✐", "Research notes"]]],
+  ["Charts", [["chart", "📈", "Chart lab"], ["screens/RSIACC", "∿", "RSIACC"], ["screens/RSCACC", "∿", "RSCACC"], ["screens/RSIMMA", "≡", "RSIMMA"], ["screens/RSCMMA", "≡", "RSCMMA"], ["workspace", "⊞", "Multi-chart workspace"]]],
+  ["Discovery", [["scanners", "⌖", "Scanners"], ["rs", "↗", "Relative strength"], ["screener", "⚲", "Screener"], ["early", "◷", "Early-stage scanner"], ["funnel", "▽", "Opportunity funnel"], ["rotation", "↻", "Sector rotation"], ["breadth", "▥", "Market breadth"]]],
+  ["Research", [["scores", "★", "AI setup scores"], ["assistant", "✦", "GQ Agent (full page)"], ["briefs", "✎", "Market briefs"], ["backtest", "⟲", "Backtest & patterns"]]],
+  ["My work", [["alerts", "◉", "Alerts"], ["tasks", "☑", "Tasks"], ["watchlists", "☰", "Watchlists & portfolio"], ["paper", "◈", "Practice portfolio"], ["notes", "✐", "Research notes"]]],
   ["Data", [["data", "⛁", "Data centre"]]],
 ];
 
@@ -103,8 +110,13 @@ function CommandBar() {
 function Shell() {
   const d = useData();
   const route = useRoute();
-  const [collapsed, setCollapsed] = usePersistent("navCollapsed", false);
-  useEffect(() => { document.documentElement.dataset.theme = d.settings.theme; }, [d.settings.theme]);
+  const [collapsed, setCollapsed] = usePersistent("navCollapsed", typeof window !== "undefined" && window.innerWidth < 760);
+  const acct = useAccount();
+  useEffect(() => {
+    const apply = () => { document.documentElement.dataset.theme = resolveTheme(d.settings.theme); };
+    apply();
+    return d.settings.theme === "system" ? watchSystemTheme(apply) : undefined;
+  }, [d.settings.theme]);
   const Page = pages[route.page] || pages.home;
   const activeKey = route.page === "screens" ? `screens/${route.args[0] || "RSIMMA"}` : route.page;
 
@@ -145,7 +157,10 @@ function Shell() {
           <div className="grow" />
           <span className="small muted" title="Latest session in the data">As of <b className="mono">{d.info?.asOf}</b></span>
           <button className="btn sm" onClick={() => d.reload()} title="Reload the latest calculation run without reloading the page">↻</button>
-          <button className="btn sm" onClick={() => d.setSetting("theme", d.settings.theme === "dark" ? "light" : "dark")} title="Toggle dark / light">{d.settings.theme === "dark" ? "☀" : "☾"}</button>
+          <div className="seg theme-seg" title="Appearance">
+            {[["light", "☀", "Light"], ["dark", "☾", "Dark"], ["system", "Auto", "Same as device"]].map(([k, ic, l]) => <button key={k} className={d.settings.theme === k ? "on" : ""} onClick={() => d.setSetting("theme", k)} title={l}>{ic}</button>)}
+          </div>
+          {acct.email && <span className="small muted" title={acct.email}>{acct.email.split("@")[0]}{acct.session ? <a style={{ marginLeft: 6, cursor: "pointer" }} onClick={acct.signOut}>sign out</a> : null}</span>}
         </div>
         <div className="content">
           <Suspense fallback={<Loading />}>
@@ -153,10 +168,11 @@ function Shell() {
           </Suspense>
         </div>
       </div>
+      <AgentPanel />
     </div>
   );
 }
 
 export default function App() {
-  return <DataProvider><Shell /></DataProvider>;
+  return <AccountProvider><DataProvider><Shell /></DataProvider></AccountProvider>;
 }

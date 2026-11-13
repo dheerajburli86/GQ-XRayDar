@@ -1,7 +1,7 @@
 // Security page: bottom-up entry point. Every parent (sector, cap segment,
 // country, region, global) is one click away, with the stock's full technical,
 // relative, Weight Watcher, fundamental and score picture.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useData } from "../data/store.jsx";
 import { useAsync } from "../lib/useAsync.js";
 import { href } from "../lib/router.js";
@@ -14,12 +14,14 @@ import { WW_TREND_LABEL } from "../../engine/weightWatcher.js";
 import { Explain } from "./Scores.jsx";
 import { NoteBox } from "./Notes.jsx";
 import { usePersistent } from "../lib/storage.js";
+import { setAgentContext } from "../components/AgentPanel.jsx";
 import { fmtMoney, fmtNum } from "../lib/format.js";
 
 export default function Stock({ route }) {
   const d = useData();
   const id = route.args[0];
   const sec = d.secById.get(id);
+  useEffect(() => { if (sec) setAgentContext({ page: "stock", instrumentId: id, symbol: sec.symbol, name: sec.name }); return () => setAgentContext(null); }, [id, sec]);
   const [tf, setTf] = useState("D");
   const [wls, setWls] = usePersistent("watchlists", {});
   const [sync] = useState(() => new ChartSync());
@@ -61,6 +63,7 @@ export default function Stock({ route }) {
         <a href={href("explorer", { region: sec.region, country: sec.country })}>{sec.country}</a>{sec.capSegment && <><span className="sep">›</span><a href={href("explorer", { region: sec.region, country: sec.country, cap: sec.capSegment })}>{sec.capSegment} Cap</a></>}
         <span className="sep">›</span><a href={href("explorer", { region: sec.region, country: sec.country, sector: sec.sector })}>{sec.sector}</a><span className="sep">›</span>
         <a href={href("explorer", { region: sec.region, country: sec.country, sector: sec.sector, ig: sec.industryGroup })}>{sec.industryGroup}</a></span>}>
+        <a className="btn sm primary" href={href(`chart/${id}`)}>Chart lab</a>
         <a className="btn sm" href={href(`screens/RSIACC/${id}`)}>RSIACC</a><a className="btn sm" href={href(`screens/RSCACC/${id}`)}>RSCACC</a>
         <a className="btn sm" href={href(`screens/RSIMMA/${id}`)}>RSIMMA</a><a className="btn sm" href={href(`screens/RSCMMA/${id}`)}>RSCMMA</a>
         <Select value="" options={Object.entries(wls).map(([k, v]) => ({ value: k, label: `${inList(k) ? "✓ " : ""}${v.name}` }))} onChange={(k) => k && setWls({ ...wls, [k]: { ...wls[k], ids: inList(k) ? wls[k].ids.filter((x) => x !== id) : [...wls[k].ids, id] } })} allowEmpty="+ Watchlist" />

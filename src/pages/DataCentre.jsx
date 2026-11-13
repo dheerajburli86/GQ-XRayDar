@@ -1,6 +1,7 @@
 // Data centre: security master, data health, calculation audit trail, FX,
 // corporate actions, methodology, integrations and the requirement trace.
 import { useMemo, useState } from "react";
+import { SERVER_ON } from "../lib/server.js";
 import { useData } from "../data/store.jsx";
 import { useAsync } from "../lib/useAsync.js";
 import { PageHead, Tabs, Badge, Select, Loading } from "../components/ui.jsx";
@@ -155,11 +156,12 @@ function Integrations() {
     ["LOCOM", "awaiting definition", "Will plug into the same field registry once its formula, inputs and thresholds are supplied."],
     ["IMB framework", "awaiting definition", "Inputs/outputs to be connected to scores and screens; no formula is invented."],
     ["Finxray feed", "not connected", "Needs the endpoint, credentials, permitted use and instrument mapping. The catalyst component of the AI score is excluded (weight re-spread) until it exists."],
-    ["Telegram / GQ agent", "planned", "Alerts, the assistant and briefs already produce structured output the agent and Telegram can consume."],
+    ["TA server", SERVER_ON ? "connected" : "not configured", "Login check, alerts on Telegram, morning / weekly summaries, tasks, account sync and the agent panel (VITE_TA_SERVER_URL; docs/DEPLOY.md)."],
+    ["Telegram / GQ agent", SERVER_ON ? "via the TA server" : "needs the TA server", "The GQ agent bot gets ta_* tools (analyse, chart read, screens, market, alerts, watchlists, tasks) and /ta link; the server sends alerts with the same bot."],
     ["Historical FX", "tas_fx_history", "Loaded by cli/fx-backfill.mjs from FMP (USD per unit; inverted pairs recorded)."],
   ];
   return (
-    <div className="grid g2">{items.map(([t, s, x]) => <div key={t} className="card"><div className="row between"><b>{t}</b><Badge kind={/connected|tas_|carry/.test(s) && !/not/.test(s) ? "g" : /demo|planned/.test(s) ? "b" : "a"}>{s}</Badge></div><div className="small muted" style={{ marginTop: 4 }}>{x}</div></div>)}</div>
+    <div className="grid g2">{items.map(([t, s, x]) => <div key={t} className="card"><div className="row between"><b>{t}</b><Badge kind={/connected|tas_|carry|via/.test(s) && !/not/.test(s) ? "g" : /demo|planned|needs/.test(s) ? "b" : "a"}>{s}</Badge></div><div className="small muted" style={{ marginTop: 4 }}>{x}</div></div>)}</div>
   );
 }
 

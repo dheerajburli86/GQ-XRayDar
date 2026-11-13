@@ -1,0 +1,10 @@
+# TA backend server + the batch engine (same image, different start command).
+FROM node:22-slim
+WORKDIR /app
+ENV NODE_ENV=production
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts
+COPY engine ./engine
+COPY cli ./cli
+COPY server ./server
+CMD ["node", "server/index.mjs"]

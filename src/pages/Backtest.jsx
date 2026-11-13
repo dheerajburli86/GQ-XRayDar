@@ -12,19 +12,44 @@ import { backtestEvents, HORIZON_KEYS } from "../../engine/backtest.js";
 import { EVENT_LABEL } from "../../engine/signals.js";
 import { usePersistent } from "../lib/storage.js";
 import { navigate } from "../lib/router.js";
+import { RuleEditor, ReportCard } from "../components/RuleCard.jsx";
 
 const TYPES = Object.keys(EVENT_LABEL);
 
 export default function Backtest({ route }) {
-  const [tab, setTab] = useState(route.query.tab || "summary");
+  const [tab, setTab] = useState(route.query.tab || "idea");
   return (
     <div className="stack">
       <PageHead title="Backtest, pattern library & inflection database" sub="Bias controls: signals use data up to the signal bar only; entry is the next session's close; delisted stocks stay in the universe; split adjustments are applied before any calculation." />
-      <Tabs value={tab} onChange={setTab} tabs={[{ value: "summary", label: "Signal scorecard" }, { value: "custom", label: "Custom backtest" }, { value: "library", label: "Pattern library" }, { value: "log", label: "Inflection database" }]} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ value: "idea", label: "Test an idea" }, { value: "summary", label: "Signal scorecard" }, { value: "custom", label: "Custom backtest" }, { value: "library", label: "Pattern library" }, { value: "log", label: "Inflection database" }]} />
+      {tab === "idea" && <Idea />}
       {tab === "summary" && <Summary />}
       {tab === "custom" && <Custom />}
       {tab === "library" && <Library route={route} />}
       {tab === "log" && <Log route={route} />}
+    </div>
+  );
+}
+
+function Idea() {
+  const [wls] = usePersistent("watchlists", {});
+  const [rule, setRule] = useState({ rule: "rsi_cross_below", params: { level: 30 }, tf: "D" });
+  const [on, setOn] = useState("top");
+  const [inst, setInst] = useState(null);
+  const [wl, setWl] = useState(null);
+  const ids = on === "stock" ? (inst ? [inst.id] : []) : on === "wl" ? wls[wl]?.ids || [] : null;
+  return (
+    <div className="stack">
+      <div className="card stack">
+        <div className="small">"What if I had acted every time this happened?" Pick a signal and where to test it; each past signal is followed for three periods, entering at the next candle's close.</div>
+        <RuleEditor value={rule} onChange={setRule} />
+        <div className="row">
+          <Seg value={on} options={[{ value: "top", label: "Largest stocks" }, { value: "stock", label: "One stock" }, { value: "wl", label: "A watchlist" }]} onChange={setOn} />
+          {on === "stock" && <InstrumentPicker allowIndex={false} value={inst} onChange={setInst} />}
+          {on === "wl" && <Select value={wl} options={Object.entries(wls).map(([k, v]) => ({ value: k, label: v.name }))} onChange={setWl} allowEmpty="Pick" />}
+        </div>
+      </div>
+      {(on === "top" || ids?.length > 0) && <ReportCard key={JSON.stringify([rule, on, ids])} rule={rule} ids={ids} title="Result" />}
     </div>
   );
 }

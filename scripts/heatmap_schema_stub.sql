@@ -9,10 +9,11 @@ end $$;
 create table if not exists instruments (
   id uuid primary key, symbol text, name text, universe text, type text, sector text, industry text, country text,
   region text, currency text, exchange text, isin text, is_active boolean, market_cap_local numeric, market_cap_currency text,
-  market_cap_usd bigint, market_cap_inr bigint);
+  market_cap_usd bigint, market_cap_inr bigint, etf_category text);
 create table if not exists price_history (instrument_id uuid, date date, open numeric, high numeric, low numeric, close numeric, volume bigint, primary key (instrument_id, date));
 create table if not exists fundamentals (instrument_id uuid primary key, income_statement jsonb, income_statement_q jsonb, balance_sheet jsonb, balance_sheet_q jsonb, cash_flow jsonb, cash_flow_q jsonb, reported_currency text);
 create table if not exists fx_rates (currency text primary key, usd_per_unit numeric);
 create table if not exists glocom_latest (instrument_id uuid primary key, glocom_code int, glocom_label text, sort_score numeric, pctile_1m numeric, pctile_3m numeric, pctile_6m numeric, pctile_1y numeric, as_of timestamptz);
 grant usage on schema public to anon, authenticated;
 grant select on instruments, price_history to anon, authenticated;
+alter table instruments add column if not exists etf_category text;

@@ -118,7 +118,7 @@ export const REQUIREMENTS = [
   R(111, "M", "Rebuild / replay capability", "done", "Re-running the engine recomputes history deterministically and logs every change."),
   R(112, "M", "Actual vs estimated data labels", "done", "Estimated caps, carried FX, stale constituents and demo data are labelled."),
   R(113, "M", "Reusable calculation services", "done", "One engine (engine/) for indices, RSC, WW, FX, charts and heatmaps, in batch and in the browser."),
-  R(114, "E", "APIs and structured exports", "partial", "CSV / Excel exports; Supabase REST on tas_* tables and tas_index_series(). No separate authenticated API."),
+  R(114, "E", "APIs and structured exports", "done", "CSV / Excel / PDF / PNG exports; Supabase REST on tas_* tables and tas_index_series(); the TA server's authenticated /api (login or agent secret) for analysis, screens, alerts, tasks and watchlists."),
   R(115, "E", "Performance and caching", "done", "Precomputed batch results, compact screen rows, cached series, Web Worker in demo."),
   R(116, "C", "Integration feasibility", "config", "Checklist in Data centre → Integrations and docs/METHODOLOGY.md."),
 ];

@@ -6,7 +6,7 @@
 import { FIELDS } from "./fields.js";
 
 // Identity fields come from the security master; everything else is flattened.
-const IDENTITY = new Set(["symbol", "name", "country", "region", "classification", "sector", "industryGroup", "industry", "cap", "capUsd", "currency"]);
+const IDENTITY = new Set(["symbol", "name", "country", "region", "classification", "sector", "industryGroup", "industry", "cap", "capUsd", "currency", "assetClass"]);
 export const SCREEN_KEYS = FIELDS.filter((f) => !IDENTITY.has(f.key)).map((f) => f.key);
 
 const rnd = (v) => (typeof v === "number" ? (Number.isFinite(v) ? Math.round(v * 10000) / 10000 : null) : v);

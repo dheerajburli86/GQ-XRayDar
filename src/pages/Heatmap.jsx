@@ -54,7 +54,7 @@ export default function Heatmap({ route }) {
 
   const stockRows = useMemo(() => {
     if (level !== "stocks") return [];
-    let rows = applyScope(d.rows, { region: q.region, country: q.country, sector: q.sector, cap: q.cap || (s.capFilter !== "All" ? s.capFilter : null), industryGroup: q.ig });
+    let rows = applyScope(d.rows.filter((r) => (r.sec.assetClass || "Stock") === "Stock"), { region: q.region, country: q.country, sector: q.sector, cap: q.cap || (s.capFilter !== "All" ? s.capFilter : null), industryGroup: q.ig });
     if (!q.country && !q.region && !q.sector) rows = [...rows].sort((a, b) => (b.sec.capUsdNow || 0) - (a.sec.capUsdNow || 0)).slice(0, 600);
     return rows;
   }, [level, d.rows, q.region, q.country, q.sector, q.cap, q.ig, s.capFilter]);
