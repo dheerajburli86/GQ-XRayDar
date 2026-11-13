@@ -1,0 +1,36 @@
+# Nightly calculation run. MANUAL ONLY until the database is connected and a
+# first run has been reviewed: uncomment `schedule` afterwards.
+# Requires repository secrets DATABASE_URL (and FMP_API_KEY for the FX step).
+name: engine
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Compute only, write nothing"
+        type: boolean
+        default: true
+  # schedule:
+  #   # 02:40 UTC: after the heatmap's global prices (23:10 UTC) and alt assets,
+  #   # clear of its technical-analysis run (05:30 UTC) and the India window (10:00+ UTC)
+  #   - cron: "40 2 * * 2-6"
+
+concurrency: { group: engine, cancel-in-progress: false }
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm test
+      - name: Historical FX
+        if: ${{ github.event_name == 'schedule' || !inputs.dry_run }}
+        run: node cli/fx-backfill.mjs
+        env: { DATABASE_URL: "${{ secrets.DATABASE_URL }}", FMP_API_KEY: "${{ secrets.FMP_API_KEY }}" }
+      - name: Engine
+        run: node --max-old-space-size=12000 cli/run.mjs ${{ (github.event_name != 'schedule' && inputs.dry_run) && '--dry-run' || '' }}
+        env: { DATABASE_URL: "${{ secrets.DATABASE_URL }}" }
