@@ -33,7 +33,7 @@ export function createFo({ pool, log = console.log, fetchImpl = fetch, cfg = foC
   async function nseCookie(force = false) {
     if (!force && cookie && Date.now() - cookieAt < 20 * 60_000) return cookie;
     try {
-      const r = await fetchImpl("https://www.nseindia.com/", { headers: { "User-Agent": UA, Accept: "text/html", "Accept-Language": "en-US,en;q=0.9" } });
+      const r = await fetchImpl("https://www.nseindia.com/", { signal: AbortSignal.timeout(30_000), headers: { "User-Agent": UA, Accept: "text/html", "Accept-Language": "en-US,en;q=0.9" } });
       const set = typeof r.headers.getSetCookie === "function" ? r.headers.getSetCookie() : [r.headers.get("set-cookie")].filter(Boolean);
       cookie = set.map((c) => c.split(";")[0]).join("; ");
       cookieAt = Date.now();
@@ -44,7 +44,9 @@ export function createFo({ pool, log = console.log, fetchImpl = fetch, cfg = foC
   async function get(url) {
     for (let attempt = 0; attempt < 2; attempt++) {
       const ck = await nseCookie(attempt > 0);
-      const r = await fetchImpl(url, { headers: { "User-Agent": UA, Accept: "*/*", Referer: "https://www.nseindia.com/", ...(ck ? { Cookie: ck } : {}) } });
+      let r;
+      try { r = await fetchImpl(url, { signal: AbortSignal.timeout(60_000), headers: { "User-Agent": UA, Accept: "*/*", Referer: "https://www.nseindia.com/", ...(ck ? { Cookie: ck } : {}) } }); }
+      catch (e) { const why = e.cause?.code || e.cause?.message || e.name; if (attempt === 1) throw new Error(`${url.split("/").pop()}: ${e.message} (${why})`); continue; }
       if (r.status === 404) return null;
       if (r.ok) return Buffer.from(await r.arrayBuffer());
       if (attempt === 1) throw new Error(`${url.split("/").pop()}: HTTP ${r.status}`);
@@ -135,9 +137,11 @@ export function createFo({ pool, log = console.log, fetchImpl = fetch, cfg = foC
     const t0 = Date.now(), done = [];
     try {
       const todo = (await pending()).slice(0, cfg.maxPerTick);
+      let streak = 0;
       for (const d of todo) {
-        try { const r = await loadDate(d); done.push(r); log(`[fo] ${d}: ${r.status}${r.underlyings ? ` (${r.underlyings} underlyings; ${Object.entries(r.files).map(([k, v]) => `${k} ${typeof v === "string" ? v : "ok"}`).join(", ")})` : ""}`); }
-        catch (e) { done.push({ date: d, status: "error", error: e.message }); log(`[fo] ${d}: ERROR ${e.message}`); await mark(d, "error", null, 0, 0, { error: e.message.slice(0, 500) }).catch(() => {}); }
+        if (streak >= 2) { log("[fo] two failures in a row: stopping this pass (the exchange may be refusing this server)"); break; }
+        try { const r = await loadDate(d); done.push(r); streak = 0; log(`[fo] ${d}: ${r.status}${r.underlyings ? ` (${r.underlyings} underlyings; ${Object.entries(r.files).map(([k, v]) => `${k} ${typeof v === "string" ? v : "ok"}`).join(", ")})` : ""}`); }
+        catch (e) { streak++; done.push({ date: d, status: "error", error: e.message }); log(`[fo] ${d}: ERROR ${e.message}`); await mark(d, "error", null, 0, 0, { error: e.message.slice(0, 500) }).catch(() => {}); }
         await new Promise((r) => setTimeout(r, 1500));
       }
       if (done.some((x) => x.status === "ok")) await prune();
