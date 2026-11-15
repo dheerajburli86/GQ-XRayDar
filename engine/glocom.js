@@ -13,7 +13,7 @@
 //   UW 30 30      w < 0.3    m6 < 0.3                   5 dark red
 //   LTW 30        w <= 0.3   m6 >= 0.3                  5 dark red
 //   UW 40 40      w < 0.4    m6 < 0.4                   4 light red
-//   LTW 40        w <= 0.4   m6 < 0.4                   4 light red
+//   LTW 40        w <= 0.4   m6 >= 0.4                  4 light red
 //   Neutral 40 60 everything else                       3 yellow
 //
 // Rows are tested in that order and the first match wins (owner's sheet,
@@ -32,7 +32,7 @@ export const GLOCOM_RULES = [
   { label: "UW 30 30", code: 5, test: (w, m) => w < 0.3 && m < 0.3 },
   { label: "LTW 30", code: 5, test: (w, m) => w <= 0.3 && m >= 0.3 },
   { label: "UW 40 40", code: 4, test: (w, m) => w < 0.4 && m < 0.4 },
-  { label: "LTW 40", code: 4, test: (w, m) => w <= 0.4 && m < 0.4 },
+  { label: "LTW 40", code: 4, test: (w, m) => w <= 0.4 && m >= 0.4 },
 ];
 export const NEUTRAL = { label: "Neutral 40 60", code: 3 };
 export const GLOCOM_LABELS = [...GLOCOM_RULES.map((r) => r.label), NEUTRAL.label];

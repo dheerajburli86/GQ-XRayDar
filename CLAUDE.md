@@ -89,7 +89,7 @@ Local end-to-end check of the batch engine against a throw-away Postgres:
   with `server/lib/rbac.mjs`. **API tokens** are hashed (`tas_api_token`), scoped, rate-limited per token; `/v1`
   and the `/v1/stream` WebSocket are in `server/lib/publicApi.mjs`, documented in `docs/API.md`.
 - `engine/deriv/capabilities.js` is the exchange capability matrix and rule engines; pages should read it rather
-  than assume an exchange offers depth, tape or SPAN. Freeze limits there must be checked against circulars.
+  than assume an exchange offers depth, tape or SPAN. NSE freeze limits there are from NSE/FAOP/77189 (2026-11-02); NSE revises them often, re-check before relying on them.
 - Chart patterns (`engine/patterns.js`) are computed in the batch engine for D and W (snapshot `chartPatterns`) and
   appear as screen fields `chartPattern*`; the chart lab recomputes them for the bars on screen.
 
@@ -100,7 +100,8 @@ Local end-to-end check of the batch engine against a throw-away Postgres:
 - Peer sets: a stock's GLOCOM = vs its market (heatmap `glocom_latest` wins when present, `source` says which);
   LOCOM = vs its own GICS industry group (needs 3+ stocks); industries / sectors = vs the other groups of the market,
   on the EQUAL-WEIGHTED average of their constituents' 1W / 6M / 1Y returns (calendar look-backs, as returns_latest).
-  "LOCOM = within industry" is our reading of "local" and still to be confirmed with the owner.
+  LOCOM = within industry group (confirmed by the owner 2026-11-15). LTW 40 is W <= 0.4 and 6M >= 0.4, as the heatmap's
+  scraper_common.classify (owner: follow the heatmap where the picture differs).
 - Group rank 1 = best (band, then the heatmap's 50/30/20 score). History of the last `methodology.glocom.historySessions`
   sessions is stored in `tas_glocom_group` (`C:<country>|industry|sector`, `G|...` in USD); the page computes moves
   (`groupMoves`, `groupTimeline`). Jump > 0 = moved up that many places.
@@ -110,8 +111,8 @@ Local end-to-end check of the batch engine against a throw-away Postgres:
 - Source of truth: the ETI project (repo dheerajburli86/ETI, Supabase project "ETI"). It stores, per company, the 10
   characteristics (6 IMB, 4 ETI gates) as yes / no / unknown with numbers and notes. Sir's rule: **no score, no rank,
   no view** -- this app shows and filters them, nothing more. Do not add counts, totals or orderings by "how many met".
-- Copy: `tas_eti_sync()` in the heatmap DB pulls `company_characteristics_latest` over dblink (server `eti_src`, ETI
-  login `xraydar_reader`: read-only, SELECT on companies / characteristics only) into `tas_eti_characteristic`, hourly
+- Copy: `tas_eti_sync()` in the heatmap DB pulls `company_characteristics_latest` over dblink (connection string in the Vault
+  secret `eti_src_conn`; a foreign server is not allowed, dblink_fdw belongs to supabase_admin; ETI login `xraydar_reader`: read-only, SELECT on companies / characteristics only) into `tas_eti_characteristic`, hourly
   via pg_cron `tas-eti-sync`. Instruments are matched by ISIN, then NSE symbol. Every changed answer after first sight
   is appended to `tas_eti_change` (first sight is silent), which is what the "eti" alert kind reads.
 - `unknown` (null) means the rule could not be checked. Never show or filter it as "no".

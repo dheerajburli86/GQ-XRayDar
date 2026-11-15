@@ -40,7 +40,7 @@ export const REQUIREMENTS = [
   R(33, "M", "EWCW relative strength engine", "done", "EWCW page; ratio EW/CW per scope."),
   R(34, "M", "EWCW across index hierarchy", "done", "Computed for every CW/EW pair (sector, cap, country, region, classification, global)."),
   R(35, "M", "GLOCOM integration", "done", "Heatmap rule sheet (1W / 6M / 1Y percentiles, 9 labels, 5 colour bands) in engine/glocom.js. Stocks use the heatmap's own glocom_latest where it exists; industries and sectors are rated per market and globally, with rank history and moves (GLOCOM / LOCOM page)."),
-  R(36, "M", "LOCOM integration", "done", "Same rule sheet with a stock's own industry group as the peer set (3+ stocks). Interpretation of 'local' to be confirmed."),
+  R(36, "M", "LOCOM integration", "done", "Same rule sheet with a stock's own industry group as the peer set (3+ stocks). Confirmed by the owner 2026-11-15."),
   R(37, "C", "GLOCOM / LOCOM definitions", "done", "Rule sheet supplied 2026-11-15; colours dark green / light green / yellow / light red / dark red."),
   R(38, "M", "CW Weight Watcher", "done", "engine/weightWatcher.js; Weight Watcher page."),
   R(39, "M", "Stock WW", "done", "Stocks in a country sector, one line each."),

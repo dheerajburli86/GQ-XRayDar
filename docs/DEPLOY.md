@@ -55,6 +55,10 @@ key can read nothing in the user tables; only the TA server can.
 
 ## Step 2: Engine on Railway (15 min)
 
+> Done 2026-11-15: Railway project **gq-xraydar**, service **engine** (Dockerfile, start command, cron
+> `40 2 * * 2-6`, 8 GB, restart never). Only `DATABASE_URL` (and optionally `FMP_API_KEY`) still has to be
+> added in its Variables tab.
+
 1. Railway → your project → **New → GitHub repo** → pick this repository.
 2. Service **Settings**:
    - *Root directory*: leave empty (the repo root).

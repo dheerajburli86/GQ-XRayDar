@@ -55,15 +55,15 @@ export const capabilityNote = (exchange, key) => { const c = capability(exchange
  */
 export const EXCHANGE_RULES = {
   NSE: {
-    version: "2025 circulars (verify freeze limits against the latest circular)", mwplNearBan: 0.8, mwplBan: 0.95, mwplExit: 0.8, physicalWarnDays: 5,
-    freezeQty: { NIFTY: 1800, BANKNIFTY: 900, FINNIFTY: 1800, MIDCPNIFTY: 2800, NIFTYNXT50: 600 },
+    version: "freeze limits: NSE/FAOP/77189, effective 2026-11-02 (revised every month or two: re-check the latest circular)", mwplNearBan: 0.8, mwplBan: 0.95, mwplExit: 0.8, physicalWarnDays: 5,
+    freezeQty: { NIFTY: 1800, BANKNIFTY: 900, FINNIFTY: 1800, MIDCPNIFTY: 2800, NIFTYNXT50: 600, NIFTYFPI: 8500 },
     stockFreezeRule: "Freeze quantity for stock derivatives is set per contract by NSE (lot multiple); read from the contract file when present.",
     expiry: { index: "NIFTY weekly on Tuesday; monthly index contracts on the last Tuesday", stock: "last Tuesday of the month", holiday: "previous trading day" },
     settlement: { index: "cash, at the final settlement price (closing price of the index)", stock: "physical delivery for stock futures and in-the-money stock options" },
     style: "European", tradingHours: "09:15-15:30 IST", tick: 0.05,
   },
   BSE: {
-    version: "2025 circulars (verify freeze limits against the latest circular)", mwplNearBan: 0.8, mwplBan: 0.95, mwplExit: 0.8, physicalWarnDays: 5, freezeQty: { SENSEX: 1000, BANKEX: 900 },
+    version: "freeze limits: BSE single-order limits (SENSEX 1000, BANKEX 900, SENSEX50 1800; no 2026 revision found, not re-verified against a 2026 notice)", mwplNearBan: 0.8, mwplBan: 0.95, mwplExit: 0.8, physicalWarnDays: 5, freezeQty: { SENSEX: 1000, BANKEX: 900, SENSEX50: 1800 },
     expiry: { index: "SENSEX weekly on Thursday", stock: "last Thursday" }, settlement: { index: "cash", stock: "physical" }, style: "European", tradingHours: "09:15-15:30 IST", tick: 0.05,
   },
   MCX: { version: "not connected", expiry: { commodity: "contract-specific (product calendar)" }, settlement: { commodity: "cash or delivery per product; tender / delivery period before expiry" }, style: "European (options on futures)", tradingHours: "09:00-23:30 IST (varies by product)" },

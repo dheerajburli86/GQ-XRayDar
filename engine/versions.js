@@ -19,7 +19,7 @@ export const MODEL_VERSIONS = {
   derivAlerts: "1.0 edge-triggered on end-of-day summaries",
   coach: "1.0 rule-based journal analysis",
   validation: "1.0 walk-forward, parameter grid, Brier and calibration",
-  glocom: "1.0 heatmap rule sheet (1W / 6M / 1Y percentiles); LOCOM within industry group; group rank history",
+  glocom: "1.1 heatmap rule sheet (LTW 40 = 6M >= 0.4, as scraper_common.classify) (1W / 6M / 1Y percentiles); LOCOM within industry group; group rank history",
   chartPatterns: "1.0 pivot-based classical patterns",
   assistant: "1.0 deterministic parser + stored calculations (built-in)",
   foCollector: "3 (FO_VERSION)",

@@ -41,7 +41,7 @@ Generated from `src/requirements.js` (`npm run trace`). Also shown in the app: *
 | 33 | M | EWCW relative strength engine | Built | EWCW page; ratio EW/CW per scope. |
 | 34 | M | EWCW across index hierarchy | Built | Computed for every CW/EW pair (sector, cap, country, region, classification, global). |
 | 35 | M | GLOCOM integration | Built | Heatmap rule sheet (1W / 6M / 1Y percentiles, 9 labels, 5 colour bands) in engine/glocom.js. Stocks use the heatmap's own glocom_latest where it exists; industries and sectors are rated per market and globally, with rank history and moves (GLOCOM / LOCOM page). |
-| 36 | M | LOCOM integration | Built | Same rule sheet with a stock's own industry group as the peer set (3+ stocks). Interpretation of 'local' to be confirmed. |
+| 36 | M | LOCOM integration | Built | Same rule sheet with a stock's own industry group as the peer set (3+ stocks). Confirmed by the owner 2026-11-15. |
 | 37 | C | GLOCOM / LOCOM definitions | Built | Rule sheet supplied 2026-11-15; colours dark green / light green / yellow / light red / dark red. |
 | 38 | M | CW Weight Watcher | Built | engine/weightWatcher.js; Weight Watcher page. |
 | 39 | M | Stock WW | Built | Stocks in a country sector, one line each. |

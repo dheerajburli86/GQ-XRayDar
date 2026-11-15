@@ -5,9 +5,9 @@
 --   ETI project:     role xraydar_reader (login, read-only) with SELECT + RLS select policies on
 --                    companies and company_characteristics, SELECT on company_characteristics_latest.
 --   heatmap project: create extension dblink with schema extensions;
---                    create server eti_src foreign data wrapper dblink_fdw options (host '<ETI session pooler host>',
---                      port '5432', dbname 'postgres', sslmode 'require', connect_timeout '15');
---                    create user mapping for postgres server eti_src options (user 'xraydar_reader.<eti ref>', password '...');
+--                    a Vault secret named 'eti_src_conn' holding the libpq connection string to the ETI session
+--                    pooler (host, port 5432, dbname, sslmode=require, user xraydar_reader.<eti ref>, password).
+--                    (A dblink foreign server is not possible here: dblink_fdw is owned by supabase_admin.)
 begin;
 
 create table if not exists tas_eti_characteristic (
@@ -41,11 +41,11 @@ create table if not exists tas_eti_change (
 );
 create index if not exists tas_eti_change_at on tas_eti_change(at desc);
 
-create or replace function tas_eti_sync() returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+create or replace function tas_eti_sync() returns jsonb language plpgsql security definer set search_path = public, extensions, vault as $$
 declare n int; ch int;
 begin
   create temp table _eti on commit drop as
-  select * from extensions.dblink('eti_src', $q$
+  select * from extensions.dblink((select decrypted_secret from vault.decrypted_secrets where name = 'eti_src_conn'), $q$
     select c.id, cc.characteristic, cc.framework, c.isin, c.nse_symbol, c.bse_code, c.name, cc.as_of, cc.meets, cc.value, cc.note, cc.method_version, cc.computed_at
       from company_characteristics_latest cc join companies c on c.id = cc.company_id
      where coalesce(c.hidden, false) = false

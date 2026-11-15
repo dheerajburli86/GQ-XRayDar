@@ -134,7 +134,7 @@ function GroupDetail({ hist, name, market, level, rows, onClose }) {
 function Sheet() {
   const rows = [...GLOCOM_RULES.map((r) => ({ label: r.label, code: r.code })), NEUTRAL];
   const text = { "US 80 80": "W > 0.8 · 6M > 0.4 · 1Y > 0.8", "LTS 80": "W ≤ 0.8 · 6M > 0.4 · 1Y > 0.8", "US 60 60": "W > 0.6 · 6M > 0.4 · 0.6 < 1Y ≤ 0.8", "LTS 60": "W ≤ 0.6 · 6M > 0.4 · 0.6 < 1Y ≤ 0.8",
-    "UW 30 30": "W < 0.3 · 6M < 0.3", "LTW 30": "W ≤ 0.3 · 6M ≥ 0.3", "UW 40 40": "W < 0.4 · 6M < 0.4", "LTW 40": "W ≤ 0.4 · 6M < 0.4", "Neutral 40 60": "everything else" };
+    "UW 30 30": "W < 0.3 · 6M < 0.3", "LTW 30": "W ≤ 0.3 · 6M ≥ 0.3", "UW 40 40": "W < 0.4 · 6M < 0.4", "LTW 40": "W ≤ 0.4 · 6M ≥ 0.4", "Neutral 40 60": "everything else" };
   return (
     <div className="card"><h3>Rule sheet (percentiles, first match wins)</h3>
       {rows.map((r) => <div key={r.label} className="row between small" style={{ padding: "3px 0" }}><GBadge code={r.code} label={r.label} /><span className="mono">{text[r.label]}</span></div>)}

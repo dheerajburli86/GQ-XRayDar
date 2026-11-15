@@ -11,7 +11,8 @@ test("classifyGlocom follows the sheet row by row", () => {
   assert.equal(c(0.2, 0.2, 0.9), "UW 30 30");    // m6 fails the top rows
   assert.equal(c(0.3, 0.35, 0.1), "LTW 30");
   assert.equal(c(0.35, 0.35, 0.1), "UW 40 40");
-  assert.equal(c(0.4, 0.35, 0.1), "LTW 40");     // w = 0.4 exactly
+  assert.equal(c(0.4, 0.45, 0.1), "LTW 40");     // w = 0.4 exactly, m6 >= 0.4 (heatmap rule)
+  assert.equal(c(0.4, 0.35, 0.1), "Neutral 40 60"); // m6 < 0.4 at w = 0.4: no row matches
   assert.equal(c(0.5, 0.5, 0.5), "Neutral 40 60");
   assert.equal(c(0.5, 0.39, 0.5), "Neutral 40 60"); // w not < 0.4
   assert.equal(classifyGlocom(0.9, 0.5, 0.9).code, 1);
