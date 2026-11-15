@@ -2,21 +2,21 @@
 
 Generated from `src/requirements.js` (`npm run trace`). Also shown in the app: *Data centre → Requirement trace*.
 
-**Built, with a stated limit:** 12 · **Built:** 95 · **Enhancement, not started:** 1 · **Built on a default awaiting confirmation [C]:** 4 · **Needs an external input:** 4
+**Built, with a stated limit:** 17 · **Built:** 111 · **Built on a default awaiting confirmation [C]:** 4 · **Needs an external input:** 7
 
 | # | Tag | Requirement | Status | Where / notes |
 |---|---|---|---|---|
-| 1 | M | Unified AI technical-analysis platform | Built, with a stated limit | Technical, relative, absolute, fundamental, index, Weight Watcher and GLOCOM in one app. IMB and Finxray plug in once their definitions / feed exist (#93, #95). |
-| 2 | M | Global equity coverage | Built | Stocks, GICS sectors / industry groups, countries, regions and DM/EM classifications across US, India and the 39-country global universe. |
+| 1 | M | Unified AI global market intelligence platform | Built, with a stated limit | Technical, relative, absolute, fundamental, index, Weight Watcher and GLOCOM in one app. IMB and Finxray plug in once their definitions / feed exist (#93, #95). |
+| 2 | M | Global coverage | Built, with a stated limit | Stocks, GICS sectors / industry groups, countries, regions and DM/EM classifications across US, India and the 39-country global universe; commodity, crypto and currency products as their own asset classes; REITs as the GICS Equity REITs group; fixed income on the Cross-asset page (bond funds from FMP, the heatmap carries none). Spot crypto pairs are inactive in the heatmap and stay out. |
 | 3 | M | Top-down and bottom-up navigation | Built | Top-down explorer (global → region → country → cap → sector → industry group → stock); stock page breadcrumbs go back up. |
 | 4 | M | Absolute and relative views | Built | Absolute / relative-to-parent toggle in the explorer and heatmap; relative-strength pages. |
-| 5 | M | Rapid timeframe selector | Built | Candle interval D/W/M/Q/Y per chart window; trailing horizons 1W/1M/3M/6M/12M are a separate control. |
+| 5 | M | Rapid timeframe selector | Built | Candle interval D/W/M/Q/6M (half-yearly)/9M/Y per chart window; trailing horizons 1W/1M/3M/6M/12M are a separate control. |
 | 6 | M | Voice commands | Built | Microphone in the command bar and the assistant (Web Speech API, Chrome / Edge). Spoken text runs through the same command parser. |
 | 7 | M | Natural-language commands | Built | engine/nl.js: deterministic parser that shows how it read the sentence; the spec's example query is a unit test. |
 | 8 | M | Responsive modern interface | Built | Dark / light mode, saved chart layouts and workspaces, no page reloads (hash routing). |
 | 9 | M | Common search and filtering | Built | Command bar search over stocks, countries and pages; region / class / country / sector / cap filters; index search. |
 | 10 | E | Global market command centre | Built | Command centre page. |
-| 11 | E | Multi-asset context | Enhancement, not started | Fixed income / commodities / REITs heatmaps and cross-asset correlation. |
+| 11 | E | Multi-asset context | Built | Cross-asset page: equities, REITs, commodities, crypto, currencies and fixed income in USD: returns heatmap, weekly-return correlation matrix, volatility and relative strength vs global equities (tas_xasset, refreshed daily by the server). |
 | 12 | M | Independent CW and EW index families | Built | engine/indexEngine.js; every scope has both. |
 | 13 | M | Level 1: country sector-by-cap indices | Built | C:<country>\|S:<sector>\|K:<cap>, CW and EW, local and USD. |
 | 14 | M | Level 2: country cap-segment indices | Built | C:<country>\|K:<cap>. |
@@ -122,3 +122,26 @@ Generated from `src/requirements.js` (`npm run trace`). Also shown in the app: *
 | 114 | E | APIs and structured exports | Built | CSV / Excel / PDF / PNG exports; Supabase REST on tas_* tables and tas_index_series(); the TA server's authenticated /api (login or agent secret) for analysis, screens, alerts, tasks and watchlists. |
 | 115 | E | Performance and caching | Built | Precomputed batch results, compact screen rows, cached series, Web Worker in demo. |
 | 116 | C | Integration feasibility | Built on a default awaiting confirmation [C] | Checklist in Data centre → Integrations and docs/METHODOLOGY.md. |
+| 117 | M | Half-yearly and 9-month timeframes | Built | Every chart window (stacked screens, chart lab, workspace, stock page) offers 6M and 9M candles; 9-month candles run on a fixed 9-month grid from January 2000. |
+| 118 | M | User-built indices with Weight Watcher | Built | Indices → My indices: any stocks, CW / EW / own weights, USD or local; history plus each member's weight quarter by quarter with trend flags (engine/customIndex.js). |
+| 119 | M | Derivatives coverage: index and stock futures & options | Built | NSE end-of-day files collected nightly by the server (tas_fo_*): every listed expiry and strike, lot sizes, OI, volume, settlement. |
+| 120 | M | Commodity, currency, interest-rate and international derivatives | Needs an external input | Adapters defined (engine/deriv/sources.js); need MCX / NSE CDS / BSE files or licensed feeds for CME, Eurex, CBOE, SGX, ICE. |
+| 121 | M | Contract master and exchange-aware details | Built | Underlying, expiry, strike, type, lot, settlement style and last trading day from the bhavcopy; physical-settlement window flagged for stock contracts. |
+| 122 | M | Option chain workstation | Built, with a stated limit | Chain with OI, change, volume, IV, Greeks, PCR by strike, moneyness by spot or synthetic forward, strike range, heat colouring, multi-expiry view, session time machine, CSV / Excel / JSON export. Bid / ask, live refresh and intraday series need a live feed. |
+| 123 | M | PCR, IV metrics, IV rank and percentile | Built | Strike / expiry / overall PCR by OI and volume with history; strike IV, ATM IV history, IV rank and percentile with the look-back shown. |
+| 124 | M | First, second and third-order Greeks | Built | Delta, gamma, theta, vega, rho, vanna, charm, vomma, speed, zomma, colour (unit-tested against finite differences), model audit panel. |
+| 125 | M | Synthetic futures, parity and box-spread rates | Built | Per strike, with conversion / reversal gaps vs the future; labelled as indications (closes are not simultaneous). |
+| 126 | M | OI analytics, writing vs buying, build-up classes | Built | Long / short build-up, short covering, long unwinding with evidence and confidence; option writing / buying / covering / unwinding per contract; OI walls, concentration (HHI, top-strike share), wall migration. |
+| 127 | M | MWPL, F&O ban and participant-wise OI | Built | Exchange-published, labelled as fact; near-ban (80%) and ban (95%) flags; FII / DII / Pro / Client net positions with history. |
+| 128 | M | Futures, basis, carry, rollover and continuous series | Built | Near / next / far, basis, annualised carry, implied dividend yield, fair value, rollover vs 3- and 6-cycle averages, roll cost, curve, five continuous-series roll methods, cash-futures arbitrage screen net of Indian charges. |
+| 129 | M | Volatility suite | Built | Smile, 25 / 10-delta skew, SVI fit with an arbitrage check, surface grid, term structure and forward vol, realised vol (close-to-close, Parkinson, Garman-Klass, Yang-Zhang), cones, VRP, regimes, IV alerts, a statistical IV projection, results-date IV crush. |
+| 130 | M | Pricing models | Built | Black-Scholes-Merton, Black-76, CRR binomial, trinomial, Barone-Adesi-Whaley, Bachelier. |
+| 131 | M | Dealer gamma (GEX) and gamma flip | Built | By strike and across spot levels, with the dealer-positioning assumption stated. |
+| 132 | M | Strategy builder and analyser | Built, with a stated limit | 53 templates in every listed group, free multi-leg builder, payoff at expiry and T+N, max profit / loss, breakevens, PoP, touch, EV, Greeks, scenario matrix, Indian costs and taxes, comparison, recommender, adjustments, saved positions with aggregated risk, trade journal. Margin is a labelled stress estimate: exchange SPAN needs the SPAN files. |
+| 133 | M | Expiry & event war room | Built | Max pain and its drift, walls, expected moves (straddle and IV), probabilities, gamma flip, decay curve, written synthesis in probabilistic language, implied vs realised move audit. |
+| 134 | M | Catalyst calendar | Built, with a stated limit | Expiries, results dates and corporate actions from data; macro / policy dates added by hand until a calendar feed is connected. |
+| 135 | M | Unusual activity | Built, with a stated limit | End-of-day volume z-scores, volume / OI, OI jumps, premium, deep ITM / far OTM, flow attribution with confidence. Tape, sweeps, blocks and order-book depth need a live feed. |
+| 136 | M | Derivatives & confluence screener | Built | Preset scans for every listed group, custom conditions, plain-English queries, saved scans with new-match alerts, technical + derivatives confluence and conflicts. |
+| 137 | M | Derivatives research and backtests | Built | Forward returns and hit rates after each derivatives signal; participant positioning vs the index. |
+| 138 | E | Live order flow, depth, footprint and time & sales | Needs an external input | Needs a dedicated live broker stream (not the heatmap's Kite session). |
+| 139 | E | Order management | Needs an external input | Optional by design; needs a broker connection and explicit approval. Practice positions only. |

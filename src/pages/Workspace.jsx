@@ -1,3 +1,4 @@
+import { CHART_TFS } from "../../engine/calendar.js";
 // Multi-chart workspace: any securities, indices, benchmarks and indicator
 // panels side by side, saved as named layouts.
 import { useMemo, useState } from "react";
@@ -73,7 +74,7 @@ function ChartPanel({ p, onChange, onRemove, sync }) {
       <div className="panel-head">
         <InstrumentPicker value={p.inst} onChange={(r) => onChange({ inst: r })} width={210} />
         <div className="row">
-          <Seg value={p.tf} options={["D", "W", "M", "Q", "Y"]} onChange={(tf) => onChange({ tf })} />
+          <Seg value={p.tf} options={CHART_TFS} onChange={(tf) => onChange({ tf })} />
           <Select value={p.ind} options={INDICATORS} onChange={(ind) => onChange({ ind })} />
           {p.ind === "rsc" && <InstrumentPicker value={p.bench} onChange={(r) => onChange({ bench: r })} width={170} placeholder="Benchmark…" />}
           <button className="btn sm ghost" onClick={onRemove} title="Remove panel">✕</button>

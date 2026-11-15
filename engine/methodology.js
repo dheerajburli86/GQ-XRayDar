@@ -60,7 +60,7 @@ export const METHODOLOGY = Object.freeze({
     accEmas: [4, 14, 26, 39],
     mmaShort: [3, 5, 8, 10, 12, 15],
     mmaLong: [30, 35, 40, 45, 50, 60],
-    mmaCompressionPct: { D: 2.0, W: 4.0, M: 8.0, Q: 12.0, Y: 18.0 }, // short-group spread below this % = compression
+    mmaCompressionPct: { D: 2.0, W: 4.0, M: 8.0, Q: 12.0, H: 15.0, N: 16.5, Y: 18.0 }, // short-group spread below this % = compression
     rscEma: 10,
     rscRebase: 100,
   },

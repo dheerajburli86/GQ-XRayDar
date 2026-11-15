@@ -6,7 +6,7 @@ export function Seg({ value, options, onChange, title }) {
     <div className="seg" title={title}>
       {options.map((o) => {
         const v = typeof o === "object" ? o.value : o, l = typeof o === "object" ? o.label : o;
-        return <button key={String(v)} className={value === v ? "on" : ""} onClick={() => onChange(v)}>{l}</button>;
+        return <button key={String(v)} className={value === v ? "on" : ""} title={typeof o === "object" ? o.title : undefined} onClick={() => onChange(v)}>{l}</button>;
       })}
     </div>
   );

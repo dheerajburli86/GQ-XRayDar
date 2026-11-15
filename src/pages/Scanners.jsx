@@ -185,7 +185,7 @@ function SectorRank({ rows }) {
     const g = new Map();
     for (const r of rows) {
       const k = by === "sector" ? r.sec.sector : r.sec.industryGroup;
-      if (!k || k === "ETF" || k === "Index") continue;
+      if (!k || (r.sec.assetClass || "Stock") !== "Stock") continue;
       if (!g.has(k)) g.set(k, []);
       g.get(k).push(r);
     }

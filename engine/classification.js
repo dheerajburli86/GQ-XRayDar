@@ -34,8 +34,13 @@ export const EQUITY_UNIVERSES = {
 
 // ETFs and exchange indices are analysed (charts, screens, alerts) but never
 // enter the CW / EW index construction, breadth or Weight Watcher.
-export const FUND_UNIVERSES = { us_etfs: "ETF", india_etfs: "ETF", global_etfs: "ETF", demo_etfs: "ETF", us_indices: "Index", india_indices: "Index", global_indices: "Index", demo_indices: "Index" };
-const UNIVERSE_COUNTRY = { us_etfs: "United States", us_indices: "United States", india_etfs: "India", india_indices: "India" };
+export const FUND_UNIVERSES = { us_etfs: "ETF", india_etfs: "ETF", global_etfs: "ETF", demo_etfs: "ETF", us_indices: "Index", india_indices: "Index", global_indices: "Index", demo_indices: "Index",
+  commodities: "Commodity", crypto_etfs: "Crypto" };
+/** Asset classes beyond stocks. Commodity and crypto products are the heatmap's
+ *  exchange-traded vehicles (GLD, USO, IBIT, ...); US currency ETFs are read
+ *  from the heatmap's own etf_category, never guessed from a name. */
+export const ASSET_CLASSES = ["Stock", "ETF", "Index", "Commodity", "Crypto", "Currency"];
+const UNIVERSE_COUNTRY = { us_etfs: "United States", us_indices: "United States", india_etfs: "India", india_indices: "India", commodities: "United States", crypto_etfs: "United States" };
 
 export function isAnalysableRow(row) {
   if (FUND_UNIVERSES[row.universe]) return true;
@@ -58,7 +63,7 @@ export function toSecurity(row, indiaMap = null) {
   let industry = row.industry ?? null;
   if (universe === "us_stocks") industry = INDUSTRY_MAP[row.symbol] ?? industry;
   if (universe === "india_stocks" && indiaMap) industry = indiaMap[row.symbol] ?? indiaMap[nseBaseSymbol(row.symbol)] ?? industry;
-  const fund = FUND_UNIVERSES[universe] || null;
+  const fund = universe === "us_etfs" && row.etf_category === "currency" ? "Currency" : FUND_UNIVERSES[universe] || null;
   const g = fund ? { sector: fund, industryGroup: row.etf_category || fund, source: "asset_class" } : classifyGics({ symbol: row.symbol, industry, sector: row.sector, universe });
   const country = canonicalCountry(row.country) || UNIVERSE_COUNTRY[universe] || (universe === "india_stocks" ? "India" : universe === "us_stocks" ? "United States" : null);
   const meta = countryMeta(country);

@@ -22,6 +22,8 @@ import { createDigests } from "./lib/digests.mjs";
 import { createTasks, TASK_KINDS } from "./lib/tasks.mjs";
 import { createScorecard } from "./lib/scorecard.mjs";
 import { createAgentProxy } from "./lib/agent.mjs";
+import { createFo, foConfig } from "./lib/fo.mjs";
+import { runXasset } from "../cli/xassetJob.mjs";
 import { RULES, DEFAULT_PARAMS, normalizeParams, describeRule, evaluateRule } from "../engine/rules.js";
 import { ALERT_TEMPLATES } from "../engine/alerts.js";
 import { FIELD } from "../engine/fields.js";
@@ -43,6 +45,7 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
   const tasks = createTasks({ pool, analysis, userdata, telegram, log });
   const scorecard = createScorecard({ data });
   const agentProxy = createAgentProxy({ cfg, data, fetchImpl, log });
+  const fo = deps.fo || createFo({ pool, log, fetchImpl, cfg: foConfig(cfg.env || process.env) });
   const limiter = new RateLimiter(cfg.rateLimitPerMin);
   const r = createRouter();
 
@@ -58,7 +61,8 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
   r.get("/health", async () => {
     let db = false, asOf = null;
     try { await pool.query("select 1"); db = true; const s = await data.get(); asOf = s.info.asOf; } catch { /* reported below */ }
-    return { ok: db, db, dataAsOf: asOf, telegram: telegram.enabled, push: push.enabled, agent: agentProxy.connected(), jobs: cfg.jobsEnabled };
+    const f = fo.status();
+    return { ok: db, db, dataAsOf: asOf, telegram: telegram.enabled, push: push.enabled, agent: agentProxy.connected(), jobs: cfg.jobsEnabled, fo: { enabled: f.enabled, running: f.running, last: f.last && { at: f.last.at, done: f.last.done.map((x) => `${x.date}:${x.status}`) } } };
   });
   r.get("/api/me", async (req) => {
     const u = await auth.web(req);
@@ -247,7 +251,7 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
     await pool.query(`insert into tas_push_sub (user_id, endpoint, keys) values ($1,$2,$3) on conflict (endpoint) do update set user_id = excluded.user_id, keys = excluded.keys`, [u.id, b.endpoint, JSON.stringify(b.keys)]);
     return { ok: true };
   });
-  r.post("/api/push/test", async (req) => { const u = await auth.web(req); return push.notify(u.id, { title: "GQ Technical Analysis", body: "Notifications are working on this device.", url: "/#/alerts" }); });
+  r.post("/api/push/test", async (req) => { const u = await auth.web(req); return push.notify(u.id, { title: "GQ XRayDar", body: "Notifications are working on this device.", url: "/#/alerts" }); });
 
   // ------------------------------------------------------------- analysis (web + agent)
   r.get("/api/resolve", async (req, _, url) => { await auth.any(req); return (await data.resolve(q(url, "q"))).map((x) => ({ id: x.id, symbol: x.symbol, name: x.name, country: x.country, exchange: x.exchange, assetClass: x.assetClass })); });
@@ -284,6 +288,14 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
     return agentProxy.chat({ message: String(b.message).slice(0, 4000), history: b.history, context: b.context, user: u });
   });
 
+  // ------------------------------------------------------------- derivatives (F&O end-of-day collector)
+  r.get("/api/fo/status", async (req) => { await auth.any(req); return fo.status(); });
+  r.post("/api/fo/run", async (req) => {
+    const a = await auth.any(req);
+    if (!a.agent && !a.user?.isAdmin) throw new HttpError(403, "admins only");
+    return fo.tick();
+  });
+
   // ------------------------------------------------------------- HTTP plumbing
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://x");
@@ -311,11 +323,25 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
     timers.push(setInterval(guard("alerts", () => alerts.tick()), cfg.alertPollMinutes * 60_000));
     timers.push(setInterval(guard("minute", async () => { await tasks.tick(); await digests.tick(); }), 60_000));
     setTimeout(guard("alerts", () => alerts.tick()), 20_000);
+    // Cross-asset series: refreshed when older than 20 hours (checked every 3 hours).
+    const xasset = async () => {
+      const { rows } = await pool.query(`select max(updated_at) t from tas_xasset`).catch(() => ({ rows: [] }));
+      if (rows[0]?.t && Date.now() - new Date(rows[0].t).getTime() < 20 * 3600_000) return;
+      await runXasset(pool, { log, fetchImpl });
+    };
+    timers.push(setInterval(guard("xasset", xasset), 3 * 3600_000));
+    setTimeout(guard("xasset", xasset), 90_000);
+    const foCfg = fo.status().cfg;
+    if (foCfg.enabled) {
+      timers.push(setInterval(guard("fo", () => fo.tick()), foCfg.pollMinutes * 60_000));
+      setTimeout(guard("fo", () => fo.tick()), 45_000);
+      log(`[jobs] F&O collector every ${foCfg.pollMinutes} min (backfill ${foCfg.backfill} sessions, chains kept ${foCfg.keepChains})`);
+    }
     log(`[jobs] alerts every ${cfg.alertPollMinutes} min; tasks + digests every minute (morning ${cfg.morningSummaryTime} IST weekdays, weekly ${cfg.weeklySummaryTime} IST)`);
   }
   async function close() { timers.forEach(clearInterval); await new Promise((res) => server.close(res)); if (!deps.pool) await pool.end(); }
 
-  return { server, pool, startJobs, close, alerts, tasks, digests, data, analysis };
+  return { server, pool, startJobs, close, alerts, tasks, digests, data, analysis, fo };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

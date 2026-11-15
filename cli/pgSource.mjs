@@ -13,7 +13,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 export const STOCK_UNIVERSES = ["us_stocks", "global", "india_stocks"];
 // Analysed (charts, screens, alerts) but never part of index construction or breadth.
-export const FUND_UNIVERSES = ["us_etfs", "india_etfs", "global_etfs", "us_indices", "india_indices", "global_indices"];
+export const FUND_UNIVERSES = ["us_etfs", "india_etfs", "global_etfs", "us_indices", "india_indices", "global_indices", "commodities", "crypto_etfs"];
 // Inactive rows are kept (delisted companies matter for survivorship-free
 // history) EXCEPT in India, where is_active=false is also how the heatmap mutes
 // ETFs, bonds and fund codes that sit in the stock universe.

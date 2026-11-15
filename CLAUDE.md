@@ -51,3 +51,22 @@ Local end-to-end check of the batch engine against a throw-away Postgres:
 - Event rows are stored compact (`engine/eventCodec.js`); decode before use.
 - The heatmap mutes India non-equities with `is_active=false`; the engine therefore skips
   inactive India rows but keeps inactive US / global ones (delisted companies).
+
+## Derivatives (F&O), added 2026-11-15
+
+- **Data = NSE's public end-of-day files**, downloaded by the TA server (`server/lib/fo.mjs`):
+  F&O UDiFF bhavcopy, participant-wise OI, ban list, combined OI / MWPL. It writes only
+  `tas_fo_day`, `tas_fo_chain` (last `FO_CHAIN_KEEP_SESSIONS`), `tas_fo_stats` (kept),
+  `tas_fo_market`. Parsers find columns by NAME and throw with the header they saw.
+- **Never log in to Kite from this app.** The heatmap's live ticker holds the account's
+  session; a second TOTP login can end it. Live chains / depth / tape need a dedicated
+  broker session (see `engine/deriv/sources.js`) and are labelled "needs a live feed".
+- **OI units**: the bhavcopy may quote OI and volume in shares. The parser converts to
+  contracts when >= 90% of rows divide by the lot, and records the choice in `tas_fo_day.units`.
+- **Fact vs interpretation**: exchange-published numbers (prices, OI, participant OI, ban)
+  are facts; IV, Greeks, build-up, writing / buying, GEX, margin are interpretations with
+  stated assumptions and confidence. Keep the labels; margin is an ESTIMATE, not SPAN.
+- All maths lives in `engine/deriv/` with tests in `tests/deriv.test.mjs` (Greeks are checked
+  against finite differences). Fractions everywhere; pages format with `fp` (signed) / `pc` (unsigned).
+- Cross-asset series (`tas_xasset`) are built by `cli/xassetJob.mjs`, run by the server when
+  older than 20 h. Bond funds come from FMP into `tas_xasset_bars` because the heatmap has none.

@@ -161,3 +161,19 @@ textarea.notes { width: 100%; min-height: 70px; }
   .topbar .cmd { flex: 1 1 100%; max-width: none; }
   .banner.demo { font-size: 11px; }
 }
+
+/* utilities used by the newer pages */
+.wrap { flex-wrap: wrap; }
+.grow { flex: 1 1 auto; }
+.h3 { font-weight: 650; margin: 0 0 8px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
+.stack-gap > * + * { margin-top: 12px; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.ce { color: #16a34a; } .pe { color: #dc2626; }
+.atm td { background: var(--gq-soft); }
+.chain td, .chain th { padding: 3px 6px; font-size: 12px; white-space: nowrap; }
+.chain th { position: sticky; top: 0; background: var(--panel-2); z-index: 1; }
+.cell-bar { position: relative; }
+.cell-bar > i { position: absolute; top: 2px; bottom: 2px; opacity: .22; }
+.cell-bar > span { position: relative; }
+.legend-note { font-size: 11px; color: var(--muted); }

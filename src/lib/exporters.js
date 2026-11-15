@@ -17,7 +17,7 @@ export function exportCsv(filename, columns, rows) {
 export async function exportXlsx(filename, sheets) {
   const { default: ExcelJS } = await import("exceljs");
   const wb = new ExcelJS.Workbook();
-  wb.creator = "GQ AI-Powered Technical Analysis Software";
+  wb.creator = "GQ XRayDar";
   for (const s of sheets) {
     const ws = wb.addWorksheet(s.name.replace(/[\\/?*[\]:]/g, " ").slice(0, 31));
     let r0 = 1;

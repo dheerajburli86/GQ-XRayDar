@@ -2,8 +2,12 @@
 // shift with the viewer's timezone, and a session is the date the exchange
 // printed -- not a timestamp converted from somewhere else.
 
-export const TIMEFRAMES = ["D", "W", "M", "Q", "Y"];
-export const TF_LABEL = { D: "Daily", W: "Weekly", M: "Monthly", Q: "Quarterly", Y: "Yearly" };
+export const TIMEFRAMES = ["D", "W", "M", "Q", "H", "N", "Y"];
+export const TF_LABEL = { D: "Daily", W: "Weekly", M: "Monthly", Q: "Quarterly", H: "Half-yearly", N: "9-month", Y: "Yearly" };
+/** Short button labels for the candle selectors. */
+export const TF_SHORT = { D: "D", W: "W", M: "M", Q: "Q", H: "6M", N: "9M", Y: "Y" };
+/** Timeframes offered on chart windows (the batch screens stay on D/W/M/Q/Y). */
+export const CHART_TFS = TIMEFRAMES.map((t) => ({ value: t, label: TF_SHORT[t], title: TF_LABEL[t] }));
 
 /** Trailing-return horizons in TRADING DAYS. A horizon is not a candle size:
  *  "3M" is a 63-session look-back on daily data, "Q" is a quarterly candle. */
@@ -29,6 +33,14 @@ export function periodKey(date, tf) {
   const y = +date.slice(0, 4), m = +date.slice(5, 7);
   if (tf === "M") return date.slice(0, 7);
   if (tf === "Q") return `${y}-Q${Math.floor((m - 1) / 3) + 1}`;
+  if (tf === "H") return `${y}-H${m <= 6 ? 1 : 2}`;
+  if (tf === "N") {
+    // 9-month candles do not fit a calendar year, so they run on a fixed grid
+    // of 9-month blocks counted from January 2000 (Jan-Sep 2000, Oct 2000-Jun 2001, ...).
+    const k = Math.floor(((y - 2000) * 12 + (m - 1)) / 9);
+    const sm = 2000 * 12 + k * 9, sy = Math.floor(sm / 12), mm = (sm % 12) + 1;
+    return `${sy}-${String(mm).padStart(2, "0")}-N`;
+  }
   return String(y);
 }
 

@@ -36,14 +36,26 @@ const pages = {
   scanners: lazy(() => import("./pages/Scanners.jsx")),
   tasks: lazy(() => import("./pages/Tasks.jsx")),
   paper: lazy(() => import("./pages/Paper.jsx")),
+  myindex: lazy(() => import("./pages/MyIndices.jsx")),
+  xasset: lazy(() => import("./pages/CrossAsset.jsx")),
+  dhome: lazy(() => import("./pages/deriv/DerivHome.jsx")),
+  dchain: lazy(() => import("./pages/deriv/OptionChain.jsx")),
+  dfut: lazy(() => import("./pages/deriv/Futures.jsx")),
+  dvol: lazy(() => import("./pages/deriv/VolLab.jsx")),
+  dstrat: lazy(() => import("./pages/deriv/Strategy.jsx")),
+  dexpiry: lazy(() => import("./pages/deriv/Expiry.jsx")),
+  dunusual: lazy(() => import("./pages/deriv/Unusual.jsx")),
+  dscreen: lazy(() => import("./pages/deriv/DerivScreener.jsx")),
+  dresearch: lazy(() => import("./pages/deriv/DerivResearch.jsx")),
 };
 
 const NAV = [
-  ["Overview", [["home", "◎", "Command centre"], ["explorer", "⇣", "Top-down explorer"], ["heatmap", "▦", "Heatmap"]]],
-  ["Indices", [["indices", "≋", "CW / EW indices"], ["ewcw", "⇋", "EW vs CW (EWCW)"], ["ww", "◔", "Weight Watcher"]]],
+  ["Overview", [["home", "◎", "Command centre"], ["explorer", "⇣", "Top-down explorer"], ["heatmap", "▦", "Heatmap"], ["xasset", "⊕", "Cross-asset"]]],
+  ["Indices", [["indices", "≋", "CW / EW indices"], ["ewcw", "⇋", "EW vs CW (EWCW)"], ["ww", "◔", "Weight Watcher"], ["myindex", "✚", "My indices"]]],
   ["Charts", [["chart", "📈", "Chart lab"], ["screens/RSIACC", "∿", "RSIACC"], ["screens/RSCACC", "∿", "RSCACC"], ["screens/RSIMMA", "≡", "RSIMMA"], ["screens/RSCMMA", "≡", "RSCMMA"], ["workspace", "⊞", "Multi-chart workspace"]]],
   ["Discovery", [["scanners", "⌖", "Scanners"], ["rs", "↗", "Relative strength"], ["screener", "⚲", "Screener"], ["early", "◷", "Early-stage scanner"], ["funnel", "▽", "Opportunity funnel"], ["rotation", "↻", "Sector rotation"], ["breadth", "▥", "Market breadth"]]],
   ["Research", [["scores", "★", "AI setup scores"], ["assistant", "✦", "GQ Agent (full page)"], ["briefs", "✎", "Market briefs"], ["backtest", "⟲", "Backtest & patterns"]]],
+  ["Derivatives", [["dhome", "⧉", "Derivatives dashboard"], ["dchain", "⋮", "Option chain"], ["dfut", "⇉", "Futures & rollover"], ["dvol", "≈", "Volatility lab"], ["dstrat", "⟁", "Strategy builder"], ["dexpiry", "⏱", "Expiry & events"], ["dunusual", "⚡", "Unusual activity"], ["dscreen", "⚲", "Derivatives screener"], ["dresearch", "⟲", "Derivatives research"]]],
   ["My work", [["alerts", "◉", "Alerts"], ["tasks", "☑", "Tasks"], ["watchlists", "☰", "Watchlists & portfolio"], ["paper", "◈", "Practice portfolio"], ["notes", "✐", "Research notes"]]],
   ["Data", [["data", "⛁", "Data centre"]]],
 ];
@@ -125,7 +137,7 @@ function Shell() {
     const pct = p?.phase === "indices" ? 10 + (p.done / p.total) * 40 : p?.phase === "signals" ? 55 + (p.done / p.total) * 40 : p?.phase === "analytics" || p?.phase === "weight_watcher" ? 96 : 5;
     return (
       <div className="loading-screen"><div className="box card">
-        <div className="brand"><div className="logo">GQ</div><div><div className="t1">GQ AI-Powered Technical Analysis</div><div className="t2">{d.mode === "demo" ? "Building the demo universe with the full calculation engine…" : "Loading from Supabase…"}</div></div></div>
+        <div className="brand"><div className="logo">GQ</div><div><div className="t1">GQ XRayDar</div><div className="t2">{d.mode === "demo" ? "Building the demo universe with the full calculation engine…" : "Loading from Supabase…"}</div></div></div>
         <div className="progress" style={{ margin: "8px 0" }}><div style={{ width: `${pct}%` }} /></div>
         <div className="small muted">{p ? `${p.phase}${p.note ? ` · ${p.note}` : ""}` : "starting"}</div>
       </div></div>
@@ -141,7 +153,7 @@ function Shell() {
       <nav className="side">
         <div className="brand" onClick={() => setCollapsed(!collapsed)} style={{ cursor: "pointer" }} title="Collapse / expand">
           <div className="logo">GQ</div>
-          <div className="bt"><div className="t1">GQ Technical Analysis</div><div className="t2">AI-powered · {d.mode === "demo" ? "demo data" : "live data"}</div></div>
+          <div className="bt"><div className="t1">GQ XRayDar</div><div className="t2">Global market intelligence · {d.mode === "demo" ? "demo data" : "live data"}</div></div>
         </div>
         {NAV.map(([g, items]) => (
           <div className="navgroup" key={g}>

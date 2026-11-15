@@ -1,13 +1,19 @@
-# GQ AI-Powered Technical Analysis Software
+# GQ XRayDar
 
-A standalone dashboard and calculation engine for global equity technical analysis:
+A standalone global market intelligence platform: technical analysis across global
+equities plus an F&O (derivatives) workstation, cross-asset context and user-built
+indices. Equity side:
 CW / EW index hierarchy (local currency and USD), EWCW, Weight Watcher, the four
 stacked RSIACC / RSCACC / RSIMMA / RSCMMA screens, relative strength, early-stage
 scanning, sector rotation, market breadth, heatmaps, explainable AI setup scores,
 a natural-language and voice command layer, a chart lab (Heikin-Ashi, Renko, Kagi,
 Point & Figure, key levels, drawings, busiest prices), 13 scanners, indicator alerts
 on Telegram, morning / weekly summaries, tasks, the GQ Agent, a practice portfolio,
-backtesting and briefs. Light, dark or device theme; installable on a phone.
+backtesting and briefs. Derivatives side (NSE end-of-day): option chain with IV and
+all Greeks, OI and build-up analytics, ban list / MWPL / participant OI, futures basis
+and rollover, a volatility lab, dealer gamma, a strategy builder with 53 templates,
+an expiry war room, unusual activity, a derivatives & confluence screener and signal
+research. Light, dark or device theme; installable on a phone.
 
 It is **independent of the heatmap dashboard**: its own repository, its own web app,
 its own tables. It only *reads* market data from the heatmap's Supabase database.
@@ -130,10 +136,14 @@ npm run test:server      # end-to-end server test (needs that local database wit
 | Batch runner + Postgres source / sink | `cli/` |
 | Database schema (tas_* only) | `supabase/migrations/` |
 | Web app | `src/` (pages in `src/pages/`) |
-| Requirement traceability (all 116) | `docs/REQUIREMENTS_TRACE.md`, in-app *Data centre → Requirement trace* |
+| Requirement traceability (all 139) | `docs/REQUIREMENTS_TRACE.md`, in-app *Data centre → Requirement trace* |
 | Alert rules, report card, chart read, chart styles | `engine/rules.js`, `engine/scorecard.js`, `engine/chartRead.js`, `engine/chartTools.js`, `engine/candles.js` |
 | TA server (auth, alerts, digests, tasks, agent proxy) | `server/` (`server/index.mjs` lists every route) |
 | Login, account sync, agent panel, push | `src/lib/server.js`, `src/components/Account.jsx`, `src/components/AgentPanel.jsx`, `public/sw.js` |
+| Derivatives maths (pricing, chain, positioning, vol, futures, strategies, screens) | `engine/deriv/` |
+| NSE F&O collector (runs inside the server) | `server/lib/fo.mjs`, parsers in `engine/deriv/nse.js` |
+| Derivatives pages | `src/pages/deriv/` |
+| User-built indices, cross-asset context | `engine/customIndex.js`, `engine/crossAsset.js`, `cli/xassetJob.mjs` |
 
 ## Not yet connected (by design)
 

@@ -55,7 +55,7 @@ function SignIn({ blocked, onSignOut }) {
   return (
     <div className="loading-screen">
       <div className="box card stack" style={{ maxWidth: 420 }}>
-        <div className="brand"><div className="logo">GQ</div><div><div className="t1">GQ AI-Powered Technical Analysis</div><div className="t2">GQuants team sign-in</div></div></div>
+        <div className="brand"><div className="logo">GQ</div><div><div className="t1">GQ XRayDar</div><div className="t2">GQuants team sign-in</div></div></div>
         {blocked ? (
           <>
             <div className="note warn">{blocked} is not allowed to use this app. Sign in with your @{ALLOWED_DOMAINS[0]} account.</div>

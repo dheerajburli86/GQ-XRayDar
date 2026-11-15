@@ -1,6 +1,6 @@
 {
-  "name": "GQ AI-Powered Technical Analysis",
-  "short_name": "GQ TA",
+  "name": "GQ XRayDar",
+  "short_name": "XRayDar",
   "description": "Technical analysis on India, US and global markets: charts, scanners, alerts and the GQ Agent.",
   "start_url": "/",
   "scope": "/",

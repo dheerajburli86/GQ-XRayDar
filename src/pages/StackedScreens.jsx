@@ -16,7 +16,7 @@ import { InstrumentPicker } from "../components/pickers.jsx";
 import { loadInstrument, alignCurrency, defaultBenchmark } from "../lib/series.js";
 import { aggregate, rsi, emaStrict, rsc } from "../../engine/indicators.js";
 import { usePersistent } from "../lib/storage.js";
-import { TF_LABEL } from "../../engine/calendar.js";
+import { TF_LABEL, CHART_TFS } from "../../engine/calendar.js";
 
 const ACC = [4, 14, 26, 39];
 const ACC_COLORS = { 4: "#22d3ee", 14: "#a3e635", 26: "#f472b6", 39: "#fb923c" };
@@ -142,7 +142,7 @@ function Panel({ idx, title, mode, p, set, data, sync, height, rangeKey, benchLa
       <div className="panel-head">
         <div className="row" style={{ gap: 10 }}>
           <b>{title}{idx > 0 && mode.base === "rsc" ? <span className="muted small"> vs {benchLabel}</span> : null}</b>
-          <Seg value={p.tf} options={["D", "W", "M", "Q", "Y"].map((t) => ({ value: t, label: t }))} onChange={(tf) => set({ tf })} title="Timeframe of this window" />
+          <Seg value={p.tf} options={CHART_TFS} onChange={(tf) => set({ tf })} title="Timeframe of this window" />
           <span className="small muted">{TF_LABEL[p.tf]} · {built ? `${built.n} candles · last ${built.lastTime} = ${built.last != null ? built.last.toFixed(2) : "—"}` : "no comparison series"}</span>
         </div>
         <div className="legend">

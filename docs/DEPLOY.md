@@ -47,6 +47,7 @@ In the Supabase SQL editor run, in this order:
 
 1. `supabase/migrations/20261113000000_tas_schema.sql` (analysis tables)
 2. `supabase/migrations/20261114000000_tas_users.sql` (accounts, alerts, tasks)
+3. `supabase/migrations/20261115000000_tas_derivatives.sql` (F&O end-of-day store, cross-asset series)
 
 Check: *Table editor* now lists `tas_calc_run`, `tas_user`, `tas_task` and friends.
 The second file switches row-level security on with no policies, so the browser
@@ -96,6 +97,12 @@ tas_calc_run order by started desc limit 1;` shows `ok`.
    TELEGRAM_BOT_USERNAME=GQagent_bot
    GQAGENT_URL=<the agent's public URL, Step 4>   # optional; empty = built-in assistant
    ```
+
+   Derivatives and cross-asset (optional, these are the defaults):
+   `FO_ENABLED=true`, `FO_BACKFILL_SESSIONS=120`, `FO_CHAIN_KEEP_SESSIONS=60`,
+   `FO_POLL_MINUTES=20`, `FO_READY_IST=19:30`; add `FMP_API_KEY` so the cross-asset
+   page gets bond funds (the heatmap carries none). The server downloads NSE's public
+   end-of-day F&O files itself; `/health` shows the last collection run.
 
    Optional phone pop-ups: run `npx web-push generate-vapid-keys` once and add
    `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`. Optional timing:

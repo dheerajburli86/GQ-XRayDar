@@ -29,7 +29,7 @@ add("industry", "Industry", "Identity", "cat", (r) => r.sec.industry);
 add("cap", "Cap segment", "Identity", "cat", (r) => r.sec.capSegment);
 add("capUsd", "Market cap (USD)", "Identity", "money", (r) => r.sec.capUsdNow ?? r.sec.capUsd);
 add("currency", "Currency", "Identity", "cat", (r) => r.sec.currency);
-add("assetClass", "Asset class", "Identity", "cat", (r) => r.sec.assetClass || "Stock", { values: ["Stock", "ETF", "Index"] });
+add("assetClass", "Asset class", "Identity", "cat", (r) => r.sec.assetClass || "Stock", { values: ["Stock", "ETF", "Index", "Commodity", "Crypto", "Currency"] });
 
 // returns
 for (const h of ["1D", "1W", "1M", "3M", "6M", "12M", "YTD"]) {

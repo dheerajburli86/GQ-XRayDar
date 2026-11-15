@@ -62,7 +62,7 @@ export default function Alerts({ route }) {
     const fresh = matches.filter((m) => !seen.has(m.key)).map((m) => ({ ...m, firstSeen: new Date().toISOString(), read: false }));
     if (fresh.length) {
       setInbox([...fresh, ...inbox].slice(0, 2000));
-      if (typeof Notification !== "undefined" && Notification.permission === "granted" && fresh.length) new Notification("GQ Technical Analysis", { body: `${fresh.length} new alert${fresh.length > 1 ? "s" : ""}` });
+      if (typeof Notification !== "undefined" && Notification.permission === "granted" && fresh.length) new Notification("GQ XRayDar", { body: `${fresh.length} new alert${fresh.length > 1 ? "s" : ""}` });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matches]);

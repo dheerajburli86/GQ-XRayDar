@@ -114,7 +114,7 @@ export function createAlertEngine({ cfg, pool, data, telegram, push, log = conso
 
   async function sendTest(user) {
     if (!user.telegram_chat_id) return { error: "Telegram is not linked for this account" };
-    await telegram.send(user.telegram_chat_id, "✅ <b>GQ Technical Analysis</b>\nTelegram alerts are working for your account.");
+    await telegram.send(user.telegram_chat_id, "✅ <b>GQ XRayDar</b>\nTelegram alerts are working for your account.");
     return { ok: true };
   }
 

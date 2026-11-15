@@ -32,7 +32,7 @@ export function ScopeFilter({ scope, onChange, show = ["region", "country", "sec
       {show.includes("country") && <Select label="Country" value={scope.country} options={countries} onChange={(v) => set("country", v)} allowEmpty />}
       {show.includes("sector") && <Select label="Sector" value={scope.sector} options={d.sectors} onChange={(v) => set("sector", v)} allowEmpty />}
       {show.includes("cap") && <Select label="Cap" value={scope.cap} options={CAPS} onChange={(v) => set("cap", v)} allowEmpty />}
-      {show.includes("asset") && <Select label="Type" value={scope.assetClass} options={["Stock", "ETF", "Index"]} onChange={(v) => set("assetClass", v)} allowEmpty="All types" />}
+      {show.includes("asset") && <Select label="Type" value={scope.assetClass} options={["Stock", "ETF", "Index", "Commodity", "Crypto", "Currency"]} onChange={(v) => set("assetClass", v)} allowEmpty="All types" />}
     </div>
   );
 }

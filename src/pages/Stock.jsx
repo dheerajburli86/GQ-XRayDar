@@ -1,3 +1,4 @@
+import { CHART_TFS } from "../../engine/calendar.js";
 // Security page: bottom-up entry point. Every parent (sector, cap segment,
 // country, region, global) is one click away, with the stock's full technical,
 // relative, Weight Watcher, fundamental and score picture.
@@ -77,7 +78,7 @@ export default function Stock({ route }) {
             <div className="card"><Kpi label="Weight Watcher" value={data.snap.ww ? <Badge kind={TREND_BADGE[data.snap.ww.trend]}>{WW_TREND_LABEL[data.snap.ww.trend]}</Badge> : "—"} sub={data.snap.ww?.last != null ? `${data.snap.ww.last.toFixed(3)}% of ${sec.country} ${sec.sector}` : ""} /></div>
           </div>
           <div className="card tight">
-            <div className="row between" style={{ padding: "0 4px 4px" }}><span className="small muted">EMA 20 / 50 / 200 · purple dots = results filed (revenue YoY){data.inst.adjustments?.length ? " · split-adjusted" : ""}</span><Seg value={tf} options={["D", "W", "M", "Q", "Y"]} onChange={setTf} /></div>
+            <div className="row between" style={{ padding: "0 4px 4px" }}><span className="small muted">EMA 20 / 50 / 200 · purple dots = results filed (revenue YoY){data.inst.adjustments?.length ? " · split-adjusted" : ""}</span><Seg value={tf} options={CHART_TFS} onChange={setTf} /></div>
             <TvChart height={330} series={charts.price} sync={sync} />
             <TvChart height={90} series={charts.vol} sync={sync} />
           </div>
