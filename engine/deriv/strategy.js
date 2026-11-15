@@ -235,7 +235,7 @@ export const legLabel = (l) => `${l.side > 0 ? "Buy" : "Sell"} ${l.qty} ${l.type
  * regime, probability of profit, reward / risk, liquidity and the loss limit.
  * The output explains every score; it is a ranking of structures, not advice.
  */
-export function recommend(chain, { view = "bullish", ivPercentile = null, maxLoss = null, expiryIndex = 0, walls = null } = {}) {
+export function recommend(chain, { view = "bullish", ivPercentile = null, maxLoss = null, expiryIndex = 0, walls = null, spots = null } = {}) {
   const fits = TEMPLATES.filter((t) => t.view.split("-").includes(view) && t.view !== "arbitrage");
   const out = [];
   for (const tpl of fits) {
@@ -260,7 +260,8 @@ export function recommend(chain, { view = "bullish", ivPercentile = null, maxLos
     if (walls && view === "neutral" && m.breakevens.length === 2 && walls.support[0] && walls.resistance[0] && m.breakevens[0] <= walls.support[0].strike && m.breakevens[1] >= walls.resistance[0].strike) { s += 10; reasons.push("breakevens sit outside the main put and call OI walls"); }
     const thin = legs.filter((l) => { const ex = chain.expiries.find((e) => e.expiry === l.expiry); const row = ex?.rows.find((r) => r.strike === l.strike); const leg = l.type === "CE" ? row?.ce : l.type === "PE" ? row?.pe : null; return leg && !(leg.vol > 0); }).length;
     if (thin) { s -= 10 * thin; reasons.push(`${thin} leg(s) did not trade today (liquidity)`); }
-    out.push({ template: tpl.name, group: tpl.group, legs, metrics: m, score: Math.round(s), reasons });
+    const evidence = evidenceFor({ legs, metrics: m, chain, reasons, shortVol, ivPercentile, walls, view, spots });
+    out.push({ template: tpl.name, group: tpl.group, legs, metrics: m, score: Math.round(s), reasons, evidence });
   }
   return out.sort((a, b) => b.score - a.score);
 }
@@ -276,4 +277,43 @@ export function adjustments(legs, chain, metrics) {
   if (g.gamma < 0 && metrics.expiry && chain.expiries[0]?.dte <= 2) out.push("Short gamma into expiry: small moves now cost more; roll out to the next expiry if you want to keep the view.");
   if (!out.length) out.push("No adjustment flagged: spot is inside the breakevens and the Greeks are balanced for this structure.");
   return out;
+}
+
+/**
+ * How often the structure would have finished in profit historically: the
+ * expiry payoff applied to every past move of the same length in the stored
+ * spot series (spots: oldest first). A check of the lognormal PoP, not a forecast.
+ */
+export function historicalHitRate(metrics, spots, sessions, S0) {
+  if (!metrics?.grid?.length || !spots || spots.length < sessions + 20) return null;
+  const pnlAt = (S) => { const g = metrics.grid; if (S <= g[0].S) return g[0].pnl; if (S >= g[g.length - 1].S) return g[g.length - 1].pnl; let lo = 0, hi = g.length - 1; while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (g[mid].S < S) lo = mid; else hi = mid; } const w = (S - g[lo].S) / (g[hi].S - g[lo].S); return g[lo].pnl + w * (g[hi].pnl - g[lo].pnl); };
+  let n = 0, wins = 0;
+  for (let i = 0; i + sessions < spots.length; i++) { if (!(spots[i] > 0 && spots[i + sessions] > 0)) continue; n++; if (pnlAt(S0 * (spots[i + sessions] / spots[i])) > 0) wins++; }
+  return n ? { hitRate: wins / n, n, sessions } : null;
+}
+
+/**
+ * Evidence ledger for a ranked structure: supporting drivers, counter-evidence,
+ * a confidence score, the historical sample behind it and explicit invalidation
+ * triggers (price, IV, OI). Every recommendation carries one.
+ */
+export function evidenceFor({ legs, metrics: m, chain, reasons, shortVol, ivPercentile, walls, view, spots }) {
+  const neg = /low \(|expensive|open-ended|tail risk|exceeds|did not trade|little premium/;
+  const supporting = reasons.filter((r) => !neg.test(r)), counter = reasons.filter((r) => neg.test(r));
+  if (m.ev < 0) counter.push(`model expected value is negative (${Math.round(m.ev)})`);
+  if (m.pop < 0.4) counter.push("less likely than not to finish in profit under the model");
+  const ex = chain.expiries.find((e) => e.expiry === m.expiry);
+  const sessions = Math.max(1, Math.round(((ex?.dte ?? 7) * 5) / 7));
+  const hist = spots ? historicalHitRate(m, spots, sessions, chain.spot) : null;
+  if (hist && hist.n >= 20) (Math.abs(hist.hitRate - m.pop) > 0.15 ? counter : supporting).push(`historically ${Math.round(hist.hitRate * 100)}% of ${hist.n} past ${sessions}-session moves would have finished in profit (model PoP ${Math.round(m.pop * 100)}%)`);
+  const confidence = Math.max(0.05, Math.min(0.85, hist && hist.n >= 20 ? 0.5 * m.pop + 0.5 * hist.hitRate - 0.05 * counter.length : 0.8 * m.pop - 0.05 * counter.length));
+  const inv = [];
+  const be = m.breakevens.map((b) => Math.round(b));
+  if (be.length === 2) inv.push(`price: a close below ${be[0]} or above ${be[1]} (breakevens)`);
+  else if (be.length === 1) inv.push(`price: a close ${view === "bearish" ? "above" : "below"} ${be[0]} (breakeven)`);
+  const iv = m.iv;
+  if (shortVol) inv.push(`IV: ATM IV above ${((iv + 0.05) * 100).toFixed(1)}%${ivPercentile != null ? " or IV percentile above 90%" : ""} (short volatility loses as IV rises)`);
+  else if (legs.some((l) => l.type === "CE" || l.type === "PE")) inv.push(`IV: ATM IV below ${(Math.max(0.01, iv - 0.04) * 100).toFixed(1)}% (long premium loses as IV falls)`);
+  if (walls?.support?.[0] && walls?.resistance?.[0]) inv.push(view === "bullish" ? `OI: the main put wall (${walls.support[0].strike}) moves lower or unwinds` : view === "bearish" ? `OI: the main call wall (${walls.resistance[0].strike}) moves higher or unwinds` : `OI: the put wall (${walls.support[0].strike}) or call wall (${walls.resistance[0].strike}) shifts toward or past a breakeven`);
+  return { supporting, counter, confidence, sample: hist, invalidation: inv, kind: "model estimate", note: "Confidence blends the model probability of profit with the historical hit rate of the same payoff, less a penalty for each counter-point. It is a ranking aid, not a prediction." };
 }

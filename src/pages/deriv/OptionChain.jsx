@@ -10,11 +10,14 @@ import { useAsync } from "../../lib/useAsync.js";
 import { navigate } from "../../lib/router.js";
 import { downloadBlob, exportXlsx } from "../../lib/exporters.js";
 import { useDerivRows, DerivGate, UndSelect, DataNote, FP, fp, fn, fiv, pc } from "./common.jsx";
-import { enrichChain, pcr, pcrOverall, maxPain, oiWalls, atmIv, expectedMove, gex, gexProfile, parity, termStructure, moneyness, DERIV_DEFAULTS } from "../../../engine/deriv/chain.js";
+import { QUOTE_FLAGS, chainQuality, enrichChain, pcr, pcrOverall, maxPain, oiWalls, atmIv, expectedMove, gex, gexProfile, parity, termStructure, moneyness, DERIV_DEFAULTS } from "../../../engine/deriv/chain.js";
 import { optionFlow } from "../../../engine/deriv/positioning.js";
 import { MODEL_INFO } from "../../../engine/deriv/pricing.js";
 
 const HEAT = [{ value: "oi", label: "OI" }, { value: "chgOi", label: "OI chg" }, { value: "vol", label: "Volume" }, { value: "iv", label: "IV" }, { value: "gamma", label: "Gamma" }, { value: "chgPx", label: "Premium chg" }];
+const SEVERE = new Set(["dead", "below_intrinsic", "iv_fail", "locked"]);
+const qFlag = (l) => (l?.q?.length ? l.q.map((f) => QUOTE_FLAGS[f]).join("; ") : "");
+const ivCell = (l) => <span title={qFlag(l)} className={l?.q?.some((f) => SEVERE.has(f)) ? "muted" : ""}>{fiv(l?.iv)}{l?.q?.some((f) => SEVERE.has(f)) ? "†" : l?.q?.includes("no_trade") ? "*" : ""}</span>;
 const heatVal = (leg, k) => (!leg ? null : k === "gamma" ? leg.g?.gamma ?? null : k === "iv" ? leg.iv : leg[k]);
 
 export default function OptionChain({ route }) {
@@ -109,7 +112,7 @@ function ChainTable({ chain, ex, und, date }) {
     return k === "oi" ? <td className="num cell-bar"><i style={{ [side === "ce" ? "right" : "left"]: 0, width: `${w}%`, background: col }} /><span>{fn(v, 0)}</span></td> : <td className="num">{render ? render(leg) : fn(v)}</td>;
   };
   const flat = ex.rows.flatMap((x) => [x.ce, x.pe].filter(Boolean).map((l) => ({ id: `${x.strike}${l.cp}`, strike: x.strike, type: l.cp > 0 ? "CE" : "PE", ...l })));
-  const exportFlat = () => exportXlsx(`${und}-${date}-${ex.expiry}`, [{ name: "chain", columns: ["strike", "type", "px", "settle", "chgPx", "oi", "chgOi", "vol", "iv"].map((k) => ({ label: k, value: (r) => r[k] })).concat(["delta", "gamma", "theta", "vega"].map((k) => ({ label: k, value: (r) => r.g?.[k] }))), rows: flat }]);
+  const exportFlat = () => exportXlsx(`${und}-${date}-${ex.expiry}`, [{ name: "chain", columns: ["strike", "type", "px", "settle", "chgPx", "oi", "chgOi", "vol", "iv"].map((k) => ({ label: k, value: (r) => r[k] })).concat([{ label: "quality", value: (r) => (r.q || []).join(" ") }]).concat(["delta", "gamma", "theta", "vega"].map((k) => ({ label: k, value: (r) => r.g?.[k] }))), rows: flat }]);
   return (
     <div className="card">
       <div className="row wrap" style={{ gap: 10, marginBottom: 8 }}>
@@ -132,21 +135,21 @@ function ChainTable({ chain, ex, und, date }) {
               const g = (l, k, d = 3) => (l?.g ? (+l.g[k]).toFixed(d) : "—");
               return (
                 <tr key={x.strike} className={x.strike === atmK ? "atm" : ""}>
-                  {cell(x.ce, "ce", "oi")}{cell(x.ce, "ce", "chgOi", (l) => <span className={l?.chgOi > 0 ? "pos" : l?.chgOi < 0 ? "neg" : ""}>{fn(l?.chgOi, 0)}</span>)}{cell(x.ce, "ce", "vol", (l) => fn(l?.vol, 0))}{cell(x.ce, "ce", "iv", (l) => fiv(l?.iv))}
+                  {cell(x.ce, "ce", "oi")}{cell(x.ce, "ce", "chgOi", (l) => <span className={l?.chgOi > 0 ? "pos" : l?.chgOi < 0 ? "neg" : ""}>{fn(l?.chgOi, 0)}</span>)}{cell(x.ce, "ce", "vol", (l) => fn(l?.vol, 0))}{cell(x.ce, "ce", "iv", ivCell)}
                   {greeks && <><td className="num">{g(x.ce, "delta", 2)}</td><td className="num">{g(x.ce, "gamma", 5)}</td><td className="num">{g(x.ce, "theta", 2)}</td><td className="num">{g(x.ce, "vega", 2)}</td></>}
                   <td className="num" style={{ background: ceItm ? "var(--panel-2)" : undefined }}>{fn(x.ce?.px)}</td>{cell(x.ce, "ce", "chgPx", (l) => <span className={l?.chgPx > 0 ? "pos" : l?.chgPx < 0 ? "neg" : ""}>{fn(l?.chgPx)}</span>)}
                   <td className="num"><b>{x.strike}</b></td>
                   <td className="num muted">{x.ce?.oi > 0 && x.pe?.oi != null ? (x.pe.oi / x.ce.oi).toFixed(2) : "—"}</td>
                   {cell(x.pe, "pe", "chgPx", (l) => <span className={l?.chgPx > 0 ? "pos" : l?.chgPx < 0 ? "neg" : ""}>{fn(l?.chgPx)}</span>)}<td className="num" style={{ background: peItm ? "var(--panel-2)" : undefined }}>{fn(x.pe?.px)}</td>
                   {greeks && <><td className="num">{g(x.pe, "vega", 2)}</td><td className="num">{g(x.pe, "theta", 2)}</td><td className="num">{g(x.pe, "gamma", 5)}</td><td className="num">{g(x.pe, "delta", 2)}</td></>}
-                  {cell(x.pe, "pe", "iv", (l) => fiv(l?.iv))}{cell(x.pe, "pe", "vol", (l) => fn(l?.vol, 0))}{cell(x.pe, "pe", "chgOi", (l) => <span className={l?.chgOi > 0 ? "pos" : l?.chgOi < 0 ? "neg" : ""}>{fn(l?.chgOi, 0)}</span>)}{cell(x.pe, "pe", "oi")}
+                  {cell(x.pe, "pe", "iv", ivCell)}{cell(x.pe, "pe", "vol", (l) => fn(l?.vol, 0))}{cell(x.pe, "pe", "chgOi", (l) => <span className={l?.chgOi > 0 ? "pos" : l?.chgOi < 0 ? "neg" : ""}>{fn(l?.chgOi, 0)}</span>)}{cell(x.pe, "pe", "oi")}
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
-      <p className="legend-note">Price = last traded price if the contract traded today, else the exchange settlement price. IV and Greeks: {chain.assumptions.model}, risk-free {(DERIV_DEFAULTS.riskFree * 100).toFixed(2)}% unless changed above, {chain.assumptions.time}. Bid / ask and bid / ask IV need a live feed (Data sources). Shaded price = in the money.</p>
+      <p className="legend-note">Price = last traded price if the contract traded today, else the exchange settlement price. IV and Greeks: {chain.assumptions.model}, risk-free {(DERIV_DEFAULTS.riskFree * 100).toFixed(2)}% unless changed above, {chain.assumptions.time}. Bid / ask and bid / ask IV need a live feed (Data sources). Shaded price = in the money. Quote hygiene: * did not trade today (settlement price); † unreliable quote ({Object.entries(chainQuality(chain).counts).filter(([, n]) => n).map(([k, n]) => `${QUOTE_FLAGS[k].toLowerCase()} ${n}`).join(", ") || "none"}); IV and Greeks are suppressed for contracts with no OI and no volume, or priced below intrinsic value. Hover an IV for its flags.</p>
     </div>
   );
 }

@@ -11,7 +11,7 @@ import { encodeDay } from "../../engine/deriv/codec.js";
 import { unzipEntries } from "./zip.mjs";
 
 // Bump when the summary logic changes: stored sessions from an older version are re-processed.
-export const FO_VERSION = 2;
+export const FO_VERSION = 3; // 3: quote-hygiene flags suppress IV on dead and below-intrinsic contracts
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 const istNow = () => new Date(Date.now() + 5.5 * 3600_000);
 const iso = (d) => d.toISOString().slice(0, 10);

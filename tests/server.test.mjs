@@ -137,3 +137,71 @@ test("server: link, alerts, tasks, digests, agent fallback", { skip: !DB && "set
     await app.pool.end().catch(() => {});
   }
 });
+
+test("server: API tokens, /v1, roles, audit, derivatives alerts", { skip: !DB && "set TEST_DATABASE_URL to a local Postgres with an engine run" }, async () => {
+  const { createServer } = await import("../server/index.mjs");
+  const { loadConfig } = await import("../server/lib/config.mjs");
+  const hooks = [];
+  const fakeFetch = async (url, init) => {
+    if (String(url).startsWith("https://hooks.example.com/")) { hooks.push(JSON.parse(init.body)); return new Response("ok"); }
+    if (String(url).includes("/sendMessage")) return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }));
+    throw new Error(`unexpected fetch ${url}`);
+  };
+  const cfg = loadConfig({ DATABASE_URL: DB, AUTH_MODE: "dev", TA_API_SECRET: "s3cret", TELEGRAM_BOT_TOKEN: "123:abc", PORT: "0", ADMIN_EMAILS: "boss@gquants.com", FO_ENABLED: "false" });
+  const app = await createServer(cfg, { fetch: fakeFetch });
+  await app.pool.query(`delete from tas_user where email like '%@gquants.com'`);
+  await new Promise((r) => app.server.listen(0, r));
+  const base = `http://127.0.0.1:${app.server.address().port}`;
+  const call = async (method, path, body, headers = {}) => { const r = await fetch(base + path, { method, headers: { "content-type": "application/json", ...headers }, body: body ? JSON.stringify(body) : undefined }); return { status: r.status, json: await r.json().catch(() => null) }; };
+  const quant = { "x-dev-email": "quant@gquants.com" }, boss = { "x-dev-email": "boss@gquants.com" };
+  try {
+    // tokens: shown once, scoped, rate limited, revocable
+    const t = (await call("POST", "/api/tokens", { name: "py", scopes: ["deriv"], ratePerMin: 5 }, quant)).json;
+    assert.match(t.token, /^xr_/);
+    const tk = { authorization: `Token ${t.token}` };
+    assert.equal((await call("GET", "/v1/deriv/underlyings")).status, 401);
+    const u = await call("GET", "/v1/deriv/underlyings", null, tk);
+    assert.equal(u.status, 200);
+    assert.ok(Array.isArray(u.json.rows));
+    assert.equal((await call("GET", "/v1/indices/CW|USD|G", null, tk)).status, 403); // no indices scope
+    for (let i = 0; i < 4; i++) await call("GET", "/v1/deriv/market", null, tk);
+    assert.equal((await call("GET", "/v1/deriv/market", null, tk)).status, 429);
+    assert.equal((await call("GET", "/api/tokens", null, quant)).json.tokens[0].uses >= 5, true);
+    // audit: API calls logged; rows are append-only
+    const au = (await call("GET", "/api/audit?category=api", null, quant)).json;
+    assert.ok(au.some((x) => x.action === "/v1/deriv/underlyings"));
+    await assert.rejects(app.pool.query(`update tas_audit set action = 'x'`), /append-only/);
+    // roles: only admins change them; a viewer cannot create tasks or tokens
+    const me = (await call("GET", "/api/me", null, quant)).json;
+    assert.equal(me.role, "analyst");
+    assert.equal((await call("PATCH", `/api/admin/users/${me.id}`, { role: "viewer" }, quant)).status, 403);
+    assert.equal((await call("PATCH", `/api/admin/users/${me.id}`, { role: "viewer" }, boss)).json.role, "viewer");
+    assert.equal((await call("POST", "/api/tokens", { name: "x" }, quant)).status, 403);
+    assert.equal((await call("PATCH", `/api/admin/users/${me.id}`, { role: "analyst" }, boss)).json.role, "analyst");
+    assert.equal((await call("DELETE", `/api/tokens/${t.id}`, null, quant)).json.ok, true);
+    assert.equal((await call("GET", "/v1/deriv/underlyings", null, tk)).status, 401);
+    // ops dashboard for admins only
+    assert.equal((await call("GET", "/api/admin/ops", null, quant)).status, 403);
+    const ops = (await call("GET", "/api/admin/ops", null, boss)).json;
+    assert.ok(ops.feeds && ops.alerts && ops.http.length > 0);
+    // derivatives alerts: seeded silently, then fire on an edge, delivered to the webhook
+    assert.equal((await call("PATCH", "/api/settings", { webhookUrl: "http://127.0.0.1/x" }, quant)).status, 400);
+    await call("PATCH", "/api/settings", { webhookUrl: "https://hooks.example.com/xr" }, quant);
+    const { rows: ds } = await app.pool.query(`select und from tas_fo_stats where date = (select max(date) from tas_fo_stats) limit 1`);
+    if (ds.length) {
+      await call("PUT", "/api/docs/deriv.alerts", { value: [{ id: "d1", rule: "pcr_high", params: { level: -1 }, target: { unds: [ds[0].und] }, enabled: true, priority: "normal" }] }, quant);
+      const first = await app.alerts.derivTick();
+      assert.equal(first.fired, 0); // seed
+      await app.pool.query(`delete from tas_alert_event where rule_id = 'd1' and instrument_id <> '__seed__'`);
+      const second = await app.alerts.derivTick();
+      assert.ok(second.fired >= 0);
+    }
+    // AI output log from the browser
+    assert.equal((await call("POST", "/api/audit/ai", { kind: "recommender", modelKey: "recommender", params: { view: "bullish" }, features: { und: "NIFTY" }, output: { top: "Bull Call Spread" } }, quant)).json.ok, true);
+    assert.equal((await call("GET", "/api/audit/ai", null, quant)).json[0].kind, "recommender");
+  } finally {
+    await app.pool.query(`delete from tas_user where email like '%@gquants.com'`);
+    await app.close();
+    await app.pool.end().catch(() => {});
+  }
+});

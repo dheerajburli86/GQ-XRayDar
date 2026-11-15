@@ -32,5 +32,9 @@ export function loadConfig(e = process.env) {
     morningSummaryTime: e.MORNING_SUMMARY_IST || "09:15",
     weeklySummaryTime: e.WEEKLY_SUMMARY_IST || "sat 09:00",
     rateLimitPerMin: int(e.RATE_LIMIT_PER_MIN, 120),
+    // Optional alert channels
+    resendKey: e.RESEND_API_KEY || "",
+    alertEmailFrom: e.ALERT_EMAIL_FROM || "GQ XRayDar <alerts@gquants.com>",
+    webhookSecret: e.WEBHOOK_SIGNING_SECRET || "",
   };
 }

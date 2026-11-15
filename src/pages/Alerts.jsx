@@ -21,6 +21,9 @@ import { RuleEditor, ReportCard } from "../components/RuleCard.jsx";
 import { useAccount } from "../components/Account.jsx";
 import { api } from "../lib/server.js";
 import { enablePush, pushSupported, isIos, isStandalone } from "../lib/push.js";
+import { DERIV_ALERT_RULES, DERIV_ALERT_GROUPS, describeDerivRule, evaluateDerivRule, marketView } from "../../engine/deriv/alerts.js";
+import { getDerivApi } from "../data/derivApi.js";
+import { useAsync } from "../lib/useAsync.js";
 
 const TFL = { D: "daily", W: "weekly", M: "monthly" };
 
@@ -79,9 +82,10 @@ export default function Alerts({ route }) {
         {acct.serverOn && acct.me && <button className="btn sm" onClick={async () => { const paused = !acct.me.settings?.alertsPaused; await api("PATCH", "/api/settings", { alertsPaused: paused }); acct.refreshMe(); }}>{acct.me.settings?.alertsPaused ? "▶ Resume all alerts" : "⏸ Pause all alerts"}</button>}
         {tab === "combo" && <button className="btn sm" onClick={() => setRules([...rules, { id: uid(), name: "Custom rule", template: "custom", conditions: [{ field: "rscTurnUp_country_W", op: "is true" }], universe: {}, enabled: true }])}>+ Custom rule</button>}
       </PageHead>
-      <Tabs value={tab} onChange={setTab} tabs={[{ value: "indicator", label: `Indicator alerts (${indicatorRules.length})` }, { value: "combo", label: `Combination alerts (${comboRules.length})` }, { value: "inbox", label: `Inbox${unread ? ` (${unread})` : ""}` }, { value: "telegram", label: "Telegram & summaries" }, { value: "card", label: "Report card" }]} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ value: "indicator", label: `Indicator alerts (${indicatorRules.length})` }, { value: "combo", label: `Combination alerts (${comboRules.length})` }, { value: "deriv", label: "Derivatives alerts" }, { value: "inbox", label: `Inbox${unread ? ` (${unread})` : ""}` }, { value: "telegram", label: "Telegram & summaries" }, { value: "card", label: "Report card" }]} />
       {tab === "indicator" && <IndicatorAlerts rules={indicatorRules} all={rules} setRules={setRules} wls={wls} />}
       {tab === "telegram" && <TelegramPanel />}
+      {tab === "deriv" && <DerivAlerts />}
       {tab === "card" && <CardTab wls={wls} rules={indicatorRules} />}
       {tab === "combo" && <div className="grid g2">
         <div className="stack">
@@ -197,18 +201,20 @@ function IndicatorAlerts({ rules, all, setRules, wls }) {
 function ServerEvents() {
   const d = useData();
   const [ev, setEv] = useState(null);
-  useEffect(() => { api("GET", "/api/alerts/events?limit=300").then(setEv).catch((e) => setEv({ error: e.message })); }, []);
+  const [qs, setQs] = useState("");
+  useEffect(() => { const t = setTimeout(() => api("GET", `/api/alerts/events?limit=500${qs ? `&q=${encodeURIComponent(qs)}` : ""}`).then(setEv).catch((e) => setEv({ error: e.message })), qs ? 400 : 0); return () => clearTimeout(t); }, [qs]);
   if (!ev) return <div className="card small muted">Loading delivered alerts…</div>;
   if (ev.error) return <div className="note warn">{ev.error}</div>;
   return (
     <div className="card">
-      <h3>Delivered alerts</h3>
+      <div className="row between"><h3>Delivered alerts (history)</h3><input placeholder="Search alert text or symbol…" value={qs} onChange={(e) => setQs(e.target.value)} style={{ width: 240 }} /></div>
       <DataTable compact pageSize={20} exportName="delivered_alerts" rows={ev} columns={[
         { key: "t", label: "Fired", value: (e) => e.fired_at, render: (e) => new Date(e.fired_at).toLocaleString() },
         { key: "s", label: "Instrument", value: (e) => e.symbol, render: (e) => <StockLink sec={d.secById.get(e.instrument_id)}>{e.symbol}</StockLink> },
         { key: "a", label: "Alert", value: (e) => e.payload?.text },
         { key: "c", label: "Candle", value: (e) => e.payload?.barTime || e.bar_key },
         { key: "v", label: "Telegram", value: (e) => (e.delivered?.telegram ? (String(e.delivered.telegram).startsWith("error") ? e.delivered.telegram : "sent") : "—") },
+        { key: "ch", label: "Other channels", value: (e) => ["push", "webhook", "email", "app"].filter((k) => e.delivered?.[k]).map((k) => `${k}${String(e.delivered[k]).startsWith("error") ? " (error)" : ""}`).join(", ") },
       ]} />
     </div>
   );
@@ -254,7 +260,20 @@ function TelegramPanel() {
           pushSupported() || isIos() ? <div className="row"><button className="btn sm" onClick={() => act(async () => { await enablePush(me.pushKey); await api("POST", "/api/push/test"); return "Pop-ups are on for this device; a test was sent."; })}>Enable on this device</button>{isIos() && !isStandalone() && <span className="small muted">iPhone: add the app to the Home Screen first (Share → Add to Home Screen).</span>}</div>
             : <div className="small muted">This browser cannot show push notifications.</div>
         ) : <div className="small muted">Push is not configured on the server (VAPID keys); Telegram still works.</div>}
+        <h3 style={{ margin: "8px 0 0" }}>Email and webhook</h3>
+        <Check checked={!!me.settings?.emailAlerts} onChange={(v) => setting("emailAlerts", v)}><b>Email</b> high-priority alerts to {me.email}{!me.emailChannel && <span className="muted"> (email is not configured on the server yet: RESEND_API_KEY)</span>}</Check>
+        <WebhookField value={me.settings?.webhookUrl || ""} signed={me.webhookSigned} onSave={(v) => act(async () => { await api("PATCH", "/api/settings", { webhookUrl: v }); return v ? "Webhook saved." : "Webhook removed."; })} />
       </div>
+    </div>
+  );
+}
+
+function WebhookField({ value, signed, onSave }) {
+  const [v, setV] = useState(value);
+  return (
+    <div className="stack" style={{ gap: 4 }}>
+      <div className="row"><input placeholder="https://your-endpoint.example.com/xraydar" value={v} onChange={(e) => setV(e.target.value)} style={{ flex: 1 }} /><button className="btn sm" onClick={() => onSave(v.trim())}>Save</button></div>
+      <div className="small muted">Normal and high-priority alerts are POSTed as JSON to this public https address{signed ? ", signed with HMAC-SHA256 in the x-xraydar-signature header" : ""}.</div>
     </div>
   );
 }
@@ -271,6 +290,72 @@ function CardTab({ wls, rules }) {
         <Select label="Test on" value={wl} options={Object.entries(wls).map(([k, v]) => ({ value: k, label: `${v.name} (${v.ids.length})` }))} onChange={setWl} allowEmpty="The 120 largest stocks" />
       </div>
       <ReportCard key={JSON.stringify([rule, wl])} rule={rule} ids={wl ? wls[wl]?.ids : null} title="Alert report card" />
+    </div>
+  );
+}
+
+const PRIORITY_LABEL = { high: "High: every channel incl. email", normal: "Normal: Telegram, push, webhook", low: "Low: in the app only" };
+
+function DerivAlerts() {
+  const [rules, setRules] = usePersistent("deriv.alerts", []);
+  const [positions] = usePersistent("deriv.positions", []);
+  const dapi = getDerivApi();
+  const ctx = useAsync(async () => {
+    const st = await dapi.status();
+    const ok = (st.days || []).filter((x) => x.status === "ok").map((x) => x.date);
+    const [cur, prev, mk] = await Promise.all([dapi.statsOn(ok.at(-1)), ok.length > 1 ? dapi.statsOn(ok.at(-2)) : [], dapi.market()]);
+    return { date: ok.at(-1), cur: new Map(cur.map((x) => [x.und, x.s])), prev: new Map(prev.map((x) => [x.und, x.s])), market: mk.at(-1) || null, marketPrev: mk.at(-2) || null };
+  }, []);
+  const [draft, setDraft] = useState({ rule: "pcr_high", params: { ...DERIV_ALERT_RULES.pcr_high.params }, scope: "all", unds: "", positionIds: [], priority: "normal", cooldownDays: 0 });
+  const R = DERIV_ALERT_RULES[draft.rule];
+  const add = () => {
+    const target = R.scope === "position" ? { positionIds: draft.positionIds } : draft.scope === "list" ? { unds: draft.unds.split(/[\s,]+/).map((x) => x.trim().toUpperCase()).filter(Boolean) } : draft.scope === "index" || draft.scope === "stock" ? { kind: draft.scope } : {};
+    const r = { id: uid(), rule: draft.rule, params: draft.params, target, priority: draft.priority, cooldownDays: +draft.cooldownDays || 0, enabled: true, createdAt: new Date().toISOString() };
+    r.name = `${describeDerivRule(r.rule, r.params)} · ${target.unds?.join(", ") || (target.kind ? `all ${target.kind === "index" ? "indices" : "stocks"}` : target.positionIds ? `${target.positionIds.length || "all"} position(s)` : "all F&O underlyings")}`;
+    setRules([...rules, r]);
+  };
+  const matching = (r) => {
+    const c = ctx.data; if (!c) return null;
+    const S = DERIV_ALERT_RULES[r.rule]; if (!S || S.scope === "position") return null;
+    const unds = r.target?.unds?.length ? r.target.unds : [...c.cur.keys()].filter((u) => !r.target?.kind || c.cur.get(u)?.kind === r.target.kind);
+    return unds.filter((u) => { const cur = S.scope === "market" ? marketView(c.market, u) : c.cur.get(u); const prev = S.scope === "market" ? marketView(c.marketPrev, u) : c.prev.get(u); return cur && evaluateDerivRule(r.rule, r.params, cur, prev).fired; });
+  };
+  return (
+    <div className="grid g2">
+      <div className="stack">
+        <div className="card stack">
+          <h3 style={{ margin: 0 }}>New derivatives alert</h3>
+          <select value={draft.rule} onChange={(e) => setDraft({ ...draft, rule: e.target.value, params: { ...DERIV_ALERT_RULES[e.target.value].params } })}>
+            {DERIV_ALERT_GROUPS.map((g) => <optgroup key={g} label={g}>{Object.entries(DERIV_ALERT_RULES).filter(([, x]) => x.group === g).map(([k, x]) => <option key={k} value={k}>{x.label(x.params)}</option>)}</optgroup>)}
+          </select>
+          <div className="row wrap" style={{ gap: 8 }}>
+            {Object.keys(R.params).map((k) => <label key={k} className="small muted">{k} <input type="number" step="any" value={draft.params[k]} onChange={(e) => setDraft({ ...draft, params: { ...draft.params, [k]: +e.target.value } })} style={{ width: 90 }} /></label>)}
+            <span className="small muted">{describeDerivRule(draft.rule, draft.params)}</span>
+          </div>
+          {R.scope === "position"
+            ? <div className="small">Positions: {positions.length ? positions.map((p) => <label key={p.id} style={{ marginRight: 10 }}><input type="checkbox" checked={draft.positionIds.includes(p.id)} onChange={(e) => setDraft({ ...draft, positionIds: e.target.checked ? [...draft.positionIds, p.id] : draft.positionIds.filter((x) => x !== p.id) })} /> {p.name}</label>) : "none saved (Strategy builder → Save position)"}{" "}<span className="muted">(none ticked = all)</span></div>
+            : <div className="row wrap" style={{ gap: 8 }}>
+              <Select label="On" value={draft.scope} onChange={(v) => setDraft({ ...draft, scope: v })} options={[{ value: "all", label: "Every F&O underlying" }, { value: "index", label: "All indices" }, { value: "stock", label: "All stocks" }, { value: "list", label: "These symbols" }]} />
+              {draft.scope === "list" && <input placeholder="NIFTY, RELIANCE…" value={draft.unds} onChange={(e) => setDraft({ ...draft, unds: e.target.value })} style={{ width: 200 }} />}
+            </div>}
+          <div className="row wrap" style={{ gap: 8 }}>
+            <Select label="Priority" value={draft.priority} onChange={(v) => setDraft({ ...draft, priority: v })} options={Object.entries(PRIORITY_LABEL).map(([value, label]) => ({ value, label }))} />
+            <label className="small muted">Cooldown <input type="number" min={0} value={draft.cooldownDays} onChange={(e) => setDraft({ ...draft, cooldownDays: e.target.value })} style={{ width: 55 }} /> days</label>
+            <button className="btn sm primary" onClick={add}>Add alert</button>
+          </div>
+        </div>
+        {rules.map((r) => { const m = matching(r); return (
+          <div key={r.id} className="card">
+            <div className="row between"><Check checked={r.enabled !== false} onChange={(v) => setRules(rules.map((x) => (x.id === r.id ? { ...x, enabled: v } : x)))}><b>{r.name}</b></Check>
+              <div className="row"><Badge>{r.priority || "normal"}</Badge>{r.cooldownDays ? <Badge>cooldown {r.cooldownDays}d</Badge> : null}{m && <Badge kind={m.length ? "g" : ""}>{m.length} would fire on {ctx.data?.date}</Badge>}<button className="btn sm ghost" onClick={() => setRules(rules.filter((x) => x.id !== r.id))}>✕</button></div></div>
+            {m?.length > 0 && <div className="small muted">{m.slice(0, 20).join(", ")}{m.length > 20 ? ` +${m.length - 20}` : ""}</div>}
+          </div>); })}
+      </div>
+      <div className="card small muted stack">
+        <div>Derivatives alerts are checked on the server after each new F&O session (end-of-day). A rule fires when its condition becomes true on the latest session and was not true on the session before, once per underlying and session; the first check after you create a rule is recorded quietly.</div>
+        <div><b>Priority</b> decides the channels: high goes everywhere including email, normal to Telegram, phone push and your webhook, low only into the app's history. <b>Cooldown</b> mutes a rule on the same underlying for that many days after it fires.</div>
+        <div>Strategy and portfolio alerts read your saved practice positions and the latest stored chain. Intraday triggers (live OI flips, block prints, sweeps) need a live feed.</div>
+      </div>
     </div>
   );
 }

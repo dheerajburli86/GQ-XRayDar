@@ -2,7 +2,7 @@
 
 Generated from `src/requirements.js` (`npm run trace`). Also shown in the app: *Data centre → Requirement trace*.
 
-**Built, with a stated limit:** 17 · **Built:** 111 · **Built on a default awaiting confirmation [C]:** 4 · **Needs an external input:** 7
+**Built, with a stated limit:** 18 · **Built:** 124 · **Built on a default awaiting confirmation [C]:** 4 · **Needs an external input:** 7
 
 | # | Tag | Requirement | Status | Where / notes |
 |---|---|---|---|---|
@@ -71,7 +71,7 @@ Generated from `src/requirements.js` (`npm run trace`). Also shown in the app: *
 | 63 | M | True timeframe EMA calculation | Built | Bars are aggregated to the timeframe first; EMA14 weekly = 14 weekly candles. |
 | 64 | M | Latest available trading date | Built | Charts end on the newest stored session; 'Latest' button; data refresh button reloads without a page reload. |
 | 65 | C | Indicator calculation specification | Built on a default awaiting confirmation [C] | House RSI (= heatmap), nested RSI, EMA warm-up hidden — in Methodology. |
-| 66 | M | Pattern recognition | Built, with a stated limit | Consolidation, breakout / breakdown, trend reversal, MMA compression / expansion, emerging setups. Classical shape patterns (head & shoulders, flags) are not implemented. |
+| 66 | M | Pattern recognition | Built | Consolidation, breakout / breakdown, trend reversal, MMA compression / expansion, emerging setups, and classical chart patterns (head & shoulders and inverse, double / triple tops and bottoms, triangles, wedges, rectangles, bull / bear flags) with their level, measured move and confirmation; screenable and drawn in the chart lab. |
 | 67 | M | Crossovers and agreement | Built | EMA / MACD / RSI crosses; multi-indicator agreement and conflict. |
 | 68 | M | Absolute performance filters | Built | Returns (local / USD), price levels, trend states. |
 | 69 | M | New high / low screeners | Built | 20-day, 3-month, 52-week, all-time. |
@@ -119,7 +119,7 @@ Generated from `src/requirements.js` (`npm run trace`). Also shown in the app: *
 | 111 | M | Rebuild / replay capability | Built | Re-running the engine recomputes history deterministically and logs every change. |
 | 112 | M | Actual vs estimated data labels | Built | Estimated caps, carried FX, stale constituents and demo data are labelled. |
 | 113 | M | Reusable calculation services | Built | One engine (engine/) for indices, RSC, WW, FX, charts and heatmaps, in batch and in the browser. |
-| 114 | E | APIs and structured exports | Built | CSV / Excel / PDF / PNG exports; Supabase REST on tas_* tables and tas_index_series(); the TA server's authenticated /api (login or agent secret) for analysis, screens, alerts, tasks and watchlists. |
+| 114 | E | APIs and structured exports | Built | CSV / Excel / PDF / PNG exports; Supabase REST on tas_* tables and tas_index_series(); the TA server's authenticated /api (login or agent secret) for analysis, screens, alerts, tasks and watchlists; the token-based /v1 quant API and WebSocket stream (#150). |
 | 115 | E | Performance and caching | Built | Precomputed batch results, compact screen rows, cached series, Web Worker in demo. |
 | 116 | C | Integration feasibility | Built on a default awaiting confirmation [C] | Checklist in Data centre → Integrations and docs/METHODOLOGY.md. |
 | 117 | M | Half-yearly and 9-month timeframes | Built | Every chart window (stacked screens, chart lab, workspace, stock page) offers 6M and 9M candles; 9-month candles run on a fixed 9-month grid from January 2000. |
@@ -144,4 +144,18 @@ Generated from `src/requirements.js` (`npm run trace`). Also shown in the app: *
 | 136 | M | Derivatives & confluence screener | Built | Preset scans for every listed group, custom conditions, plain-English queries, saved scans with new-match alerts, technical + derivatives confluence and conflicts. |
 | 137 | M | Derivatives research and backtests | Built | Forward returns and hit rates after each derivatives signal; participant positioning vs the index. |
 | 138 | E | Live order flow, depth, footprint and time & sales | Needs an external input | Needs a dedicated live broker stream (not the heatmap's Kite session). |
-| 139 | E | Order management | Needs an external input | Optional by design; needs a broker connection and explicit approval. Practice positions only. |
+| 139 | E | Order management | Needs an external input | Optional by design; needs a broker connection and explicit approval. Practice positions only. Freeze-quantity slicing rules are defined for when a broker is connected. |
+| 140 | M | Portfolio risk & attribution | Built, with a stated limit | Derivatives → Portfolio risk: raw and beta-weighted Greeks, session P&L split into delta / gamma / theta / vega / rho and residual, stress grid (spot ±1-15% × IV −20% to +100%, beta-scaled and correlation breakdown), parametric / historical / Monte Carlo VaR and expected shortfall, hedge calculator. Multi-account / multi-broker books need broker connections. |
+| 141 | M | Position sizing, risk limits and margin monitor | Built, with a stated limit | Fixed-fractional, volatility-target, Greek-budget and fractional-Kelly sizing; hard / soft limits on underlying and expiry concentration, net Greeks, daily loss and margin use, with logged overrides; margin use and a what-if with hedge benefit. Margin is a stress estimate, not SPAN. |
+| 142 | M | Monte Carlo and jump-diffusion simulation | Built | Strategy P&L distribution under Merton jumps and Heston-type stochastic volatility, seeded and reproducible; correlated Monte Carlo VaR with a correlation-shift control. |
+| 143 | M | Derivatives alerts and delivery | Built | 30 edge-triggered rules on futures price, OI spikes / flips, PCR extremes, MWPL near-ban / ban / exit, basis, IV rank / percentile, IV crush / expansion, skew shifts, term inversion, gamma-flip crossings, OI walls, price-OI divergence, and strategy P&L target / stop, breakeven, PoP, margin and physical-delivery alerts; priority tiers, cooldowns, Telegram, push, signed webhook, email (when configured) and searchable history. Intraday triggers need a live feed. |
+| 144 | M | Walk-forward, sensitivity and calibration | Built | Anchored walk-forward of any alert rule's parameters with out-of-sample efficiency, parameter sensitivity grids, Brier score / log loss / calibration curve of the option market's probabilities, IV forecast audit, false-positive rate and feature-drift (PSI). |
+| 145 | M | Trade journal and AI risk coach | Built | Structured journal (strategy tag, thesis, size, planned max loss, market snapshot at entry, adjustments, fees / STT, post-trade review); with consent, the coach flags losses past plan, holding losers, size before events, size after losses, cost drag and repeated adjustments, and the regimes and strategies that worked. |
+| 146 | M | Evidence, counter-evidence and invalidation | Built | Every strategy recommendation carries supporting drivers, counter-evidence, a confidence score, the historical sample and hit rate of the same payoff, and explicit price / IV / OI invalidation triggers; outputs are tagged exchange fact, calculation or model estimate. |
+| 147 | M | AI audit logging and model versioning | Built | Append-only tas_audit and tas_ai_audit (the database refuses edits): agent chats, recommender, Monte Carlo, coach and risk runs with model version, engine version, parameters, input snapshot and hash, output and timing; every calculation component has a version (engine/versions.js). |
+| 148 | M | Quote hygiene | Built | Each contract is flagged (no trade, dead, stale, minimum tick, below intrinsic, locked, IV failure); IV and Greeks are suppressed on invalid quotes; counts shown on the chain and returned by the API. Crossed bid / ask needs a live feed. |
+| 149 | M | Exchange capability matrix and rule engines | Built | Per-exchange matrix (NSE, BSE, NSE CDS, MCX, CME, Cboe, Eurex, SGX, ICE) of what is available, needs a feed or a licence; NSE / BSE rule engines (MWPL thresholds, freeze quantities, expiry and settlement rules) used by alerts and pages. |
+| 150 | E | Quant REST and WebSocket API | Built | /v1 endpoints for derivatives summaries, chains with Greeks, surfaces, screens, participant data, index series and stock analysis; WebSocket stream of new sessions and own alerts; personal tokens (hashed), scopes, per-token rate limits, every call audited (docs/API.md). |
+| 151 | E | Role-based access and compliance audit trail | Built | Roles admin / analyst / viewer / disabled enforced by the server, admin role management, audit trail of API queries, AI outputs, risk-limit overrides, role and token changes. |
+| 152 | E | Operational observability | Built | Data centre → Operations: feed status and session age, missing contract masters, engine runs, alert volume, channel errors and Telegram delivery delay, failed tasks, API routes with p50 / p95 latency, token usage, stream clients. |
+| 153 | M | Fibonacci and derivatives levels on charts | Built | Fibonacci retracements / extensions, call / put OI walls, max pain and the gamma-flip estimate drawn with support / resistance and volume profile in the chart lab. |

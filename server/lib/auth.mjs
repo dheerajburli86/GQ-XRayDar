@@ -21,7 +21,12 @@ export function createAuth(cfg, pool, fetchImpl = fetch) {
        returning *`, [id, email, name || null]);
     return rows[0];
   }
-  const shape = (u) => ({ id: u.id, email: u.email, name: u.name, telegramLinked: !!u.telegram_chat_id, telegramName: u.telegram_name, telegramUserId: u.telegram_user_id || null, settings: u.settings || {}, isAdmin: cfg.adminEmails.includes(String(u.email).toLowerCase()) });
+  const shape = (u) => {
+    const isAdmin = cfg.adminEmails.includes(String(u.email).toLowerCase()) || u.role === "admin";
+    const role = cfg.adminEmails.includes(String(u.email).toLowerCase()) ? "admin" : u.role || "analyst";
+    if (role === "disabled") throw new HttpError(403, "this account has been disabled by an administrator");
+    return { id: u.id, email: u.email, name: u.name, telegramLinked: !!u.telegram_chat_id, telegramName: u.telegram_name, telegramUserId: u.telegram_user_id || null, settings: u.settings || {}, isAdmin, role };
+  };
 
   async function web(req) {
     if (cfg.authMode === "dev") {

@@ -17,7 +17,10 @@ import { PageHead, Seg, Check, Loading, Badge, Empty } from "../components/ui.js
 import { InstrumentPicker } from "../components/pickers.jsx";
 import { loadInstrument } from "../lib/series.js";
 import { aggregate, emaStrict, rsi, macd } from "../../engine/indicators.js";
-import { heikinAshi, supportResistance, renko, kagi, pointFigure, volumeProfile } from "../../engine/chartTools.js";
+import { heikinAshi, supportResistance, renko, kagi, pointFigure, volumeProfile, fibonacci } from "../../engine/chartTools.js";
+import { chartPatterns } from "../../engine/patterns.js";
+import { getDerivApi } from "../data/derivApi.js";
+import { NSE_INDEX_UNDERLYINGS } from "../../engine/deriv/nse.js";
 import { candlePatternsAt, CANDLE_PATTERNS } from "../../engine/candles.js";
 import { describeChart } from "../../engine/chartRead.js";
 import { usePersistent, uid } from "../lib/storage.js";
@@ -28,7 +31,15 @@ import { downloadBlob } from "../lib/exporters.js";
 const UP = "#16a34a", DOWN = "#dc2626";
 const STYLES = [["candles", "Candles"], ["ha", "Heikin-Ashi"], ["line", "Line"], ["renko", "Renko"], ["kagi", "Kagi"], ["pnf", "Point & Figure"]];
 const TIME_STYLES = new Set(["candles", "ha", "line"]);
-const DEFAULT_VIEW = { tf: "D", style: "candles", ema: true, mma: false, sr: true, vp: false, vol: true, rsi: true, macd: false, cmp: null };
+const DEFAULT_VIEW = { tf: "D", style: "candles", ema: true, mma: false, sr: true, vp: false, vol: true, rsi: true, macd: false, cmp: null, fib: false, pat: true, fo: true };
+
+/** F&O underlying for a security (NSE stock symbol, or the index an NSE index contract tracks). */
+function foUnderlying(sec) {
+  if (!sec) return null;
+  if (sec.universe === "india_stocks") return String(sec.symbol).replace(/-(EQ|BE|BZ|ST|SM)$/, "");
+  if (sec.universe === "india_indices") { const e = Object.entries(NSE_INDEX_UNDERLYINGS).find(([, v]) => v.toUpperCase() === String(sec.symbol).toUpperCase()); return e ? e[0] : null; }
+  return null;
+}
 
 function themeOpts() {
   const cs = getComputedStyle(document.documentElement);
@@ -62,6 +73,12 @@ export default function ChartLab({ route }) {
   const bars = useMemo(() => (data?.inst ? aggregate({ ...data.inst, volume: data.inst.volume || data.inst.close.map(() => 0) }, v.tf) : null), [data, v.tf]);
   const levels = useMemo(() => (bars && v.sr ? supportResistance(bars, { lookback: v.tf === "D" ? 250 : 150 }) : []), [bars, v.sr, v.tf]);
   const lastPatterns = useMemo(() => (bars ? candlePatternsAt(bars, bars.time.length - 1).map((p) => CANDLE_PATTERNS[p]) : []), [bars]);
+  const fib = useMemo(() => (bars && v.fib ? fibonacci(bars, { lookback: v.tf === "D" ? 250 : 120 }) : null), [bars, v.fib, v.tf]);
+  const patterns = useMemo(() => (bars && v.pat ? chartPatterns(bars) : []), [bars, v.pat]);
+  const und = foUnderlying(sec);
+  const foStats = useAsync(async () => { if (!und || !v.fo) return null; const h = await getDerivApi().history(und); return h?.at(-1) || null; }, [und, v.fo]);
+  const foLevels = useMemo(() => { const s = foStats.data; if (!s) return []; return [["Call OI wall", s.callWall, "#dc2626"], ["Put OI wall", s.putWall, "#16a34a"], ["Max pain", s.maxPain, "#a78bfa"], ["Gamma flip (est.)", s.gammaFlip, "#f59e0b"]].filter((x) => x[1] > 0).map(([title, price, color]) => ({ title, price, color, asOf: s.date })); }, [foStats.data]);
+  const extraLines = useMemo(() => [...(fib ? fib.levels.map((l) => ({ price: l.price, color: l.kind === "extension" ? "#94a3b8" : "#38bdf8", title: `Fib ${(l.ratio * 100).toFixed(1)}%` })) : []), ...foLevels], [fib, foLevels]);
 
   useEffect(() => { if (sec) setAgentContext({ page: "chart", instrumentId: id, symbol: sec.symbol, name: sec.name, tf: v.tf, view: STYLES.find((s) => s[0] === v.style)?.[1] }); return () => setAgentContext(null); }, [id, sec, v.tf, v.style]);
   useEffect(() => { setExplain(null); }, [id, v.tf]);
@@ -111,6 +128,9 @@ export default function ChartLab({ route }) {
           <Check checked={v.mma} onChange={(x) => set({ mma: x })}>MMA groups</Check>
           <Check checked={v.sr} onChange={(x) => set({ sr: x })}>Key levels</Check>
           <Check checked={v.vp} onChange={(x) => set({ vp: x })}>Busiest prices</Check>
+          <Check checked={v.fib} onChange={(x) => set({ fib: x })}>Fibonacci</Check>
+          <Check checked={v.pat} onChange={(x) => set({ pat: x })}>Chart patterns</Check>
+          {und && <Check checked={v.fo} onChange={(x) => set({ fo: x })}>F&O levels</Check>}
           <span className="sep" />
           <Check checked={v.vol} onChange={(x) => set({ vol: x })}>Volume</Check>
           <Check checked={v.rsi} onChange={(x) => set({ rsi: x })}>RSI</Check>
@@ -137,12 +157,15 @@ export default function ChartLab({ route }) {
       </div>
       {loading || !bars ? <Loading what="prices" /> : (
         <div className="card" style={{ padding: 6, position: "relative" }}>
-          <ChartCanvas key={`${id}|${v.style}`} bars={bars} v={v} levels={levels} cmp={data.cmp} drawings={timeStyle ? drawings : []} tool={timeStyle ? tool : "none"}
+          <ChartCanvas key={`${id}|${v.style}`} bars={bars} v={v} levels={levels} extraLines={extraLines} patterns={patterns} cmp={data.cmp} drawings={timeStyle ? drawings : []} tool={timeStyle ? tool : "none"}
             onDraw={(dw) => setDrawings([...drawings, { id: uid(), ...dw }])} onChart={(c) => { chartRef.current = c; }} />
           <div className="row small" style={{ gap: 8, marginTop: 4, flexWrap: "wrap" }}>
             <span className="muted">{bars.time.length} candles · {bars.time[0]} → {bars.time.at(-1)}</span>
             {lastPatterns.filter((p) => p.dir !== 0).map((p) => <Badge key={p.label} kind={p.dir > 0 ? "g" : "r"}>{p.label}</Badge>)}
             {levels.map((l) => <Badge key={l.kind + l.price} kind={l.kind === "support" ? "g" : "r"}>{l.kind} {l.price.toFixed(2)} · {l.touches}×</Badge>)}
+            {patterns.map((p) => <Badge key={p.key} kind={p.dir > 0 ? "g" : p.dir < 0 ? "r" : ""} title={`${p.start} → ${p.end}${p.level ? ` · level ${p.level.toFixed(2)}` : ""}${p.target ? ` · measured move ${p.target.toFixed(2)}` : ""}`}>{p.label} · {p.status}</Badge>)}
+            {foLevels.length > 0 && <span className="muted">F&O levels from the {foLevels[0].asOf} session (OI walls and max pain are exchange OI; gamma flip is a model estimate)</span>}
+            {fib && <span className="muted">Fibonacci: {fib.note}</span>}
             {v.cmp && <span className="muted">Compare line rebased to {sec.symbol}'s first close in view</span>}
           </div>
         </div>
@@ -160,7 +183,7 @@ export default function ChartLab({ route }) {
 }
 
 /** The chart itself. Re-created when the instrument or style changes; series are rebuilt on option changes. */
-function ChartCanvas({ bars, v, levels, cmp, drawings, tool, onDraw, onChart }) {
+function ChartCanvas({ bars, v, levels, extraLines = [], patterns = [], cmp, drawings, tool, onDraw, onChart }) {
   const el = useRef(null), chartRef = useRef(null), mainRef = useRef(null), seriesRef = useRef([]), pending = useRef([]);
   const toolRef = useRef(tool), onDrawRef = useRef(onDraw);
   useEffect(() => { toolRef.current = tool; onDrawRef.current = onDraw; });
@@ -224,6 +247,13 @@ function ChartCanvas({ bars, v, levels, cmp, drawings, tool, onDraw, onChart }) 
         }
       }
       for (const l of levels) main?.createPriceLine({ price: l.price, color: l.kind === "support" ? UP : DOWN, lineStyle: LineStyle.Dotted, lineWidth: 1, axisLabelVisible: true, title: `${l.kind === "support" ? "S" : "R"} ${l.touches}×` });
+      for (const l of extraLines) main?.createPriceLine({ price: l.price, color: l.color, lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: true, title: l.title });
+      // chart patterns: their pivots as a thin line, the breakout level as a price line
+      for (const p of patterns) {
+        const pts = p.points.filter((q, i, a) => i === 0 || q.time > a[i - 1].time).map((q) => ({ time: q.time, value: q.price }));
+        if (pts.length >= 2) add(LineSeries, pts, { color: p.dir > 0 ? "#4ade80" : p.dir < 0 ? "#f87171" : "#cbd5e1", lineWidth: 1, lineStyle: LineStyle.Dotted, crosshairMarkerVisible: false, title: p.label });
+        if (p.level) main?.createPriceLine({ price: p.level, color: p.dir > 0 ? UP : p.dir < 0 ? DOWN : "#94a3b8", lineStyle: LineStyle.SparseDotted, lineWidth: 1, axisLabelVisible: false, title: `${p.label} level` });
+      }
       // drawings
       const notes = [];
       for (const dw of drawings) {
@@ -280,7 +310,7 @@ function ChartCanvas({ bars, v, levels, cmp, drawings, tool, onDraw, onChart }) 
     const nPts = main ? main.data().length : 0, show = timeStyle ? 400 : 250;
     const fit = () => { if (chartRef.current !== chart) return; if (nPts > show) chart.timeScale().setVisibleLogicalRange({ from: nPts - show, to: nPts + 5 }); else chart.timeScale().fitContent(); };
     fit(); setTimeout(fit, 60);
-  }, [bars, v.ema, v.mma, v.vol, v.rsi, v.macd, v.style, levels, cmp, drawings, timeStyle, v.tf]);
+  }, [bars, v.ema, v.mma, v.vol, v.rsi, v.macd, v.style, levels, extraLines, patterns, cmp, drawings, timeStyle, v.tf]);
 
   // busiest price levels, drawn as bars against the price axis of the visible window
   useEffect(() => {

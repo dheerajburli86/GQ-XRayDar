@@ -7,6 +7,7 @@
 // daily session, so a forward return never includes the bar that produced the
 // signal.
 
+import { chartPatterns } from "./patterns.js";
 import { METHODOLOGY } from "./methodology.js";
 import {
   aggregate, ema, emaStrict, rsi, macd, atr, rollingMax, rollingMin, mmaState, rsc, slopeSign, sma, isFiniteNum,
@@ -148,10 +149,12 @@ export function analyzeSecurity(daily, usdClose, ccClose, bench, ctx = {}, m = M
       else if (jL >= 0 && A.c[k] <= A.c[jL] && num(A.r1[k]) && num(A.r1[jL]) && A.r1[k] > A.r1[jL] + 3) rsiDiv = "bullish";
     }
     const cs = tf === "D" || tf === "W" ? candleSummary(A.b) : null;
+    const cp = tf === "D" || tf === "W" ? chartPatterns(A.b).map((x) => ({ k: x.key, s: x.status, d: x.dir })) : [];
     tfState[tf] = {
       t: A.b.time[k],
       rsiDivergence: rsiDiv,
       candles: cs ? cs.patterns : [], candleBull: cs ? cs.bullish : false, candleBear: cs ? cs.bearish : false,
+      chartPatterns: cp,
       close: r4(A.c[k]),
       rsi: r2(A.r1[k]), rsi2: r2(A.r2[k]), rsi3: r2(A.r3[k]),
       rsiPrev: r2(A.r1[k - 1]),

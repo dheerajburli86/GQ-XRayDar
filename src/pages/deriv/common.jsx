@@ -76,3 +76,7 @@ export const DataNote = ({ status }) => (
 );
 
 export const BUILD_BADGE = { long_buildup: "g", short_covering: "g", short_buildup: "r", long_unwinding: "r", neutral: "" };
+
+/** Epistemic tag on every output element: exchange fact, deterministic calculation, or model estimate / forecast. */
+const TAG = { fact: ["Exchange fact", "b", "Published by the exchange"], calc: ["Calculation", "", "Deterministic calculation from stored data with stated assumptions"], est: ["Model estimate", "a", "Depends on a model or forecast; treat as an estimate"] };
+export const Tag = ({ k = "calc" }) => { const [l, kind, t] = TAG[k] || TAG.calc; return <span className={`badge ${kind}`} title={t} style={{ fontSize: 10, marginLeft: 6 }}>{l}</span>; };

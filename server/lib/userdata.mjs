@@ -2,7 +2,7 @@
 // settings). The web app syncs them; the agent edits them for a linked user.
 import crypto from "node:crypto";
 
-export const DOC_KEYS = /^(watchlists|alerts\.rules|alerts\.inbox|notes|screens|workspaces|workspace\.current|layout\.[A-Za-z]+|paper|settings|assistant\.history|agent\.history|navCollapsed|drawings|chartlab|scanners|customIndices|deriv\.positions|deriv\.journal|deriv\.screens|deriv\.events)$/;
+export const DOC_KEYS = /^(watchlists|alerts\.rules|alerts\.inbox|notes|screens|workspaces|workspace\.current|layout\.[A-Za-z]+|paper|settings|assistant\.history|agent\.history|navCollapsed|drawings|chartlab|scanners|customIndices|deriv\.positions|deriv\.journal|deriv\.screens|deriv\.events|deriv\.alerts|deriv\.risk|deriv\.coach)$/;
 
 export function createUserData(pool) {
   async function getDoc(userId, key, fallback = null) {

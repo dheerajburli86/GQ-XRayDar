@@ -9,13 +9,14 @@ import { DataTable } from "../components/DataTable.jsx";
 import { TvChart, lineData } from "../components/TvChart.jsx";
 import { fmtMoney } from "../lib/format.js";
 import { REQUIREMENTS, STATUS_LABEL } from "../requirements.js";
+import { Capabilities, Access, AuditLog, Operations } from "./DataCentreOps.jsx";
 
 export default function DataCentre({ route }) {
   const [tab, setTab] = useState(route.query.tab || "overview");
   return (
     <div className="stack">
       <PageHead title="Data centre" sub="Where every number comes from, how it was computed, and what is wrong with the inputs." />
-      <Tabs value={tab} onChange={setTab} tabs={[{ value: "overview", label: "Overview" }, { value: "master", label: "Security master" }, { value: "health", label: "Data health" }, { value: "audit", label: "Calculation audit" }, { value: "fx", label: "FX" }, { value: "ca", label: "Corporate actions" }, { value: "method", label: "Methodology" }, { value: "integrations", label: "Integrations" }, { value: "trace", label: "Requirement trace" }]} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ value: "overview", label: "Overview" }, { value: "master", label: "Security master" }, { value: "health", label: "Data health" }, { value: "audit", label: "Calculation audit" }, { value: "fx", label: "FX" }, { value: "ca", label: "Corporate actions" }, { value: "method", label: "Methodology" }, { value: "integrations", label: "Integrations" }, { value: "caps", label: "Exchange capabilities" }, { value: "access", label: "Access & API" }, { value: "auditlog", label: "Audit log" }, { value: "ops", label: "Operations" }, { value: "trace", label: "Requirement trace" }]} />
       {tab === "overview" && <Overview />}
       {tab === "master" && <Master />}
       {tab === "health" && <Health />}
@@ -24,6 +25,10 @@ export default function DataCentre({ route }) {
       {tab === "ca" && <Ca />}
       {tab === "method" && <Method />}
       {tab === "integrations" && <Integrations />}
+      {tab === "caps" && <Capabilities />}
+      {tab === "access" && <Access />}
+      {tab === "auditlog" && <AuditLog />}
+      {tab === "ops" && <Operations />}
       {tab === "trace" && <Trace />}
     </div>
   );

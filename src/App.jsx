@@ -47,6 +47,7 @@ const pages = {
   dunusual: lazy(() => import("./pages/deriv/Unusual.jsx")),
   dscreen: lazy(() => import("./pages/deriv/DerivScreener.jsx")),
   dresearch: lazy(() => import("./pages/deriv/DerivResearch.jsx")),
+  drisk: lazy(() => import("./pages/deriv/Risk.jsx")),
 };
 
 const NAV = [
@@ -55,7 +56,7 @@ const NAV = [
   ["Charts", [["chart", "📈", "Chart lab"], ["screens/RSIACC", "∿", "RSIACC"], ["screens/RSCACC", "∿", "RSCACC"], ["screens/RSIMMA", "≡", "RSIMMA"], ["screens/RSCMMA", "≡", "RSCMMA"], ["workspace", "⊞", "Multi-chart workspace"]]],
   ["Discovery", [["scanners", "⌖", "Scanners"], ["rs", "↗", "Relative strength"], ["screener", "⚲", "Screener"], ["early", "◷", "Early-stage scanner"], ["funnel", "▽", "Opportunity funnel"], ["rotation", "↻", "Sector rotation"], ["breadth", "▥", "Market breadth"]]],
   ["Research", [["scores", "★", "AI setup scores"], ["assistant", "✦", "GQ Agent (full page)"], ["briefs", "✎", "Market briefs"], ["backtest", "⟲", "Backtest & patterns"]]],
-  ["Derivatives", [["dhome", "⧉", "Derivatives dashboard"], ["dchain", "⋮", "Option chain"], ["dfut", "⇉", "Futures & rollover"], ["dvol", "≈", "Volatility lab"], ["dstrat", "⟁", "Strategy builder"], ["dexpiry", "⏱", "Expiry & events"], ["dunusual", "⚡", "Unusual activity"], ["dscreen", "⚲", "Derivatives screener"], ["dresearch", "⟲", "Derivatives research"]]],
+  ["Derivatives", [["dhome", "⧉", "Derivatives dashboard"], ["dchain", "⋮", "Option chain"], ["dfut", "⇉", "Futures & rollover"], ["dvol", "≈", "Volatility lab"], ["dstrat", "⟁", "Strategy builder"], ["drisk", "⚖", "Portfolio risk"], ["dexpiry", "⏱", "Expiry & events"], ["dunusual", "⚡", "Unusual activity"], ["dscreen", "⚲", "Derivatives screener"], ["dresearch", "⟲", "Derivatives research"]]],
   ["My work", [["alerts", "◉", "Alerts"], ["tasks", "☑", "Tasks"], ["watchlists", "☰", "Watchlists & portfolio"], ["paper", "◈", "Practice portfolio"], ["notes", "✐", "Research notes"]]],
   ["Data", [["data", "⛁", "Data centre"]]],
 ];

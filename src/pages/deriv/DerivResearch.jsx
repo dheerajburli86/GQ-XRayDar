@@ -5,7 +5,9 @@ import { useMemo, useState } from "react";
 import { PageHead, Seg, Kpi, Tabs, Loading, Empty } from "../../components/ui.jsx";
 import { DataTable } from "../../components/DataTable.jsx";
 import { useAsync } from "../../lib/useAsync.js";
-import { useDerivRows, DerivGate, DataNote, fp, pc } from "./common.jsx";
+import { useDerivRows, DerivGate, DataNote, fp, pc, UndSelect, Tag } from "./common.jsx";
+import { XYChart } from "../../components/XYChart.jsx";
+import { derivCalibration, ivForecastAudit, psi, psiLabel } from "../../../engine/validation.js";
 
 const SIGNALS = {
   long_buildup: { label: "Long build-up", test: (s) => s.buildup === "long_buildup", dir: 1 },
@@ -28,9 +30,10 @@ export default function DerivResearch() {
       <PageHead title="Derivatives research" sub="Test derivatives signals against what the underlying did next, and compare participant positioning with the index." />
       <DerivGate status={status} loading={loading} error={error}>
         <DataNote status={status} />
-        <Tabs value={tab} onChange={setTab} tabs={[{ value: "bt", label: "Signal backtest" }, { value: "part", label: "Participants vs index" }]} />
+        <Tabs value={tab} onChange={setTab} tabs={[{ value: "bt", label: "Signal backtest" }, { value: "part", label: "Participants vs index" }, { value: "cal", label: "Forecast calibration & drift" }]} />
         {tab === "bt" && <Backtest api={api} rows={rows} />}
         {tab === "part" && <PartVsIndex api={api} market={market} />}
+        {tab === "cal" && <Calibration api={api} rows={rows} />}
       </DerivGate>
     </div>
   );
@@ -114,3 +117,47 @@ function PartVsIndex({ api, market }) {
   );
 }
 
+
+const DRIFT = [["atmIv", "ATM IV"], ["pcrOi", "PCR (OI)"], ["futOiChgPct", "Futures OI change"], ["optVolZ", "Option volume z"], ["skew25", "25-delta skew"], ["fut.basisPct", "Futures basis"]];
+const pick = (o, path) => path.split(".").reduce((x, k) => (x == null ? x : x[k]), o);
+
+function Calibration({ api, rows }) {
+  const [und, setUnd] = useState("NIFTY");
+  const h = useAsync(() => api.history(und), [und]);
+  const res = useMemo(() => {
+    const hist = h.data || [];
+    if (hist.length < 30) return null;
+    const cal = derivCalibration(hist), iv = ivForecastAudit(hist.map((x) => x.atmIv), { minFit: Math.min(60, Math.floor(hist.length / 2)) });
+    const cut = Math.max(20, hist.length - 60);
+    const drift = DRIFT.map(([k, label]) => { const v = psi(hist.slice(0, cut).map((x) => pick(x, k)), hist.slice(cut).map((x) => pick(x, k))); return { id: k, label, psi: v, verdict: psiLabel(v) }; });
+    return { cal, iv, drift, n: hist.length };
+  }, [h.data]);
+  return (
+    <div className="stack">
+      <div className="card row wrap" style={{ gap: 10 }}><UndSelect rows={rows} value={und} onChange={setUnd} />{res && <span className="small muted">{res.n} stored sessions</span>}</div>
+      {h.loading && <Loading />}
+      {!h.loading && !res && <Empty>Calibration needs at least 30 stored sessions for this underlying.</Empty>}
+      {res?.cal && <div className="card">
+        <div className="h3">Are the option market's probabilities right?<Tag k="calc" /></div>
+        <div className="kpis">
+          <Kpi label="Brier score" value={res.cal.brier.toFixed(4)} sub={`always-average: ${res.cal.brierClimatology.toFixed(4)}`} />
+          <Kpi label="Log loss" value={res.cal.logLoss.toFixed(3)} /><Kpi label="Hit rate at 50%" value={pc(res.cal.classification.hitRate)} />
+          <Kpi label="False positives" value={pc(res.cal.classification.falsePositiveRate)} /><Kpi label="Settled within 1 sd" value={pc(res.cal.withinOneSd)} sub="about 68% if IV is fair" />
+          <Kpi label="Forecasts checked" value={res.cal.n} sub={`${res.cal.sessions} sessions`} />
+        </div>
+        <XYChart height={260} xFmt={(v) => pc(v)} yFmt={(v) => pc(v)} series={[{ name: "perfect", type: "line", color: "#64748b", dash: "4 3", points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] }, { name: "observed", type: "line", color: "#2563eb", width: 2.2, points: res.cal.curve.map((c) => ({ x: c.predicted, y: c.observed })) }]} xLabel="stated probability of finishing above the strike" />
+        <p className="legend-note">{res.cal.method}</p>
+      </div>}
+      {res?.iv && <div className="card">
+        <div className="h3">IV forecast audit ({res.iv.h} sessions ahead)<Tag k="est" /></div>
+        <div className="kpis"><Kpi label="Direction right" value={pc(res.iv.directionHitRate)} /><Kpi label="Mean abs. error" value={`${(res.iv.mae * 100).toFixed(2)} pts`} /><Kpi label="Bias" value={`${(res.iv.bias * 100).toFixed(2)} pts`} /><Kpi label="Inside 1-sd band" value={pc(res.iv.bandCoverage)} sub="about 68% if well calibrated" /><Kpi label="Forecasts" value={res.iv.n} /></div>
+        <p className="legend-note">{res.iv.method}</p>
+      </div>}
+      {res && <div className="card">
+        <div className="h3">Feature drift: last 60 sessions vs the earlier history</div>
+        <DataTable compact rows={res.drift} exportName="feature-drift" columns={[{ key: "l", label: "Input", value: (r) => r.label }, { key: "p", label: "PSI", num: true, value: (r) => r.psi, render: (r) => (r.psi == null ? "—" : r.psi.toFixed(3)) }, { key: "v", label: "Verdict", value: (r) => r.verdict }]} />
+        <p className="legend-note">Population stability index: under 0.1 stable, 0.1-0.25 moderate drift, above 0.25 material drift (the inputs a signal or score uses no longer look like the history it was judged on).</p>
+      </div>}
+    </div>
+  );
+}

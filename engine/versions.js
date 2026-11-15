@@ -1,0 +1,27 @@
+// Versions of every calculation and model, so any stored or displayed output
+// can be reproduced. Bump the number when a change alters results; the server
+// writes these into the audit log with each AI / model output.
+
+export const MODEL_VERSIONS = {
+  ivSolver: "1.1 Black-76 Newton with bisection fallback",
+  greeks: "1.1 analytic generalised Black-Scholes, checked against finite differences",
+  pricingModels: "1.0 BSM, Black-76, CRR, trinomial, Barone-Adesi-Whaley, Bachelier",
+  surface: "1.0 raw SVI per expiry with a Durrleman butterfly check",
+  quoteHygiene: "1.0 end-of-day flags; IV suppressed on dead and below-intrinsic contracts",
+  buildup: "1.0 price / OI quadrants with volume and z-score confidence",
+  writingBuying: "1.0 end-of-day premium / OI / IV inference, confidence capped at 0.8",
+  gex: "1.0 dealers long calls and short puts (stated assumption)",
+  strategyMetrics: "1.0 lognormal at ATM IV of the first expiry",
+  margin: "1.0 stress estimate (not SPAN)",
+  recommender: "1.1 rule-based ranking with evidence, counter-evidence and invalidation triggers",
+  monteCarlo: "1.0 Merton jumps + Heston-type variance, seeded",
+  risk: "1.0 beta-weighting, Taylor attribution, parametric / historical / MC VaR",
+  derivAlerts: "1.0 edge-triggered on end-of-day summaries",
+  coach: "1.0 rule-based journal analysis",
+  validation: "1.0 walk-forward, parameter grid, Brier and calibration",
+  chartPatterns: "1.0 pivot-based classical patterns",
+  assistant: "1.0 deterministic parser + stored calculations (built-in)",
+  foCollector: "3 (FO_VERSION)",
+};
+
+export const ENGINE_VERSION = "2026.11.15";

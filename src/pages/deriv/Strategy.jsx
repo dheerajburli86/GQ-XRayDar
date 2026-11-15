@@ -3,14 +3,17 @@
 // estimate, Greeks, scenario matrix, side-by-side comparison, a rule-based
 // recommender, adjustment ideas, saved positions with portfolio risk, and a
 // trade journal. Practice only: nothing here places an order.
-import { useMemo, useState } from "react";
-import { PageHead, Kpi, Tabs, Select, Seg, Badge, Loading, Empty } from "../../components/ui.jsx";
+import { useEffect, useMemo, useState } from "react";
+import { PageHead, Kpi, Tabs, Select, Seg, Badge, Loading, Empty, Check } from "../../components/ui.jsx";
 import { DataTable } from "../../components/DataTable.jsx";
 import { XYChart } from "../../components/XYChart.jsx";
 import { useAsync } from "../../lib/useAsync.js";
 import { navigate } from "../../lib/router.js";
 import { usePersistent, uid } from "../../lib/storage.js";
-import { useDerivRows, DerivGate, UndSelect, fn, fiv, pc } from "./common.jsx";
+import { useDerivRows, DerivGate, UndSelect, fn, fiv, pc, Tag } from "./common.jsx";
+import { simulateStrategy, MC_DEFAULTS } from "../../../engine/deriv/montecarlo.js";
+import { coachReport, postTradeReview } from "../../../engine/deriv/coach.js";
+import { logAi } from "../../lib/audit.js";
 import { enrichChain, oiWalls } from "../../../engine/deriv/chain.js";
 import { TEMPLATES, TEMPLATE_GROUPS, legsFromTemplate, makeLeg, strategyMetrics, positionPnl, positionGreeks, scenarioMatrix, strategyCosts, marginEstimate, recommend, adjustments, legLabel } from "../../../engine/deriv/strategy.js";
 import { settlementInfo } from "../../../engine/deriv/futures.js";
@@ -23,19 +26,21 @@ export default function Strategy({ route }) {
   const day = useAsync(() => (und ? api.chain(und) : Promise.resolve(null)), [und]);
   const chain = useMemo(() => (day.data ? enrichChain(day.data) : null), [day.data]);
   const row = rows?.find((r) => r.und === und);
+  const hist = useAsync(() => (und ? api.history(und) : Promise.resolve([])), [und]);
   const [tab, setTab] = useState("build");
   return (
     <div className="stack">
       <PageHead title="Strategy builder" sub="Build any multi-leg position from futures, calls, puts and shares; see its payoff, risk, probabilities and costs. Practice only: no orders are placed." />
       <DerivGate status={status} loading={loading} error={error}>
         <div className="card row wrap" style={{ gap: 10 }}><UndSelect rows={rows} value={und} onChange={(u) => navigate("dstrat", { und: u })} />{chain && <span className="small muted">Prices from session {chain.date}; spot {fn(chain.spot)}; lot {chain.lot}</span>}</div>
-        <Tabs value={tab} onChange={setTab} tabs={[{ value: "build", label: "Build & analyse" }, { value: "rec", label: "Recommender" }, { value: "cmp", label: "Compare" }, { value: "book", label: "My positions & risk" }, { value: "journal", label: "Trade journal" }]} />
+        <Tabs value={tab} onChange={setTab} tabs={[{ value: "build", label: "Build & analyse" }, { value: "mc", label: "Monte Carlo" }, { value: "rec", label: "Recommender" }, { value: "cmp", label: "Compare" }, { value: "book", label: "My positions" }, { value: "journal", label: "Trade journal & coach" }]} />
         {day.loading && <Loading />}
         {chain && tab === "build" && <Builder chain={chain} und={und} />}
-        {chain && tab === "rec" && <Recommender chain={chain} row={row} und={und} />}
+        {chain && tab === "mc" && <MonteCarlo chain={chain} und={und} />}
+        {chain && tab === "rec" && <Recommender chain={chain} row={row} und={und} spots={(hist.data || []).map((h) => h.spot)} />}
         {chain && tab === "cmp" && <Compare chain={chain} />}
         {tab === "book" && <Book api={api} />}
-        {tab === "journal" && <Journal />}
+        {tab === "journal" && <Journal api={api} rows={rows} />}
       </DerivGate>
     </div>
   );
@@ -157,12 +162,14 @@ function Analysis({ chain, legs, days, setDays, dv, setDv }) {
   );
 }
 
-function Recommender({ chain, row, und }) {
+function Recommender({ chain, row, und, spots }) {
   const [view, setView] = useState("bullish");
   const [maxLoss, setMaxLoss] = useState("");
   const [ei, setEi] = useState(0);
   const walls = useMemo(() => { const ex = chain.expiries.find((e) => e.rows.length >= 3); return ex ? oiWalls(ex, chain.spot) : null; }, [chain]);
-  const list = useMemo(() => recommend(chain, { view, ivPercentile: row?.s?.ivPct ?? null, maxLoss: maxLoss ? +maxLoss : null, expiryIndex: ei, walls }), [chain, view, row, maxLoss, ei, walls]);
+  const list = useMemo(() => recommend(chain, { view, ivPercentile: row?.s?.ivPct ?? null, maxLoss: maxLoss ? +maxLoss : null, expiryIndex: ei, walls, spots }), [chain, view, row, maxLoss, ei, walls, spots]);
+  useEffect(() => { logAi("recommender", "recommender", { params: { und, view, maxLoss: maxLoss || null, expiryIndex: ei }, features: { session: chain.date, spot: chain.spot, ivPct: row?.s?.ivPct ?? null, walls, spotsN: spots?.length || 0 }, output: list.slice(0, 5).map((x) => ({ template: x.template, score: x.score, confidence: x.evidence.confidence, invalidation: x.evidence.invalidation })) }); }, [list]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [open, setOpen] = useState(null);
   const [, setPositions] = usePersistent("deriv.positions", []);
   const exps = chain.expiries.filter((e) => e.rows.length >= 3);
   return (
@@ -180,10 +187,13 @@ function Recommender({ chain, row, und }) {
           { key: "mp", label: "Max profit", num: true, value: (x) => x.metrics.maxProfit, render: (x) => money(x.metrics.maxProfit) },
           { key: "ml", label: "Max loss", num: true, value: (x) => x.metrics.maxLoss, render: (x) => money(x.metrics.maxLoss) },
           { key: "legs", label: "Legs", value: (x) => x.legs.map(legLabel).join(" · ") },
-          { key: "why", label: "Why", value: (x) => x.reasons.join("; ") },
+          { key: "conf", label: "Confidence", num: true, value: (x) => x.evidence.confidence, render: (x) => <span title={x.evidence.note}>{pc(x.evidence.confidence)}</span> },
+          { key: "hist", label: "Hist. hit rate", num: true, value: (x) => x.evidence.sample?.hitRate, render: (x) => (x.evidence.sample ? <span title={`${x.evidence.sample.n} past ${x.evidence.sample.sessions}-session moves`}>{pc(x.evidence.sample.hitRate)}</span> : "—") },
+          { key: "why", label: "Evidence", value: (x) => x.reasons.join("; "), render: (x) => <a style={{ cursor: "pointer" }} onClick={() => setOpen(open === x.id ? null : x.id)}>{open === x.id ? "hide" : "show"}</a> },
           { key: "save", label: "", export: false, value: () => "", render: (x) => <a style={{ cursor: "pointer" }} onClick={() => setPositions((p) => [...p, { id: uid(), name: `${und} ${x.template}`, und, kind: chain.kind, lot: chain.lot, opened: chain.date, legs: x.legs, tag: x.template }])}>save</a> },
         ]} />
-        <p className="legend-note">A ranking of structures against your view, the underlying's IV percentile, OI walls, liquidity and your loss limit. It explains its scores and is not a recommendation to trade.</p>
+        {open != null && list[open] && <EvidenceLedger x={list[open]} />}
+        <p className="legend-note">A ranking of structures against your view, the underlying's IV percentile, OI walls, liquidity and your loss limit. It explains its scores and is not a recommendation to trade. Each run is recorded in the AI audit log with its inputs and model version.</p>
       </div>
     </div>
   );
@@ -257,35 +267,134 @@ function Book({ api }) {
   );
 }
 
-function Journal() {
+function Journal({ api, rows }) {
   const [items, setItems] = usePersistent("deriv.journal", []);
   const [positions] = usePersistent("deriv.positions", []);
-  const [draft, setDraft] = useState({ position: "", thesis: "", outcome: "", lesson: "", pnl: "" });
-  const add = () => { if (!draft.thesis.trim()) return; setItems([{ id: uid(), at: new Date().toISOString().slice(0, 10), ...draft, pnl: draft.pnl === "" ? null : +draft.pnl }, ...items]); setDraft({ position: "", thesis: "", outcome: "", lesson: "", pnl: "" }); };
-  const closed = items.filter((x) => x.pnl != null), wins = closed.filter((x) => x.pnl > 0);
-  const coach = [];
-  if (closed.length >= 5) {
-    coach.push(`Win rate ${Math.round((wins.length / closed.length) * 100)}% over ${closed.length} closed entries; average win ${fn(wins.reduce((a, x) => a + x.pnl, 0) / (wins.length || 1), 0)}, average loss ${fn(closed.filter((x) => x.pnl <= 0).reduce((a, x) => a + x.pnl, 0) / ((closed.length - wins.length) || 1), 0)}.`);
-    const words = new Map(); for (const x of closed.filter((y) => y.pnl <= 0)) for (const w of String(x.lesson).toLowerCase().match(/[a-z]{5,}/g) || []) words.set(w, (words.get(w) || 0) + 1);
-    const top = [...words.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map((x) => x[0]);
-    if (top.length) coach.push(`Words that recur in the lessons of losing entries: ${top.join(", ")}.`);
-  } else coach.push("Log at least five closed entries (with P&L) to see patterns here.");
+  const [consent, setConsent] = usePersistent("deriv.coach", { allowed: false });
+  const [events] = usePersistent("deriv.events", []);
+  const blank = { position: "", tag: "", view: "", lots: 1, plannedMaxLoss: "", thesis: "", exitAt: "", outcome: "", lesson: "", pnl: "", fees: "" };
+  const [draft, setDraft] = useState(blank);
+  const [edit, setEdit] = useState(null);
+  const add = async () => {
+    if (!draft.thesis.trim()) return;
+    const pos = positions.find((p) => p.name === draft.position);
+    const st = pos ? rows?.find((r) => r.und === pos.und)?.s : null;
+    let fees = draft.fees === "" ? null : +draft.fees;
+    if (fees == null && pos) { try { const d = await api.chain(pos.und); if (d) fees = strategyCosts(pos.legs, enrichChain(d)).total; } catch { /* keep null */ } }
+    const today = new Date().toISOString().slice(0, 10);
+    const next = (events || []).map((e) => e.date).filter((d) => d >= today).sort()[0];
+    const snapshot = st ? { und: pos.und, session: st.date, spot: st.spot, ivPct: st.ivPct ?? null, volRegime: st.volRegime ?? null, buildup: st.buildup ?? null, pcr: st.pcrOi ?? null, eventDays: next ? Math.round((Date.parse(next) - Date.parse(today)) / 86400000) : null } : null;
+    setItems([{ id: uid(), at: today, ...draft, tag: draft.tag || pos?.tag || "", legs: pos?.legs || null, lots: +draft.lots || 1, plannedMaxLoss: draft.plannedMaxLoss === "" ? null : +draft.plannedMaxLoss, pnl: draft.pnl === "" ? null : +draft.pnl, fees, exitAt: draft.exitAt || null, snapshot, adjustments: [] }, ...items]);
+    setDraft(blank);
+  };
+  const upd = (id, patch) => setItems(items.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+  const report = useMemo(() => (consent.allowed ? coachReport(items) : null), [items, consent.allowed]);
+  useEffect(() => { if (report?.ready) logAi("coach", "coach", { params: { entries: items.length }, features: { closed: items.filter((x) => x.pnl != null).map((x) => ({ id: x.id, pnl: x.pnl, lots: x.lots, tag: x.tag })) }, output: report.findings.map((f) => f.title) }); }, [report]); // eslint-disable-line react-hooks/exhaustive-deps
+  const inp = (k, ph, w = 120, type = "text") => <input type={type} placeholder={ph} value={draft[k]} onChange={(e) => setDraft({ ...draft, [k]: e.target.value })} style={{ width: w }} />;
   return (
     <div className="stack">
-      <div className="card">
+      <div className="card stack">
         <div className="row wrap" style={{ gap: 8 }}>
           <select value={draft.position} onChange={(e) => setDraft({ ...draft, position: e.target.value })}><option value="">(no saved position)</option>{positions.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}</select>
-          <input placeholder="Thesis: why this trade" value={draft.thesis} onChange={(e) => setDraft({ ...draft, thesis: e.target.value })} style={{ flex: 2, minWidth: 220 }} />
-          <input placeholder="Outcome" value={draft.outcome} onChange={(e) => setDraft({ ...draft, outcome: e.target.value })} style={{ flex: 1, minWidth: 140 }} />
-          <input placeholder="Lesson" value={draft.lesson} onChange={(e) => setDraft({ ...draft, lesson: e.target.value })} style={{ flex: 1, minWidth: 140 }} />
-          <input type="number" placeholder="P&L ₹ (if closed)" value={draft.pnl} onChange={(e) => setDraft({ ...draft, pnl: e.target.value })} style={{ width: 130 }} />
-          <button className="btn sm primary" onClick={add}>Add</button>
+          {inp("tag", "Strategy tag", 130)}
+          <select value={draft.view} onChange={(e) => setDraft({ ...draft, view: e.target.value })}><option value="">View</option><option value="bullish">Bullish</option><option value="bearish">Bearish</option><option value="neutral">Range-bound</option><option value="volatile">Big move</option></select>
+          <label className="small muted">Lots {inp("lots", "", 60, "number")}</label>
+          <label className="small muted">Planned max loss ₹ {inp("plannedMaxLoss", "", 100, "number")}</label>
+          <input placeholder="Entry thesis: why this trade" value={draft.thesis} onChange={(e) => setDraft({ ...draft, thesis: e.target.value })} style={{ flex: 2, minWidth: 220 }} />
         </div>
+        <div className="row wrap" style={{ gap: 8 }}>
+          <label className="small muted">Exit date <input type="date" value={draft.exitAt} onChange={(e) => setDraft({ ...draft, exitAt: e.target.value })} /></label>
+          <label className="small muted">P&L ₹ {inp("pnl", "if closed", 100, "number")}</label>
+          <label className="small muted">Fees & STT ₹ {inp("fees", "auto", 90, "number")}</label>
+          {inp("outcome", "Outcome", 160)}{inp("lesson", "Lesson", 160)}
+          <button className="btn sm primary" onClick={add}>Add entry</button>
+        </div>
+        <div className="small muted">Linking a saved position stores its legs, the round-trip fees and STT estimate, and a snapshot of the market at entry (IV percentile, volatility regime, build-up, PCR, days to the next event in your calendar).</div>
       </div>
-      <div className="card"><div className="h3">Review</div>{coach.map((c) => <div key={c} className="small">• {c}</div>)}</div>
       <div className="card">
-        <DataTable rows={items} exportName="trade-journal" columns={[{ key: "a", label: "Date", value: (x) => x.at }, { key: "p", label: "Position", value: (x) => x.position }, { key: "t", label: "Thesis", value: (x) => x.thesis }, { key: "o", label: "Outcome", value: (x) => x.outcome }, { key: "l", label: "Lesson", value: (x) => x.lesson }, { key: "pnl", label: "P&L", num: true, value: (x) => x.pnl, render: (x) => (x.pnl == null ? "open" : <span className={x.pnl >= 0 ? "pos" : "neg"}>{fn(x.pnl, 0)}</span>) }, { key: "x", label: "", export: false, value: () => "", render: (x) => <a style={{ cursor: "pointer" }} onClick={() => setItems(items.filter((y) => y.id !== x.id))}>delete</a> }]} />
+        <div className="row between"><div className="h3">AI risk coach<Tag k="est" /></div>
+          <Check checked={!!consent.allowed} onChange={(v) => setConsent({ allowed: v, at: new Date().toISOString() })}>Allow the coach to analyse my journal</Check></div>
+        {!consent.allowed ? <div className="small muted">Off. With your consent the coach reads only your own journal entries and reports behaviour patterns (losses past plan, holding losers, size before events, size after losses, costs, repeated adjustments) and the regimes where your trades worked. Nothing is shared.</div>
+          : !report.ready ? <div className="small">{report.note}</div> : <>
+            <div className="kpis"><Kpi label="Closed" value={report.summary.n} /><Kpi label="Win rate" value={pc(report.summary.winRate)} /><Kpi label="Avg win / loss" value={`${fn(report.summary.avgWin, 0)} / ${fn(report.summary.avgLoss, 0)}`} /><Kpi label="Profit factor" value={report.summary.profitFactor?.toFixed(2) ?? "—"} /><Kpi label="Expectancy (net)" value={fn(report.summary.expectancy, 0)} /></div>
+            {report.findings.map((f) => <div key={f.title} className="small" style={{ marginBottom: 4 }}><Badge kind={f.severity === "high" ? "r" : f.severity === "medium" ? "a" : ""}>{f.severity}</Badge> <b>{f.title}.</b> {f.detail}</div>)}
+            <div className="grid g2" style={{ marginTop: 8 }}>
+              <DataTable compact rows={report.byRegime.map((g) => ({ ...g, id: g.key }))} exportName="coach-regimes" columns={[{ key: "k", label: "Vol regime at entry", value: (g) => g.key }, { key: "n", label: "Trades", num: true, value: (g) => g.n }, { key: "w", label: "Won", num: true, value: (g) => g.winRate, render: (g) => pc(g.winRate) }, { key: "a", label: "Avg P&L", num: true, value: (g) => g.avg, render: (g) => fn(g.avg, 0) }]} />
+              <DataTable compact rows={report.byTag.map((g) => ({ ...g, id: g.key }))} exportName="coach-strategies" columns={[{ key: "k", label: "Strategy", value: (g) => g.key }, { key: "n", label: "Trades", num: true, value: (g) => g.n }, { key: "w", label: "Won", num: true, value: (g) => g.winRate, render: (g) => pc(g.winRate) }, { key: "a", label: "Avg P&L", num: true, value: (g) => g.avg, render: (g) => fn(g.avg, 0) }]} />
+            </div>
+            <p className="legend-note">{report.note}</p>
+          </>}
       </div>
+      <div className="card">
+        <DataTable rows={items} exportName="trade-journal" columns={[{ key: "a", label: "Entry", value: (x) => x.at }, { key: "x", label: "Exit", value: (x) => x.exitAt || "" }, { key: "p", label: "Position", value: (x) => x.position }, { key: "tg", label: "Tag", value: (x) => x.tag }, { key: "lt", label: "Lots", num: true, value: (x) => x.lots },
+          { key: "t", label: "Thesis", value: (x) => x.thesis }, { key: "snap", label: "At entry", value: (x) => (x.snapshot ? `IV pct ${x.snapshot.ivPct != null ? Math.round(x.snapshot.ivPct * 100) : "—"} · ${x.snapshot.volRegime || "—"} · ${x.snapshot.buildup || "—"}` : "") },
+          { key: "adj", label: "Adjustments", num: true, value: (x) => (x.adjustments || []).length, render: (x) => <a style={{ cursor: "pointer" }} onClick={() => { const t = prompt("Describe the adjustment (roll, add wing, partial close…)"); if (t) upd(x.id, { adjustments: [...(x.adjustments || []), { at: new Date().toISOString().slice(0, 10), text: t }] }); }}>{(x.adjustments || []).length} +</a> },
+          { key: "f", label: "Fees", num: true, value: (x) => x.fees, render: (x) => fn(x.fees, 0) },
+          { key: "pnl", label: "P&L", num: true, value: (x) => x.pnl, render: (x) => (x.pnl == null ? <a style={{ cursor: "pointer" }} onClick={() => { const v = prompt("Closed P&L ₹"); if (v != null && v !== "") upd(x.id, { pnl: +v, exitAt: x.exitAt || new Date().toISOString().slice(0, 10) }); }}>close…</a> : <span className={x.pnl >= 0 ? "pos" : "neg"}>{fn(x.pnl, 0)}</span>) },
+          { key: "rev", label: "Review", value: (x) => postTradeReview(x), render: (x) => <a style={{ cursor: "pointer" }} onClick={() => setEdit(edit === x.id ? null : x.id)}>{edit === x.id ? "hide" : "review"}</a> },
+          { key: "d", label: "", export: false, value: () => "", render: (x) => <a style={{ cursor: "pointer" }} onClick={() => confirm("Delete this entry?") && setItems(items.filter((y) => y.id !== x.id))}>delete</a> }]} />
+        {edit && (() => { const x = items.find((y) => y.id === edit); return x ? <div className="note small" style={{ marginTop: 8 }}><b>Post-trade review.</b> {postTradeReview(x)}{x.lesson ? ` Your lesson: “${x.lesson}”.` : ""}{(x.adjustments || []).length ? ` Adjustments: ${x.adjustments.map((a) => `${a.at} ${a.text}`).join("; ")}.` : ""}</div> : null; })()}
+      </div>
+    </div>
+  );
+}
+
+function EvidenceLedger({ x }) {
+  const e = x.evidence;
+  return (
+    <div className="card tight" style={{ marginTop: 8 }}>
+      <div className="h3">{x.template}: evidence ledger<Tag k="est" /></div>
+      <div className="grid g2">
+        <div><b className="small">Supporting</b>{e.supporting.map((r) => <div key={r} className="small pos">+ {r}</div>)}</div>
+        <div><b className="small">Counter-evidence</b>{e.counter.length ? e.counter.map((r) => <div key={r} className="small neg">− {r}</div>) : <div className="small muted">none found</div>}</div>
+      </div>
+      <div className="small" style={{ marginTop: 6 }}><b>Confidence</b> {pc(e.confidence)}{e.sample ? ` · historical sample ${e.sample.n} moves of ${e.sample.sessions} sessions, ${pc(e.sample.hitRate)} would have finished in profit` : " · no historical sample yet"}</div>
+      <div className="small" style={{ marginTop: 6 }}><b>Invalidated if</b>{e.invalidation.map((t) => <div key={t}>• {t}</div>)}</div>
+      <p className="legend-note">{e.note}</p>
+    </div>
+  );
+}
+
+function MonteCarlo({ chain, und }) {
+  const [legs] = useDraft(chain);
+  const [positions] = usePersistent("deriv.positions", []);
+  const [pid, setPid] = useState("");
+  const [tpl, setTpl] = useState("Iron Condor");
+  const [o, setO] = useState({ ...MC_DEFAULTS, days: Math.min(chain.expiries[0]?.dte || 7, 30) });
+  const [res, setRes] = useState(null);
+  const pos = positions.find((p) => p.id === pid && p.und === und);
+  const useLegs = pos ? pos.legs : tpl ? legsFromTemplate(TEMPLATES.find((t) => t.name === tpl), chain) : legs;
+  const run = () => {
+    const t0 = performance.now();
+    const r = simulateStrategy(useLegs, chain, o);
+    setRes(r);
+    logAi("monte_carlo", "monteCarlo", { params: o, features: { und, session: chain.date, spot: chain.spot, legs: useLegs }, output: { mean: r.mean, p5: r.p5, p95: r.p95, var95: r.var95, es95: r.es95, probProfit: r.probProfit }, tookMs: Math.round(performance.now() - t0) });
+  };
+  const num = (k, label, step = "any", scale = 1) => <label className="small muted">{label} <input type="number" step={step} value={+(o[k] * scale).toFixed(4)} onChange={(e) => setO({ ...o, [k]: (+e.target.value || 0) / scale })} style={{ width: 70 }} /></label>;
+  return (
+    <div className="stack">
+      <div className="card stack">
+        <div className="row wrap" style={{ gap: 10 }}>
+          <Select label="Saved position" value={pid} onChange={setPid} options={positions.filter((p) => p.und === und).map((p) => ({ value: p.id, label: p.name }))} allowEmpty="(use a template)" />
+          {!pos && <label className="lbl-ctl">Template<select value={tpl} onChange={(e) => setTpl(e.target.value)}>{TEMPLATE_GROUPS.map((g) => <optgroup key={g} label={g}>{TEMPLATES.filter((t) => t.group === g).map((t) => <option key={t.name}>{t.name}</option>)}</optgroup>)}</select></label>}
+          <button className="btn sm primary" onClick={run}>Simulate</button>
+        </div>
+        <div className="row wrap" style={{ gap: 10 }}>
+          {num("days", "Horizon (days)", 1)}{num("sims", "Paths", 500)}{num("volOfVol", "Vol of vol")}{num("rho", "Spot/vol corr.", 0.1)}{num("kappa", "Mean reversion")}
+          {num("jumpPerYear", "Jumps / year")}{num("jumpMean", "Mean jump %", 0.5, 100)}{num("jumpSd", "Jump sd %", 0.5, 100)}{num("seed", "Seed", 1)}
+        </div>
+        <div className="small muted">{useLegs.map(legLabel).join(" · ")}</div>
+      </div>
+      {res && <div className="card">
+        <div className="kpis">
+          <Kpi label="Mean P&L" value={fn(res.mean, 0)} cls={res.mean >= 0 ? "pos" : "neg"} /><Kpi label="Median" value={fn(res.median, 0)} />
+          <Kpi label="5th / 95th pct" value={`${fn(res.p5, 0)} / ${fn(res.p95, 0)}`} /><Kpi label="VaR 95%" value={fn(res.var95, 0)} /><Kpi label="ES 95%" value={fn(res.es95, 0)} />
+          <Kpi label="P(profit)" value={pc(res.probProfit)} /><Kpi label="Worst path" value={fn(res.worst, 0)} cls="neg" />
+          <Kpi label="Spot 5-95%" value={`${fn(res.spotP5, 0)} – ${fn(res.spotP95, 0)}`} /><Kpi label="Median vol at horizon" value={pc(res.volMedian, 1)} />
+        </div>
+        <XYChart height={240} series={[{ name: "paths", type: "bar", color: "#2563eb", points: res.hist.map((h) => ({ x: h.x, y: h.n })) }]} markers={[{ x: 0, label: "0", color: "var(--text)" }, { x: res.p5, label: "5%", color: "#dc2626" }]} xLabel={`P&L at T+${res.horizonDays}`} />
+        <p className="legend-note">{res.assumptions}<Tag k="est" /></p>
+      </div>}
     </div>
   );
 }

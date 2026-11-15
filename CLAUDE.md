@@ -70,3 +70,24 @@ Local end-to-end check of the batch engine against a throw-away Postgres:
   against finite differences). Fractions everywhere; pages format with `fp` (signed) / `pc` (unsigned).
 - Cross-asset series (`tas_xasset`) are built by `cli/xassetJob.mjs`, run by the server when
   older than 20 h. Bond funds come from FMP into `tas_xasset_bars` because the heatmap has none.
+
+## Risk, alerts, API, audit and ops (added 2026-11-16)
+
+- **Risk maths is engine-only**: `engine/deriv/risk.js` (beta-weighting, Taylor attribution, stress, VaR/ES,
+  hedges, sizing, limits, margin monitor), `montecarlo.js` (seeded Merton + Heston-type), `coach.js`,
+  `engine/validation.js` (walk-forward, sensitivity, Brier / calibration, PSI). Tests in `tests/risk.test.mjs`.
+- **Derivatives alerts** (`engine/deriv/alerts.js`, user doc `deriv.alerts`) run in the same alert tick, fire on
+  an EDGE between the last two stored sessions, seed silently on first sight and use the same
+  `tas_alert_event` unique key. Priority decides channels (`PRIORITY_CHANNELS`); webhook URLs must be public https.
+- **Quote hygiene** lives in `enrichChain` (`quoteFlags`); IV/Greeks are suppressed on dead and below-intrinsic
+  contracts. Changing it changes stored summaries: bump `FO_VERSION` (now 3) so old sessions are reprocessed.
+- **Every calculation has a version** in `engine/versions.js`; bump it when results change.
+- **Audit tables are append-only** (`tas_audit`, `tas_ai_audit`, trigger refuses UPDATE/DELETE). Never add an
+  update/delete path. Browser-computed model outputs go through `POST /api/audit/ai` (`src/lib/audit.js`).
+- **Roles** on `tas_user.role` (admin | analyst | viewer | disabled); `ADMIN_EMAILS` are always admin; enforce
+  with `server/lib/rbac.mjs`. **API tokens** are hashed (`tas_api_token`), scoped, rate-limited per token; `/v1`
+  and the `/v1/stream` WebSocket are in `server/lib/publicApi.mjs`, documented in `docs/API.md`.
+- `engine/deriv/capabilities.js` is the exchange capability matrix and rule engines; pages should read it rather
+  than assume an exchange offers depth, tape or SPAN. Freeze limits there must be checked against circulars.
+- Chart patterns (`engine/patterns.js`) are computed in the batch engine for D and W (snapshot `chartPatterns`) and
+  appear as screen fields `chartPattern*`; the chart lab recomputes them for the bars on screen.

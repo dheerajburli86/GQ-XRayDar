@@ -27,6 +27,12 @@ import { runXasset } from "../cli/xassetJob.mjs";
 import { RULES, DEFAULT_PARAMS, normalizeParams, describeRule, evaluateRule } from "../engine/rules.js";
 import { ALERT_TEMPLATES } from "../engine/alerts.js";
 import { FIELD } from "../engine/fields.js";
+import { createAudit } from "./lib/audit.mjs";
+import { createTokens, API_SCOPES } from "./lib/tokens.mjs";
+import { createChannels, webhookAllowed } from "./lib/channels.mjs";
+import { registerPublicApi, attachStream, API_ENDPOINTS } from "./lib/publicApi.mjs";
+import { ROLES, need, can } from "./lib/rbac.mjs";
+import { MODEL_VERSIONS, ENGINE_VERSION } from "../engine/versions.js";
 
 const log = (m) => console.log(`${new Date().toISOString().slice(0, 19)} ${m}`);
 
@@ -40,7 +46,10 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
   const data = createData(pool, log);
   const analysis = createAnalysis(data, cfg);
   const userdata = createUserData(pool);
-  const alerts = createAlertEngine({ cfg, pool, data, telegram, push, log });
+  const audit = createAudit(pool, log);
+  const tokens = createTokens(pool);
+  const channels = createChannels(cfg, fetchImpl, log);
+  const alerts = createAlertEngine({ cfg, pool, data, telegram, push, channels, log });
   const digests = createDigests({ cfg, pool, data, analysis, telegram, log });
   const tasks = createTasks({ pool, analysis, userdata, telegram, log });
   const scorecard = createScorecard({ data });
@@ -48,6 +57,9 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
   const fo = deps.fo || createFo({ pool, log, fetchImpl, cfg: foConfig(cfg.env || process.env) });
   const limiter = new RateLimiter(cfg.rateLimitPerMin);
   const r = createRouter();
+  const started = Date.now();
+  const httpStats = new Map(); // route -> {n, errors, ms: [recent latencies]}
+  let stream = null;
 
   // Who is "me" for this request. Agent calls without a linked user get null.
   const needUser = async (req) => {
@@ -66,7 +78,7 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
   });
   r.get("/api/me", async (req) => {
     const u = await auth.web(req);
-    return { ...u, telegramBot: cfg.telegramBotUsername, pushKey: push.publicKey, agentConnected: agentProxy.connected() };
+    return { ...u, telegramBot: cfg.telegramBotUsername, pushKey: push.publicKey, agentConnected: agentProxy.connected(), emailChannel: channels.email.enabled, webhookSigned: !!cfg.webhookSecret };
   });
   r.get("/api/meta", async () => ({
     rules: Object.fromEntries(Object.entries(RULES).map(([k, v]) => [k, { label: describeRule(k, DEFAULT_PARAMS[k]), group: v.group, params: DEFAULT_PARAMS[k] || {} }])),
@@ -85,8 +97,10 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
   r.patch("/api/settings", async (req) => {
     const u = await auth.web(req);
     const b = await readJson(req);
-    const allowed = ["morningSummary", "weeklySummary", "alertsPaused"];
-    return userdata.updateSettings(u.id, Object.fromEntries(Object.entries(b).filter(([k]) => allowed.includes(k)).map(([k, v]) => [k, !!v])));
+    const allowed = ["morningSummary", "weeklySummary", "alertsPaused", "emailAlerts"];
+    const patch = Object.fromEntries(Object.entries(b).filter(([k]) => allowed.includes(k)).map(([k, v]) => [k, !!v]));
+    if ("webhookUrl" in b) { const w = String(b.webhookUrl || "").trim(); if (w && !webhookAllowed(w)) throw new HttpError(400, "webhook URL must be a public https address"); patch.webhookUrl = w || null; }
+    return userdata.updateSettings(u.id, patch);
   });
 
   // ------------------------------------------------------------- telegram link
@@ -174,7 +188,8 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
   r.post("/api/alerts/pause", async (req) => { const u = await needUser(req); const b = await readJson(req); return userdata.updateSettings(u.id, { alertsPaused: b.paused !== false }); });
   r.get("/api/alerts/events", async (req, _, url) => {
     const u = await needUser(req);
-    const { rows } = await pool.query(`select id, rule_id, instrument_id, bar_key, fired_at, payload, delivered from tas_alert_event where user_id = $1 and instrument_id <> '__seed__' and not (delivered ? 'seeded') order by fired_at desc limit $2`, [u.id, Math.min(+q(url, "limit", 200) || 200, 500)]);
+    const search = q(url, "q") ? `%${String(q(url, "q")).slice(0, 80)}%` : null;
+    const { rows } = await pool.query(`select id, rule_id, instrument_id, bar_key, fired_at, payload, delivered from tas_alert_event where user_id = $1 and instrument_id <> '__seed__' and not (delivered ? 'seeded') and ($3::text is null or payload->>'text' ilike $3 or instrument_id ilike $3) order by fired_at desc limit $2`, [u.id, Math.min(+q(url, "limit", 200) || 200, 1000), search]);
     const st = await data.get();
     return rows.map((e) => ({ ...e, symbol: st.secById.get(e.instrument_id)?.symbol || e.instrument_id }));
   });
@@ -231,6 +246,7 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
   r.post("/api/tasks", async (req) => {
     const a = await auth.any(req);
     if (!a.user) throw new HttpError(403, "link Telegram to the app first");
+    need(a.user, "tasks");
     const b = await readJson(req);
     try { return await tasks.create(a.user.id, { ...b, source: a.agent ? "telegram" : "web" }); }
     catch (e) { throw new HttpError(e.status || 400, e.message); }
@@ -285,7 +301,95 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
     const u = await auth.web(req);
     const b = await readJson(req, 200_000);
     if (!b.message) throw new HttpError(400, "message required");
-    return agentProxy.chat({ message: String(b.message).slice(0, 4000), history: b.history, context: b.context, user: u });
+    const t0 = Date.now();
+    const out = await agentProxy.chat({ message: String(b.message).slice(0, 4000), history: b.history, context: b.context, user: u });
+    audit.ai({ userId: u.id, kind: "agent_chat", source: out.source, modelKey: out.source === "built-in" ? "assistant" : null, modelVersion: out.source === "gq-agent" ? "gq-agent (remote)" : null, params: { context: b.context || null }, features: { message: String(b.message).slice(0, 4000) }, output: out.answer ? { answer: String(out.answer).slice(0, 8000) } : { blocks: out.blocks }, tookMs: Date.now() - t0 });
+    return out;
+  });
+
+  // ------------------------------------------------------------- audit: AI / model outputs computed in the browser
+  r.post("/api/audit/ai", async (req) => {
+    const u = await auth.web(req);
+    const b = await readJson(req, 300_000);
+    const kinds = ["recommender", "monte_carlo", "coach", "assistant", "brief", "risk", "validation"];
+    if (!kinds.includes(b.kind)) throw new HttpError(400, `kind must be one of ${kinds.join(", ")}`);
+    await audit.ai({ userId: u.id, kind: b.kind, source: "engine (browser)", modelKey: b.modelKey, params: b.params, features: b.features, output: b.output, tookMs: b.tookMs });
+    return { ok: true };
+  });
+  r.post("/api/audit/event", async (req) => {
+    const u = await auth.web(req);
+    const b = await readJson(req, 50_000);
+    if (!["risk_override", "limit_breach"].includes(b.action)) throw new HttpError(400, "action must be risk_override or limit_breach");
+    await audit.event({ userId: u.id, actor: u.email, category: "risk", action: b.action, detail: b.detail || {} });
+    return { ok: true };
+  });
+  r.get("/api/audit", async (req, _, url) => {
+    const u = await auth.web(req);
+    const mine = !can(u, "admin") || q(url, "mine") === "1";
+    return audit.list({ category: q(url, "category"), userId: mine ? u.id : q(url, "user"), limit: +q(url, "limit", 200), before: q(url, "before") });
+  });
+  r.get("/api/audit/ai", async (req, _, url) => {
+    const u = await auth.web(req);
+    const mine = !can(u, "admin") || q(url, "mine") === "1";
+    return audit.listAi({ kind: q(url, "kind"), userId: mine ? u.id : null, limit: +q(url, "limit", 200) });
+  });
+
+  // ------------------------------------------------------------- API tokens (quant REST / WebSocket API)
+  r.get("/api/tokens", async (req) => { const u = need(await auth.web(req), "tokens"); return { tokens: await tokens.list(u.id), scopes: API_SCOPES, endpoints: API_ENDPOINTS.map(([method, path, scope, desc]) => ({ method, path, scope, desc })) }; });
+  r.post("/api/tokens", async (req) => {
+    const u = need(await auth.web(req), "tokens");
+    const t = await tokens.create(u, await readJson(req));
+    audit.event({ userId: u.id, actor: u.email, category: "token", action: "create", detail: { id: t.id, prefix: t.prefix, scopes: t.scopes } });
+    return t;
+  });
+  r.delete("/api/tokens/:id", async (req, { id }) => {
+    const u = await auth.web(req);
+    if (!(await tokens.revoke(u.id, id))) throw new HttpError(404, "no such active token");
+    audit.event({ userId: u.id, actor: u.email, category: "token", action: "revoke", detail: { id } });
+    return { ok: true };
+  });
+
+  // ------------------------------------------------------------- admin: roles and operations
+  r.get("/api/admin/users", async (req) => { need(await auth.web(req), "admin"); const { rows } = await pool.query(`select id, email, name, role, created_at, last_seen_at, telegram_chat_id is not null as telegram from tas_user order by email`); return rows.map((x) => ({ ...x, role: cfg.adminEmails.includes(String(x.email).toLowerCase()) ? "admin" : x.role })); });
+  r.patch("/api/admin/users/:id", async (req, { id }) => {
+    const u = need(await auth.web(req), "admin");
+    const b = await readJson(req);
+    if (!ROLES.includes(b.role)) throw new HttpError(400, `role must be one of ${ROLES.join(", ")}`);
+    if (id === u.id && b.role !== "admin") throw new HttpError(400, "you cannot remove your own admin role");
+    const { rows } = await pool.query(`update tas_user set role = $2 where id = $1 returning id, email, role`, [id, b.role]);
+    if (!rows[0]) throw new HttpError(404, "no such user");
+    audit.event({ userId: u.id, actor: u.email, category: "admin", action: "set_role", detail: { target: rows[0].email, role: b.role } });
+    return rows[0];
+  });
+  r.get("/api/admin/ops", async (req) => {
+    need(await auth.web(req), "admin");
+    const one = async (sql, args = []) => { try { return (await pool.query(sql, args)).rows; } catch (e) { return [{ error: e.message }]; } };
+    const [foDays, foLatest, missingLot, calc, xasset, alertDelay, alertCounts, taskFails, digests, pushSubs] = await Promise.all([
+      one(`select status, count(*)::int n, max(date) latest from tas_fo_day group by status`),
+      one(`select max(date) latest, count(distinct und)::int unds from tas_fo_stats where date = (select max(date) from tas_fo_stats)`),
+      one(`select und from tas_fo_stats where date = (select max(date) from tas_fo_stats) and coalesce((s->>'lot')::int, 0) = 0`),
+      one(`select run_id, started, finished, status from tas_calc_run order by started desc limit 3`),
+      one(`select max(updated_at) t, count(*)::int n from tas_xasset`),
+      one(`select percentile_cont(0.5) within group (order by extract(epoch from ((delivered->>'telegram')::timestamptz - fired_at))) p50, percentile_cont(0.95) within group (order by extract(epoch from ((delivered->>'telegram')::timestamptz - fired_at))) p95, count(*)::int n from tas_alert_event where fired_at > now() - interval '7 days' and delivered->>'telegram' ~ '^[0-9]{4}-'`),
+      one(`select count(*) filter (where not (delivered ? 'seeded'))::int fired, count(*) filter (where delivered->>'telegram' like 'error%')::int telegram_errors, count(*) filter (where delivered->>'push' like 'error%')::int push_errors, count(*) filter (where delivered->>'webhook' like 'error%')::int webhook_errors from tas_alert_event where fired_at > now() - interval '7 days'`),
+      one(`select count(*)::int n from tas_task where status = 'failed' and updated_at > now() - interval '1 day'`),
+      one(`select kind, count(*)::int n, max(sent_at) last from tas_digest_log where sent_at > now() - interval '7 days' group by kind`),
+      one(`select count(*)::int n from tas_push_sub`),
+    ]);
+    const routes = [...httpStats.entries()].map(([k, v]) => { const s = [...v.ms].sort((a, b) => a - b); return { route: k, n: v.n, errors: v.errors, p50: s[Math.floor(s.length * 0.5)] ?? null, p95: s[Math.floor(s.length * 0.95)] ?? null }; }).sort((a, b) => b.n - a.n).slice(0, 40);
+    const fs = fo.status();
+    const latest = foLatest[0]?.latest ? new Date(foLatest[0].latest) : null;
+    return {
+      at: new Date().toISOString(), uptimeSec: Math.round((Date.now() - started) / 1000), memoryMb: Math.round(process.memoryUsage().rss / 1048576), engineVersion: ENGINE_VERSION, models: MODEL_VERSIONS,
+      feeds: {
+        fo: { enabled: fs.enabled, running: fs.running, last: fs.last, days: foDays, latestSession: foLatest[0]?.latest || null, underlyings: foLatest[0]?.unds ?? null, sessionAgeDays: latest ? Math.round((Date.now() - latest.getTime()) / 86400000) : null, missingContractMaster: missingLot.map((x) => x.und).filter(Boolean) },
+        engine: calc, xasset: xasset[0] || null, dataAsOf: (await data.get().catch(() => null))?.info?.asOf || null,
+      },
+      alerts: { engine: alerts.stats(), last7d: alertCounts[0] || null, telegramDelaySec: alertDelay[0] || null, channels: { telegram: telegram.enabled, push: push.enabled, email: channels.email.enabled, webhookSigned: !!cfg.webhookSecret }, pushDevices: pushSubs[0]?.n ?? null },
+      tasks: { failedLast24h: taskFails[0]?.n ?? null }, digests,
+      api: { tokens: await tokens.usage().catch(() => []), streamClients: stream ? stream.clients() : 0 },
+      http: routes,
+    };
   });
 
   // ------------------------------------------------------------- derivatives (F&O end-of-day collector)
@@ -293,8 +397,10 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
   r.post("/api/fo/run", async (req) => {
     const a = await auth.any(req);
     if (!a.agent && !a.user?.isAdmin) throw new HttpError(403, "admins only");
-    return fo.tick();
+    return foTick();
   });
+
+  registerPublicApi({ r, pool, tokens, audit, analysis });
 
   // ------------------------------------------------------------- HTTP plumbing
   const server = http.createServer(async (req, res) => {
@@ -305,14 +411,25 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
     if (!m) return send(res, 404, { error: "not found" });
     try {
       if (url.pathname !== "/health") limiter.check(req.headers["x-telegram-user"] || req.headers.authorization || req.socket.remoteAddress);
-      const out = await m.handler(req, m.params, url);
-      send(res, 200, out ?? { ok: true });
+      const t0 = Date.now();
+      const key = `${req.method} ${url.pathname.replace(/\/(\d+|[0-9a-f-]{36}|[A-Z0-9&_-]{2,30})(?=\/|$)/g, "/:x")}`;
+      const st = httpStats.get(key) || { n: 0, errors: 0, ms: [] };
+      httpStats.set(key, st);
+      try {
+        const out = await m.handler(req, m.params, url);
+        st.n++; st.ms.push(Date.now() - t0); if (st.ms.length > 500) st.ms.shift();
+        send(res, 200, out ?? { ok: true });
+      } catch (e) { st.n++; st.errors++; throw e; }
     } catch (e) {
       const status = e.status || 500;
       if (status >= 500) log(`[http] ${req.method} ${url.pathname}: ${e.stack || e.message}`);
       send(res, status, { error: status >= 500 && !e.status ? "internal error" : e.message });
     }
   });
+
+  stream = attachStream({ server, tokens, audit, log });
+  alerts.hooks.onFired = (user, fired) => stream.broadcast("alerts", { at: new Date().toISOString(), alerts: fired.map((f) => ({ symbol: f.symbol, text: f.text, value: f.value, asOf: f.asOf, kind: f.kind || "stock" })) }, { userId: user.id });
+  const foTick = async () => { const res = await fo.tick(); const ok = (res?.done || []).filter((x) => x.status === "ok"); if (ok.length) stream.broadcast("fo", { sessions: ok.map((x) => x.date), underlyings: ok.at(-1).underlyings }); return res; };
 
   // ------------------------------------------------------------- background jobs
   const timers = [];
@@ -333,15 +450,15 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
     setTimeout(guard("xasset", xasset), 90_000);
     const foCfg = fo.status().cfg;
     if (foCfg.enabled) {
-      timers.push(setInterval(guard("fo", () => fo.tick()), foCfg.pollMinutes * 60_000));
-      setTimeout(guard("fo", () => fo.tick()), 45_000);
+      timers.push(setInterval(guard("fo", foTick), foCfg.pollMinutes * 60_000));
+      setTimeout(guard("fo", foTick), 45_000);
       log(`[jobs] F&O collector every ${foCfg.pollMinutes} min (backfill ${foCfg.backfill} sessions, chains kept ${foCfg.keepChains})`);
     }
     log(`[jobs] alerts every ${cfg.alertPollMinutes} min; tasks + digests every minute (morning ${cfg.morningSummaryTime} IST weekdays, weekly ${cfg.weeklySummaryTime} IST)`);
   }
-  async function close() { timers.forEach(clearInterval); await new Promise((res) => server.close(res)); if (!deps.pool) await pool.end(); }
+  async function close() { timers.forEach(clearInterval); stream?.close(); await new Promise((res) => server.close(res)); if (!deps.pool) await pool.end(); }
 
-  return { server, pool, startJobs, close, alerts, tasks, digests, data, analysis, fo };
+  return { server, pool, startJobs, close, alerts, tasks, digests, data, analysis, fo, audit, tokens };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

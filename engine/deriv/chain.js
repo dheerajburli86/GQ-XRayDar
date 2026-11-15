@@ -52,9 +52,12 @@ export function enrichChain(day, opts = {}) {
       const row = byK.get(c.strike) || { strike: c.strike, ce: null, pe: null };
       const px = premiumOf(c);
       const inp = { cp: c.cp, S: F, F, K: c.strike, T, r: o.riskFree, q: 0 };
-      const iv = px >= o.minPremium ? impliedVol("BLACK76", inp, px) : null;
+      const q = quoteFlags(c, px, F, T, o);
+      const suppress = q.includes("dead") || q.includes("below_intrinsic");
+      const iv = !suppress && px >= o.minPremium ? impliedVol("BLACK76", inp, px) : null;
+      if (!suppress && px >= o.minPremium && !iv) q.push("iv_fail");
       const g = iv ? gbs(c.cp, F, c.strike, T, o.riskFree, 0, iv) : null;
-      const leg = { ...c, px, iv, g, chgPx: px != null && c.prevClose > 0 ? px - c.prevClose : null, intrinsic: Math.max(0, c.cp * (day.spot - c.strike)) };
+      const leg = { ...c, px, iv, g, q, chgPx: px != null && c.prevClose > 0 ? px - c.prevClose : null, intrinsic: Math.max(0, c.cp * (day.spot - c.strike)) };
       if (c.cp > 0) row.ce = leg; else row.pe = leg;
       byK.set(c.strike, row);
     }
@@ -63,6 +66,39 @@ export function enrichChain(day, opts = {}) {
   });
   return { date: day.date, underlying: day.underlying, kind: day.kind, spot: day.spot, lot: day.lot, futures: day.futures || [], expiries,
     assumptions: { model: "Black-76 on the same-expiry forward", riskFree: o.riskFree, time: "calendar days / 365 to the 15:30 IST expiry", premium: "last traded price if the contract traded, else the exchange settlement price", data: "exchange end-of-day bhavcopy" } };
+}
+
+/**
+ * Quote hygiene for an end-of-day contract. Flags (no bid / ask exists in the
+ * end-of-day file, so crossed markets cannot occur here; they need a live feed):
+ *   no_trade         did not trade; the price is the exchange settlement price
+ *   dead             no open interest and no volume: no usable price
+ *   stale            did not trade and the price equals the previous close
+ *   min_tick         premium at or near the minimum tick: IV carries little information
+ *   below_intrinsic  premium below discounted forward intrinsic value: invalid for IV
+ *   locked           traded but high = low = close (price-band lock or a single print)
+ *   iv_fail          the IV solver found no volatility for the price
+ * IV and Greeks are suppressed for dead and below_intrinsic contracts.
+ */
+export const QUOTE_FLAGS = { no_trade: "No trade today (settlement price)", dead: "No OI and no volume", stale: "Unchanged, untraded price", min_tick: "Premium at the minimum tick", below_intrinsic: "Below intrinsic value (IV suppressed)", locked: "Single price all day (band lock or one print)", iv_fail: "No IV fits the price" };
+export function quoteFlags(c, px, F, T, o = DERIV_DEFAULTS) {
+  const q = [];
+  if (!(c.vol > 0)) q.push("no_trade");
+  if (!(c.vol > 0) && !(c.oi > 0)) q.push("dead");
+  if (!(c.vol > 0) && c.prevClose > 0 && px === c.prevClose) q.push("stale");
+  if (px != null && px <= 2 * (o.minPremium || 0.05)) q.push("min_tick");
+  const intr = Math.max(0, c.cp * (F - c.strike)) * Math.exp(-(o.riskFree || 0) * T);
+  if (px != null && intr > 0 && px < intr - Math.max(0.05, 0.002 * intr)) q.push("below_intrinsic");
+  if (c.vol > 0 && c.high > 0 && c.high === c.low && c.low === c.close) q.push("locked");
+  return q;
+}
+
+/** Counts of each quote flag over an enriched chain. */
+export function chainQuality(chain) {
+  const counts = Object.fromEntries(Object.keys(QUOTE_FLAGS).map((k) => [k, 0]));
+  let n = 0;
+  for (const ex of chain.expiries) for (const r of ex.rows) for (const leg of [r.ce, r.pe]) { if (!leg) continue; n++; for (const f of leg.q || []) counts[f]++; }
+  return { contracts: n, counts };
 }
 
 /** ATM strike: nearest to spot, or to the synthetic / futures forward. */

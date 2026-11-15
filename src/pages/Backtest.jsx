@@ -13,6 +13,8 @@ import { EVENT_LABEL } from "../../engine/signals.js";
 import { usePersistent } from "../lib/storage.js";
 import { navigate } from "../lib/router.js";
 import { RuleEditor, ReportCard } from "../components/RuleCard.jsx";
+import { walkForward, sensitivity } from "../../engine/validation.js";
+import { DEFAULT_PARAMS, RULES, describeRule } from "../../engine/rules.js";
 
 const TYPES = Object.keys(EVENT_LABEL);
 
@@ -21,10 +23,11 @@ export default function Backtest({ route }) {
   return (
     <div className="stack">
       <PageHead title="Backtest, pattern library & inflection database" sub="Bias controls: signals use data up to the signal bar only; entry is the next session's close; delisted stocks stay in the universe; split adjustments are applied before any calculation." />
-      <Tabs value={tab} onChange={setTab} tabs={[{ value: "idea", label: "Test an idea" }, { value: "summary", label: "Signal scorecard" }, { value: "custom", label: "Custom backtest" }, { value: "library", label: "Pattern library" }, { value: "log", label: "Inflection database" }]} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ value: "idea", label: "Test an idea" }, { value: "summary", label: "Signal scorecard" }, { value: "custom", label: "Custom backtest" }, { value: "wf", label: "Walk-forward & sensitivity" }, { value: "library", label: "Pattern library" }, { value: "log", label: "Inflection database" }]} />
       {tab === "idea" && <Idea />}
       {tab === "summary" && <Summary />}
       {tab === "custom" && <Custom />}
+      {tab === "wf" && <WalkForward />}
       {tab === "library" && <Library route={route} />}
       {tab === "log" && <Log route={route} />}
     </div>
@@ -167,6 +170,77 @@ function Log({ route }) {
       {loading ? <Loading /> : <DataTable exportName={`inflections_${sec?.symbol}`} rows={rows} rowKey={(r) => r.rid} initialSort={{ key: "date", dir: "desc" }}
         columns={[{ key: "date", label: "Date", value: (e) => e.date }, { key: "type", label: "Inflection", value: (e) => EVENT_LABEL[e.type] || e.type, render: (e) => <Badge kind={/up|bull|high|break|golden|exit/.test(e.type) ? "g" : /down|bear/.test(e.type) ? "r" : ""}>{EVENT_LABEL[e.type] || e.type}</Badge> }, { key: "tf", label: "TF", value: (e) => e.tf },
           ...HORIZON_KEYS.map((h) => ({ key: h, label: `${h} after`, num: true, value: (e) => e.fwd[h], render: (e) => <Pct v={e.fwd[h]} /> })), { key: "x", label: "Excess 3M", num: true, value: (e) => e.excess["3M"], render: (e) => <Pct v={e.excess["3M"]} /> }]} />}
+    </div>
+  );
+}
+
+const defaultValues = (k, v) => (typeof v !== "number" ? [v] : k === "level" ? [v - 10, v - 5, v, v + 5, v + 10] : [Math.max(1, Math.round(v * 0.5)), Math.round(v * 0.75), v, Math.round(v * 1.5), Math.round(v * 2)]);
+
+function WalkForward() {
+  const d = useData();
+  const [wls] = usePersistent("watchlists", {});
+  const [rule, setRule] = useState({ rule: "rsi_cross_below", params: { level: 30 }, tf: "D" });
+  const [on, setOn] = useState("top");
+  const [inst, setInst] = useState(null);
+  const [wl, setWl] = useState(null);
+  const [folds, setFolds] = useState(4);
+  const [hi, setHi] = useState(1);
+  const keys = Object.keys(DEFAULT_PARAMS[rule.rule] || {}).filter((k) => typeof (DEFAULT_PARAMS[rule.rule] || {})[k] === "number").slice(0, 2);
+  const [vals, setVals] = useState({});
+  const valuesOf = (k) => (vals[`${rule.rule}.${k}`] ?? defaultValues(k, (rule.params?.[k] ?? DEFAULT_PARAMS[rule.rule][k])).join(", ")).split(/[\s,]+/).map(Number).filter(Number.isFinite);
+  const [busy, setBusy] = useState(null);
+  const [res, setRes] = useState(null);
+  const run = async () => {
+    const ids = on === "stock" ? (inst ? [inst.id] : []) : on === "wl" ? wls[wl]?.ids || [] : [...d.rows].filter((r) => (r.sec.assetClass || "Stock") === "Stock").sort((a, b) => (b.sec.capUsdNow || 0) - (a.sec.capUsdNow || 0)).slice(0, 60).map((r) => r.id);
+    const bars = new Map();
+    for (let i = 0; i < ids.length; i++) { setBusy(`Loading prices ${i + 1} / ${ids.length}…`); try { const b = await d.api.bars(ids[i]); if (b) bars.set(ids[i], b); } catch { /* skip */ } }
+    setBusy("Testing every parameter on every fold…");
+    await new Promise((r) => setTimeout(r, 0));
+    const spec = Object.fromEntries(keys.map((k) => [k, valuesOf(k)]));
+    const cands = keys.length ? Object.entries(spec).reduce((acc, [k, vs]) => acc.flatMap((o) => vs.map((v) => ({ ...o, [k]: v }))), [{ ...rule.params }]) : [rule.params];
+    const wf = walkForward(bars, { rule: rule.rule, tf: rule.tf, candidates: cands, folds, horizonIndex: hi, minTrades: 5 });
+    const sens = keys.length ? sensitivity(bars, { rule: rule.rule, tf: rule.tf, spec, horizonIndex: hi }) : null;
+    setRes({ wf, sens, n: bars.size, keys });
+    setBusy(null);
+  };
+  const fmtP = (p) => keys.map((k) => `${k} ${p[k]}`).join(", ");
+  return (
+    <div className="stack">
+      <div className="card stack">
+        <div className="small">Out-of-sample check of a rule: in each period the parameter that worked best on <b>earlier</b> signals is chosen, then scored only on the next, unseen period. A big drop from in-sample to out-of-sample means the parameter was fitted to noise.</div>
+        <RuleEditor value={rule} onChange={setRule} />
+        <div className="row wrap" style={{ gap: 8 }}>
+          {keys.map((k) => <label key={k} className="small muted">{k} values <input value={vals[`${rule.rule}.${k}`] ?? valuesOf(k).join(", ")} onChange={(e) => setVals({ ...vals, [`${rule.rule}.${k}`]: e.target.value })} style={{ width: 180 }} /></label>)}
+          <label className="small muted">Folds <input type="number" min={2} max={8} value={folds} onChange={(e) => setFolds(Math.max(2, Math.min(8, +e.target.value || 4)))} style={{ width: 50 }} /></label>
+          <Seg value={hi} onChange={setHi} options={[0, 1, 2].map((i) => ({ value: i, label: ["short", "medium", "long"][i] + " horizon" }))} />
+        </div>
+        <div className="row">
+          <Seg value={on} options={[{ value: "top", label: "Largest 60 stocks" }, { value: "stock", label: "One stock" }, { value: "wl", label: "A watchlist" }]} onChange={setOn} />
+          {on === "stock" && <InstrumentPicker allowIndex={false} value={inst} onChange={setInst} />}
+          {on === "wl" && <Select value={wl} options={Object.entries(wls).map(([k, v]) => ({ value: k, label: v.name }))} onChange={setWl} allowEmpty="Pick" />}
+          <button className="btn sm primary" disabled={!!busy || !RULES[rule.rule]} onClick={run}>{busy ? "Working…" : "Run"}</button>
+        </div>
+        {busy && <div className="small muted">{busy}</div>}
+      </div>
+      {res && !res.wf.ok && <div className="note warn">{res.wf.reason}</div>}
+      {res?.wf.ok && <div className="card">
+        <div className="row"><Badge>{describeRule(rule.rule, rule.params)}</Badge><Badge>{res.n} instruments · horizon {res.wf.horizon}</Badge><Badge kind={res.wf.efficiency > 0.5 ? "g" : res.wf.efficiency > 0 ? "a" : "r"}>efficiency {res.wf.efficiency == null ? (res.wf.noInSampleEdge ? "n/a: no in-sample edge" : "—") : res.wf.efficiency.toFixed(2)}</Badge></div>
+        <DataTable compact rows={res.wf.folds.map((f) => ({ ...f, id: f.fold }))} exportName="walk-forward" columns={[
+          { key: "f", label: "Fold", num: true, value: (f) => f.fold }, { key: "is", label: "Chosen on data to", value: (f) => f.inSampleTo }, { key: "oos", label: "Tested on", value: (f) => `${f.outOfSample[0]} → ${f.outOfSample[1]}` },
+          { key: "p", label: "Chosen parameters", value: (f) => fmtP(f.chosen) }, { key: "ise", label: "In-sample edge", num: true, value: (f) => f.isEdge, render: (f) => <Pct v={f.isEdge} /> },
+          { key: "oose", label: "Out-of-sample edge", num: true, value: (f) => f.oosEdge, render: (f) => <Pct v={f.oosEdge} /> }, { key: "n", label: "OOS signals", num: true, value: (f) => f.oosN },
+          { key: "h", label: "OOS hit rate", num: true, value: (f) => f.oosHit, render: (f) => (f.oosHit == null ? "—" : `${Math.round(f.oosHit * 100)}%`) }, { key: "rk", label: "Rank of chosen OOS", value: (f) => (f.oosRankOfChosen ? `${f.oosRankOfChosen} of ${f.candidatesOos}` : "—") },
+        ]} />
+        <p className="legend-note">{res.wf.method} Edge = average move in the rule's expected direction after the signal.</p>
+      </div>}
+      {res?.sens && <div className="card">
+        <div className="h3">Parameter sensitivity ({res.sens.horizon})</div>
+        {res.keys.length === 2 ? (() => { const [a, b] = res.keys, A = res.sens.spec[a], B = res.sens.spec[b]; return (
+          <div className="tbl-wrap"><table className="tbl chain"><thead><tr><th>{a} ↓ · {b} →</th>{B.map((x) => <th key={x}>{x}</th>)}</tr></thead>
+            <tbody>{A.map((x) => <tr key={x}><td>{x}</td>{B.map((y) => { const c = res.sens.cells.find((z) => z.params[a] === x && z.params[b] === y); return <td key={y} className={`num ${c?.edge >= 0 ? "pos" : "neg"}`} title={`${c?.n || 0} signals`}>{c?.edge == null ? "—" : `${c.edge.toFixed(2)}%`}</td>; })}</tr>)}</tbody></table></div>); })()
+          : <DataTable compact rows={res.sens.cells.map((c, i) => ({ ...c, id: i }))} exportName="sensitivity" columns={[{ key: "p", label: "Parameters", value: (c) => fmtP(c.params) }, { key: "n", label: "Signals", num: true, value: (c) => c.n }, { key: "e", label: "Edge", num: true, value: (c) => c.edge, render: (c) => <Pct v={c.edge} /> }, { key: "h", label: "Hit rate", num: true, value: (c) => c.hitRate, render: (c) => (c.hitRate == null ? "—" : `${Math.round(c.hitRate * 100)}%`) }]} />}
+        <p className="legend-note">{res.sens.method}</p>
+      </div>}
     </div>
   );
 }

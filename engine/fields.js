@@ -6,6 +6,7 @@
 // snapshot, fundamental metrics, weight-watcher trend, GLOCOM (when connected)
 // and the AI setup score.
 
+import { PATTERN_INFO } from "./patterns.js";
 const g = (o, path) => path.split(".").reduce((x, k) => (x == null ? x : x[k]), o);
 
 export const FIELD_GROUPS = ["Identity", "Returns", "Price levels", "Trend & MMA", "Momentum", "Relative strength", "Volume & liquidity", "Patterns", "Fundamentals", "Weight Watcher", "Scores", "GLOCOM"];
@@ -70,6 +71,10 @@ for (const tf of ["D", "W", "M"]) {
     add(`candleBull${tf}`, `Bullish candle pattern (${T})`, "Patterns", "bool", (r) => r.snap?.tf?.[tf]?.candleBull);
     add(`candleBear${tf}`, `Bearish candle pattern (${T})`, "Patterns", "bool", (r) => r.snap?.tf?.[tf]?.candleBear);
     add(`candles${tf}`, `Candle patterns (${T})`, "Patterns", "text", (r) => (r.snap?.tf?.[tf]?.candles || []).join(", ") || null);
+    add(`chartPattern${tf}`, `Chart patterns (${T})`, "Patterns", "text", (r) => (r.snap?.tf?.[tf]?.chartPatterns || []).map((x) => `${PATTERN_INFO[x.k]?.label || x.k} (${x.s})`).join(", ") || null);
+    add(`chartPatternBull${tf}`, `Bullish chart pattern (${T})`, "Patterns", "bool", (r) => (r.snap?.tf?.[tf]?.chartPatterns || []).some((x) => x.d > 0 || (x.d === 0 && x.s === "broke up")));
+    add(`chartPatternBear${tf}`, `Bearish chart pattern (${T})`, "Patterns", "bool", (r) => (r.snap?.tf?.[tf]?.chartPatterns || []).some((x) => x.d < 0 || (x.d === 0 && x.s === "broke down")));
+    add(`chartPatternConfirmed${tf}`, `Chart pattern confirmed by a break (${T})`, "Patterns", "bool", (r) => (r.snap?.tf?.[tf]?.chartPatterns || []).some((x) => x.s !== "forming"));
   }
   add(`mma${tf}`, `MMA state (${T})`, "Trend & MMA", "cat", (r) => r.snap?.tf?.[tf]?.mma, { values: ["bull", "above", "mixed", "below", "bear"] });
   add(`mmaBull${tf}`, `MMA bullish alignment (${T})`, "Trend & MMA", "bool", (r) => r.snap?.tf?.[tf]?.mma === "bull");
