@@ -101,8 +101,11 @@ tas_calc_run order by started desc limit 1;` shows `ok`.
    Derivatives and cross-asset (optional, these are the defaults):
    `FO_ENABLED=true`, `FO_BACKFILL_SESSIONS=120`, `FO_CHAIN_KEEP_SESSIONS=60`,
    `FO_POLL_MINUTES=20`, `FO_READY_IST=19:30`; add `FMP_API_KEY` so the cross-asset
-   page gets bond funds (the heatmap carries none). The server downloads NSE's public
-   end-of-day F&O files itself; `/health` shows the last collection run.
+   page gets bond funds (the heatmap carries none). NSE's archive refuses cloud data-centre IPs, so
+   the server fetches the public end-of-day F&O files through the Supabase edge function
+   `nse-fo-fetch` (`supabase/functions/nse-fo-fetch`, deploy once with
+   `supabase functions deploy nse-fo-fetch`); it allows only those four file families.
+   `/health` shows the last collection run.
 
    Optional phone pop-ups: run `npx web-push generate-vapid-keys` once and add
    `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`. Optional timing:

@@ -24,6 +24,10 @@ export function foConfig(e = process.env) {
     maxPerTick: Math.max(1, +e.FO_MAX_PER_TICK || 12),
     pollMinutes: Math.max(5, +e.FO_POLL_MINUTES || 20),
     readyIst: e.FO_READY_IST || "19:30", // the day's files are normally out by then
+    // NSE's archive does not answer cloud data-centre IPs; the Supabase edge function
+    // nse-fo-fetch (supabase/functions) fetches the same public files from India.
+    proxyUrl: e.NSE_PROXY_URL || (e.SUPABASE_URL ? `${e.SUPABASE_URL.replace(/\/$/, "")}/functions/v1/nse-fo-fetch` : ""),
+    proxyKey: e.SUPABASE_ANON_KEY || "",
   };
 }
 
@@ -42,6 +46,18 @@ export function createFo({ pool, log = console.log, fetchImpl = fetch, cfg = foC
   }
 
   async function get(url) {
+    if (cfg.proxyUrl) {
+      const path = new URL(url).pathname;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        let r;
+        try { r = await fetchImpl(`${cfg.proxyUrl}?path=${encodeURIComponent(path)}`, { signal: AbortSignal.timeout(90_000), headers: cfg.proxyKey ? { Authorization: `Bearer ${cfg.proxyKey}`, apikey: cfg.proxyKey } : {} }); }
+        catch (e) { if (attempt === 1) throw new Error(`${path.split("/").pop()} via proxy: ${e.message} (${e.cause?.code || e.name})`); continue; }
+        if (r.status === 404) return null;
+        if (r.ok) return Buffer.from(await r.arrayBuffer());
+        if (attempt === 1) throw new Error(`${path.split("/").pop()} via proxy: HTTP ${r.status} ${(await r.text()).slice(0, 120)}`);
+      }
+      return null;
+    }
     for (let attempt = 0; attempt < 2; attempt++) {
       const ck = await nseCookie(attempt > 0);
       let r;
@@ -86,8 +102,15 @@ export function createFo({ pool, log = console.log, fetchImpl = fetch, cfg = foC
     files.bhav = { rows: parsed.rows, units: parsed.units };
     // Market-wide files are optional: a failure is recorded, never fatal.
     const market = { participants: null, ban: null, mwpl: null };
-    for (const [k, url, zipped, fn] of [["participants", u.participant, false, parseParticipantOi], ["ban", u.secban, false, parseSecBan], ["mwpl", u.combineoi, true, parseCombineOi]]) {
-      try { const t = text(await get(url), zipped); market[k] = t ? fn(t) : null; files[k] = t ? "ok" : "not published"; } catch (e) { files[k] = `error: ${e.message.slice(0, 300)}`; }
+    // The ban file is named for the trade date it applies to: the session's own, or the next weekday's.
+    let nextDay = addDays(date, 1); while (!weekday(nextDay)) nextDay = addDays(nextDay, 1);
+    const banUrls = [u.secban, nseUrls(nextDay).secban];
+    for (const [k, urls, zipped, fn] of [["participants", [u.participant], false, parseParticipantOi], ["ban", banUrls, false, parseSecBan], ["mwpl", [u.combineoi], true, parseCombineOi]]) {
+      try {
+        let t = null;
+        for (const url of urls) { t = text(await get(url), zipped); if (t) break; }
+        market[k] = t ? fn(t) : null; files[k] = t ? "ok" : "not published";
+      } catch (e) { files[k] = `error: ${e.message.slice(0, 300)}`; }
     }
     const client = await pool.connect();
     try {
