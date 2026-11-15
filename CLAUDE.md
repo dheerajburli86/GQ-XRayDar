@@ -14,7 +14,8 @@ NOT part of the heatmap dashboard and must not be wired into it.
   parser read the registry; adding a screenable value means adding a field there (and it
   automatically joins the flat screen row).
 - **GLOCOM / LOCOM follow the owner's rule sheet** in `engine/glocom.js` (do not alter thresholds without it).
-  A stock's GLOCOM is the heatmap's `glocom_latest` where present. **IMB is not defined: do not invent it** (#95).
+  A stock's GLOCOM is the heatmap's `glocom_latest` where present. **IMB / ETI characteristics come from the ETI
+  project only** (`tas_eti_characteristic`, see below): never compute, score or rank them here.
 - **Never label estimated data as observed.** Historical market caps (constant shares),
   carried FX and stale constituents are estimated / flagged; keep it that way.
 - The demo is synthetic and must keep its "DEMO DATA" banner.
@@ -103,3 +104,15 @@ Local end-to-end check of the batch engine against a throw-away Postgres:
 - Group rank 1 = best (band, then the heatmap's 50/30/20 score). History of the last `methodology.glocom.historySessions`
   sessions is stored in `tas_glocom_group` (`C:<country>|industry|sector`, `G|...` in USD); the page computes moves
   (`groupMoves`, `groupTimeline`). Jump > 0 = moved up that many places.
+
+## IMB / ETI characteristics (added 2026-11-15)
+
+- Source of truth: the ETI project (repo dheerajburli86/ETI, Supabase project "ETI"). It stores, per company, the 10
+  characteristics (6 IMB, 4 ETI gates) as yes / no / unknown with numbers and notes. Sir's rule: **no score, no rank,
+  no view** -- this app shows and filters them, nothing more. Do not add counts, totals or orderings by "how many met".
+- Copy: `tas_eti_sync()` in the heatmap DB pulls `company_characteristics_latest` over dblink (server `eti_src`, ETI
+  login `xraydar_reader`: read-only, SELECT on companies / characteristics only) into `tas_eti_characteristic`, hourly
+  via pg_cron `tas-eti-sync`. Instruments are matched by ISIN, then NSE symbol. Every changed answer after first sight
+  is appended to `tas_eti_change` (first sight is silent), which is what the "eti" alert kind reads.
+- `unknown` (null) means the rule could not be checked. Never show or filter it as "no".
+- Definitions / labels: `engine/eti.js` (mirror of the ETI README). Screen fields `eti_<key>`.

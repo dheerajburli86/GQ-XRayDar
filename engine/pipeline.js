@@ -179,6 +179,7 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
   ci = 0;
   const fundAll = source.fundamentals ? true : false;
   const glocom = source.glocom ? await source.glocom() : new Map();
+  const eti = source.eti ? await source.eti() : new Map();
   // GLOCOM / LOCOM: group rank history per market (local currency) and globally (USD)
   const gK = m.glocom.historySessions;
   const ckG = dates.slice(-gK);
@@ -235,7 +236,7 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
       const fm = f ? fundamentalMetrics(f, b.close[b.time.length - 1] / sec.currencyDivisor, fxToReported(fx, sec, f, T)) : null;
       const wws = stockWW.get(sec.id);
       const wwT = wws ? { ...wwTrend(wws.weights), parentKey: wws.parentKey } : null;
-      snaps.push({ id: sec.id, snap: an.snapshot, f: fm, ww: wwT, glocom: glocom.get(sec.id) || null, capUsdNow: capNow ? Math.round(capNow) : null, sharesEst: shares });
+      snaps.push({ id: sec.id, snap: an.snapshot, f: fm, ww: wwT, glocom: glocom.get(sec.id) || null, eti: eti.get(sec.id) || null, capUsdNow: capNow ? Math.round(capNow) : null, sharesEst: shares });
 
       // events (+ WW turning points) with forward returns
       let ev = detectEvents(an, b, bCountry, cc, m);
@@ -286,7 +287,7 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
       const sec = secOf.get(x.id);
       const ctx = { rsRank: x.rsRank, sectorPct50: pct50(sec.sector), fundPct: fpct.get(x.id) || null };
       x.score = scoreSetup({ snap: x.snap, f: x.f }, ctx, m.scoring.weights);
-      x.flat = buildFlat({ sec: { ...sec, capUsdNow: x.capUsdNow }, snap: x.snap, f: x.f, ww: x.ww, glocom: x.glocom, score: x.score, rsRank: x.rsRank });
+      x.flat = buildFlat({ sec: { ...sec, capUsdNow: x.capUsdNow }, snap: x.snap, f: x.f, ww: x.ww, glocom: x.glocom, eti: x.eti, score: x.score, rsRank: x.rsRank });
     }
     await sink.countryResults?.(country, { snapshots: snaps, events, issues });
     for (const x of snaps) allSnaps.push({ id: x.id, capUsdNow: x.capUsdNow });

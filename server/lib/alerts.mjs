@@ -17,6 +17,7 @@ import { esc } from "./telegram.mjs";
 import { DERIV_ALERT_RULES, evaluateDerivRule, marketView, positionView, PRIORITY_CHANNELS } from "../../engine/deriv/alerts.js";
 import { decodeDay } from "../../engine/deriv/codec.js";
 import { enrichChain } from "../../engine/deriv/chain.js";
+import { ETI_BY_KEY, etiAnswer } from "../../engine/eti.js";
 
 const TF = { D: "daily", W: "weekly", M: "monthly" };
 
@@ -173,7 +174,23 @@ export function createAlertEngine({ cfg, pool, data, telegram, push, channels = 
         }
       }
       // ---- template / custom rules on the snapshot ----
-      const tmpl = rules.filter((r) => r.kind !== "indicator");
+      // ---- IMB / ETI: a stock's answer to a characteristic changed (tas_eti_change, written by tas_eti_sync) ----
+      for (const r of rules.filter((x) => x.kind === "eti" && ETI_BY_KEY[x.characteristic])) {
+        const { rows: seed } = await pool.query(`select fired_at from tas_alert_event where user_id = $1 and rule_id = $2 and instrument_id = '__seed__' limit 1`, [u.id, r.id]);
+        if (!seed.length) { await record(u.id, r.id, "__seed__", "seed", { seededAt: new Date().toISOString() }, true); continue; } // first sight: nothing older is announced
+        const want = r.to === "no" ? false : r.to === "unknown" ? null : true;
+        const ids = r.target?.watchlistId ? new Set((wls[r.target.watchlistId]?.ids || []).map(String)) : null;
+        const { rows: ch } = await pool.query(`select id, company_id, instrument_id::text iid, from_meets, to_meets, as_of::text as_of from tas_eti_change where characteristic = $1 and to_meets is not distinct from $2 and at > $3 order by at limit 500`, [r.characteristic, want, seed[0].fired_at]).catch(() => ({ rows: [] }));
+        for (const c of ch) {
+          if (ids && !ids.has(c.iid)) continue;
+          const sec = c.iid ? st.secById.get(c.iid) : null;
+          const C = ETI_BY_KEY[r.characteristic];
+          const text = `${C.framework.toUpperCase()} ${C.label}: ${etiAnswer(c.from_meets)} → ${etiAnswer(c.to_meets)}`;
+          const eventId = await record(u.id, r.id, c.iid || `eti:${c.company_id}`, `eti:${c.id}`, { kind: "eti", characteristic: r.characteristic, text, asOf: c.as_of });
+          if (eventId) fired.push({ eventId, symbol: sec?.symbol || `ETI #${c.company_id}`, text, asOf: c.as_of, priority: r.priority || "normal", kind: "eti" });
+        }
+      }
+      const tmpl = rules.filter((r) => r.kind !== "indicator" && r.kind !== "eti");
       if (tmpl.length) {
         let sectorCtx = null;
         if (tmpl.some((r) => r.template === "sector_rsc_ewcw")) {

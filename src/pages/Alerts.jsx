@@ -75,7 +75,7 @@ export default function Alerts({ route }) {
   const [tab, setTab] = useState(route.query.tab || "indicator");
   const acct = useAccount();
   const indicatorRules = rules.filter((r) => r.kind === "indicator");
-  const comboRules = rules.filter((r) => r.kind !== "indicator");
+  const comboRules = rules.filter((r) => r.kind !== "indicator" && r.kind !== "eti");
   return (
     <div className="stack">
       <PageHead title="Alerts" sub={`Data as of ${d.info.asOf}. ${acct.serverOn ? (acct.me?.telegramLinked ? `Delivered on Telegram${acct.me.telegramName ? ` to ${acct.me.telegramName}` : ""} and in this inbox.` : "Link Telegram (Telegram & summaries tab) to get alerts as messages.") : "Previewed in this app; Telegram delivery needs the TA server connected."}`}>

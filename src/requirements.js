@@ -5,7 +5,7 @@ export const STATUS_LABEL = { done: "Built", partial: "Built, with a stated limi
 
 const R = (id, tag, title, status, where) => ({ id, tag, title, status, where });
 export const REQUIREMENTS = [
-  R(1, "M", "Unified AI global market intelligence platform", "partial", "Technical, relative, absolute, fundamental, index, Weight Watcher and GLOCOM in one app. IMB and Finxray plug in once their definitions / feed exist (#93, #95)."),
+  R(1, "M", "Unified AI global market intelligence platform", "partial", "Technical, relative, absolute, fundamental, index, Weight Watcher and GLOCOM in one app. IMB / ETI characteristics come from the ETI project; Finxray plugs in once its feed exists (#93)."),
   R(2, "M", "Global coverage", "partial", "Stocks, GICS sectors / industry groups, countries, regions and DM/EM classifications across US, India and the 39-country global universe; commodity, crypto and currency products as their own asset classes; REITs as the GICS Equity REITs group; fixed income on the Cross-asset page (bond funds from FMP, the heatmap carries none). Spot crypto pairs are inactive in the heatmap and stay out."),
   R(3, "M", "Top-down and bottom-up navigation", "done", "Top-down explorer (global → region → country → cap → sector → industry group → stock); stock page breadcrumbs go back up."),
   R(4, "M", "Absolute and relative views", "done", "Absolute / relative-to-parent toggle in the explorer and heatmap; relative-strength pages."),
@@ -99,7 +99,7 @@ export const REQUIREMENTS = [
   R(92, "E", "Global opportunity funnel", "done", "Funnel page, automatic with manual overrides."),
   R(93, "M", "Finxray feed integration", "blocked", "Needs endpoint, credentials, permitted use and mapping."),
   R(94, "M", "Fundamental filters", "done", "Growth, margins, ROE, leverage, FCF, P/E from the heatmap's fundamentals table."),
-  R(95, "M", "IMB framework integration", "blocked", "Needs the IMB inputs / outputs definition."),
+  R(95, "M", "IMB framework integration", "done", "IMB / ETI characteristics (6 IMB, 4 ETI gates) read from the ETI project, copied hourly into tas_eti_characteristic; page, screen fields, stock page, change log and alerts. Shown as yes / no / unknown only, never scored or ranked (sir's rule)."),
   R(96, "M", "Technical-fundamental confluence", "done", "Fundamentals-improving flag combined with breakout / RSC / WW in screens, alerts and score conflicts."),
   R(97, "M", "AI setup scoring", "partial", "Technical, relative, participation, fundamentals, timeframe. Catalysts await Finxray (excluded, weight re-spread)."),
   R(98, "M", "Explainable scoring", "done", "Component scores, weights in force, thresholds, evidence and conflicts."),

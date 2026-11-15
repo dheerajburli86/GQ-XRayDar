@@ -2,11 +2,11 @@
 
 Generated from `src/requirements.js` (`npm run trace`). Also shown in the app: *Data centre → Requirement trace*.
 
-**Built, with a stated limit:** 17 · **Built:** 127 · **Built on a default awaiting confirmation [C]:** 4 · **Needs an external input:** 5
+**Built, with a stated limit:** 17 · **Built:** 128 · **Built on a default awaiting confirmation [C]:** 4 · **Needs an external input:** 4
 
 | # | Tag | Requirement | Status | Where / notes |
 |---|---|---|---|---|
-| 1 | M | Unified AI global market intelligence platform | Built, with a stated limit | Technical, relative, absolute, fundamental, index, Weight Watcher and GLOCOM in one app. IMB and Finxray plug in once their definitions / feed exist (#93, #95). |
+| 1 | M | Unified AI global market intelligence platform | Built, with a stated limit | Technical, relative, absolute, fundamental, index, Weight Watcher and GLOCOM in one app. IMB / ETI characteristics come from the ETI project; Finxray plugs in once its feed exists (#93). |
 | 2 | M | Global coverage | Built, with a stated limit | Stocks, GICS sectors / industry groups, countries, regions and DM/EM classifications across US, India and the 39-country global universe; commodity, crypto and currency products as their own asset classes; REITs as the GICS Equity REITs group; fixed income on the Cross-asset page (bond funds from FMP, the heatmap carries none). Spot crypto pairs are inactive in the heatmap and stay out. |
 | 3 | M | Top-down and bottom-up navigation | Built | Top-down explorer (global → region → country → cap → sector → industry group → stock); stock page breadcrumbs go back up. |
 | 4 | M | Absolute and relative views | Built | Absolute / relative-to-parent toggle in the explorer and heatmap; relative-strength pages. |
@@ -100,7 +100,7 @@ Generated from `src/requirements.js` (`npm run trace`). Also shown in the app: *
 | 92 | E | Global opportunity funnel | Built | Funnel page, automatic with manual overrides. |
 | 93 | M | Finxray feed integration | Needs an external input | Needs endpoint, credentials, permitted use and mapping. |
 | 94 | M | Fundamental filters | Built | Growth, margins, ROE, leverage, FCF, P/E from the heatmap's fundamentals table. |
-| 95 | M | IMB framework integration | Needs an external input | Needs the IMB inputs / outputs definition. |
+| 95 | M | IMB framework integration | Built | IMB / ETI characteristics (6 IMB, 4 ETI gates) read from the ETI project, copied hourly into tas_eti_characteristic; page, screen fields, stock page, change log and alerts. Shown as yes / no / unknown only, never scored or ranked (sir's rule). |
 | 96 | M | Technical-fundamental confluence | Built | Fundamentals-improving flag combined with breakout / RSC / WW in screens, alerts and score conflicts. |
 | 97 | M | AI setup scoring | Built, with a stated limit | Technical, relative, participation, fundamentals, timeframe. Catalysts await Finxray (excluded, weight re-spread). |
 | 98 | M | Explainable scoring | Built | Component scores, weights in force, thresholds, evidence and conflicts. |

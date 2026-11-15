@@ -18,6 +18,7 @@ import { usePersistent } from "../lib/storage.js";
 import { setAgentContext } from "../components/AgentPanel.jsx";
 import { fmtMoney, fmtNum } from "../lib/format.js";
 import { GBadge, Jump } from "../components/glocomUi.jsx";
+import { ETI_CHARACTERISTICS, groupEti } from "../../engine/eti.js";
 
 export default function Stock({ route }) {
   const d = useData();
@@ -120,6 +121,7 @@ export default function Stock({ route }) {
                   {data.snap.f.improving && <Badge kind="g">improving</Badge>}{data.snap.f.deteriorating && <Badge kind="r">deteriorating</Badge>}
                 </div> : <div className="small muted">No fundamental data.</div>}
                 {data.snap.glocom && <GlocomLine g={data.snap.glocom} />}
+                <EtiLine id={id} />
               </div>
               <div className="card"><h3>Recent inflections</h3>
                 {data.events.slice(-8).reverse().map((e, i) => <div key={i} className="row between small"><span>{e.date} · {EVENT_LABEL[e.type] || e.type}</span><span>{e.fwd?.["1M"] != null ? <>1M after <Pct v={e.fwd["1M"]} /></> : <span className="muted">open</span>}</span></div>)}
@@ -140,6 +142,23 @@ function GlocomLine({ g }) {
       {g.label && <div>GLOCOM <GBadge small code={g.code} label={g.label} /> <span className="muted">{g.source === "heatmap" ? "heatmap" : "vs market"}</span></div>}
       {g.locom && <div>LOCOM <GBadge small code={g.locom.code} label={g.locom.label} /> <span className="muted">vs its industry</span></div>}
       {g.industry && <div>Industry <a href={href("glocom", { lv: "industry", g: g.industry.name })}>{g.industry.name}</a> <GBadge small code={g.industry.code} label={g.industry.label} /> #{g.industry.rank} of {g.industry.of} <Jump v={g.industry.jump1D} /> <span className="muted">1D</span> <Jump v={g.industry.jump1W} /> <span className="muted">1W</span></div>}
+    </div>
+  );
+}
+
+function EtiLine({ id }) {
+  const d = useData();
+  const { data } = useAsync(() => d.api.etiFor(id), [id]);
+  const c = data?.length ? [...groupEti(data).values()][0] : null;
+  if (!c) return null;
+  const mark = { yes: ["✓", "#16a34a"], no: ["✗", "#dc2626"], unknown: ["?", "#9ca3af"] };
+  return (
+    <div className="small" style={{ marginTop: 8 }}>
+      <div>IMB / ETI characteristics <span className="muted">(ETI project{c.asOf ? `, as of ${c.asOf}` : ""}; yes / no / unknown, not a score)</span></div>
+      <div className="row" style={{ flexWrap: "wrap", gap: 8, marginTop: 3 }}>
+        {ETI_CHARACTERISTICS.map((x) => { const [t, col] = mark[c.flags[x.key]]; return <span key={x.key} title={`${x.label}: ${c.detail[x.key]?.note || x.rule}`}><b style={{ color: col }}>{t}</b> {x.short}</span>; })}
+      </div>
+      <a href={href("imbeti")}>All companies →</a>
     </div>
   );
 }

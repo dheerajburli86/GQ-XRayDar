@@ -1,4 +1,5 @@
 // One registry of every screenable / displayable field. Screens, tables,
+import { ETI_CHARACTERISTICS } from "./eti.js";
 // heatmap colouring, alerts and the natural-language parser all read fields
 // through here, so a "3M return" means the same number everywhere.
 //
@@ -9,7 +10,7 @@
 import { PATTERN_INFO } from "./patterns.js";
 const g = (o, path) => path.split(".").reduce((x, k) => (x == null ? x : x[k]), o);
 
-export const FIELD_GROUPS = ["Identity", "Returns", "Price levels", "Trend & MMA", "Momentum", "Relative strength", "Volume & liquidity", "Patterns", "Fundamentals", "Weight Watcher", "Scores", "GLOCOM"];
+export const FIELD_GROUPS = ["Identity", "Returns", "Price levels", "Trend & MMA", "Momentum", "Relative strength", "Volume & liquidity", "Patterns", "Fundamentals", "Weight Watcher", "Scores", "GLOCOM", "IMB / ETI"];
 
 const F = [];
 const IDENT = new Set(["symbol", "name", "country", "region", "classification", "sector", "industryGroup", "industry", "cap", "capUsd", "currency", "assetClass"]);
@@ -165,6 +166,9 @@ add("industryRankJump1D", "Industry rank change, 1 session (+ = up)", "GLOCOM", 
 add("industryRankJump1W", "Industry rank change, 1 week (+ = up)", "GLOCOM", "num", (r) => r.glocom?.industry?.jump1W);
 add("sectorGlocom", "Sector GLOCOM label", "GLOCOM", "cat", (r) => r.glocom?.sector?.label);
 add("sectorGlocomCode", "Sector GLOCOM code", "GLOCOM", "num", (r) => r.glocom?.sector?.code);
+
+// IMB / ETI characteristics (ETI project; yes / no / unknown, never scored)
+for (const c of ETI_CHARACTERISTICS) add(`eti_${c.key}`, `${c.framework.toUpperCase()}: ${c.label}`, "IMB / ETI", "cat", (r) => (r.eti ? r.eti[c.key] || "unknown" : null));
 
 export const FIELDS = F;
 export const FIELD = Object.fromEntries(F.map((f) => [f.key, f]));

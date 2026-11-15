@@ -106,6 +106,14 @@ export function pgSource(pool, { warmupDays = 400, minCalendarCount = 50, log = 
       } catch { /* table not created yet: no adjustments */ }
       return m;
     },
+    async eti() {
+      const m = new Map();
+      try {
+        const { rows } = await pool.query(`select instrument_id::text id, characteristic, meets from tas_eti_characteristic where instrument_id is not null`);
+        for (const r of rows) { if (!m.has(r.id)) m.set(r.id, {}); m.get(r.id)[r.characteristic] = r.meets === true ? "yes" : r.meets === false ? "no" : "unknown"; }
+      } catch (e) { log(`tas_eti_characteristic not readable: ${e.message}`); }
+      return m;
+    },
     async glocom() {
       const m = new Map();
       try {
