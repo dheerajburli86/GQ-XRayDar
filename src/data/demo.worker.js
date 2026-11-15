@@ -58,6 +58,8 @@ const api = {
   async breadth(key) { return sink.breadth[key] || null; },
   async rotationScopes() { return Object.keys(sink.rotation); },
   async rotation(key) { return sink.rotation[key] || null; },
+  async glocomScopes() { return Object.keys(sink.glocomGroups || {}); },
+  async glocomGroups(key) { return sink.glocomGroups?.[key] || null; },
   async regimes() { return sink.regimes; },
   async ewcw() { return sink.ewcw; },
   async events(id) { return sink.events.get(id) || []; },

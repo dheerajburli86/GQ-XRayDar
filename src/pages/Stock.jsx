@@ -17,6 +17,7 @@ import { NoteBox } from "./Notes.jsx";
 import { usePersistent } from "../lib/storage.js";
 import { setAgentContext } from "../components/AgentPanel.jsx";
 import { fmtMoney, fmtNum } from "../lib/format.js";
+import { GBadge, Jump } from "../components/glocomUi.jsx";
 
 export default function Stock({ route }) {
   const d = useData();
@@ -118,7 +119,7 @@ export default function Stock({ route }) {
                   <div>ROE {data.snap.f.roe ?? "—"}% · D/E {data.snap.f.debtToEquity ?? "—"} · P/E {data.snap.f.pe ?? "—"}</div>
                   {data.snap.f.improving && <Badge kind="g">improving</Badge>}{data.snap.f.deteriorating && <Badge kind="r">deteriorating</Badge>}
                 </div> : <div className="small muted">No fundamental data.</div>}
-                {data.snap.glocom && <div className="small" style={{ marginTop: 6 }}>GLOCOM: <b>{data.snap.glocom.label}</b> (code {data.snap.glocom.code})</div>}
+                {data.snap.glocom && <GlocomLine g={data.snap.glocom} />}
               </div>
               <div className="card"><h3>Recent inflections</h3>
                 {data.events.slice(-8).reverse().map((e, i) => <div key={i} className="row between small"><span>{e.date} · {EVENT_LABEL[e.type] || e.type}</span><span>{e.fwd?.["1M"] != null ? <>1M after <Pct v={e.fwd["1M"]} /></> : <span className="muted">open</span>}</span></div>)}
@@ -129,6 +130,16 @@ export default function Stock({ route }) {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function GlocomLine({ g }) {
+  return (
+    <div className="small" style={{ marginTop: 6, display: "grid", gap: 3 }}>
+      {g.label && <div>GLOCOM <GBadge small code={g.code} label={g.label} /> <span className="muted">{g.source === "heatmap" ? "heatmap" : "vs market"}</span></div>}
+      {g.locom && <div>LOCOM <GBadge small code={g.locom.code} label={g.locom.label} /> <span className="muted">vs its industry</span></div>}
+      {g.industry && <div>Industry <a href={href("glocom", { lv: "industry", g: g.industry.name })}>{g.industry.name}</a> <GBadge small code={g.industry.code} label={g.industry.label} /> #{g.industry.rank} of {g.industry.of} <Jump v={g.industry.jump1D} /> <span className="muted">1D</span> <Jump v={g.industry.jump1W} /> <span className="muted">1W</span></div>}
     </div>
   );
 }

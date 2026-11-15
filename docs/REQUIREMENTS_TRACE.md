@@ -2,7 +2,7 @@
 
 Generated from `src/requirements.js` (`npm run trace`). Also shown in the app: *Data centre → Requirement trace*.
 
-**Built, with a stated limit:** 18 · **Built:** 124 · **Built on a default awaiting confirmation [C]:** 4 · **Needs an external input:** 7
+**Built, with a stated limit:** 17 · **Built:** 127 · **Built on a default awaiting confirmation [C]:** 4 · **Needs an external input:** 5
 
 | # | Tag | Requirement | Status | Where / notes |
 |---|---|---|---|---|
@@ -40,9 +40,9 @@ Generated from `src/requirements.js` (`npm run trace`). Also shown in the app: *
 | 32 | C | Index base and return policy | Built on a default awaiting confirmation [C] | Base 1000 at the first quarter-end, price return, quarterly rebalance — in Methodology. |
 | 33 | M | EWCW relative strength engine | Built | EWCW page; ratio EW/CW per scope. |
 | 34 | M | EWCW across index hierarchy | Built | Computed for every CW/EW pair (sector, cap, country, region, classification, global). |
-| 35 | M | GLOCOM integration | Built, with a stated limit | GLOCOM is read as computed by the heatmap (glocom_latest) and used in heatmap colour, screens and stock pages; its formula is not re-implemented (#37). |
-| 36 | M | LOCOM integration | Needs an external input | Needs the LOCOM definition (#37). |
-| 37 | C | GLOCOM / LOCOM definitions | Needs an external input | Formulas, parameters and thresholds to be supplied; nothing is invented. |
+| 35 | M | GLOCOM integration | Built | Heatmap rule sheet (1W / 6M / 1Y percentiles, 9 labels, 5 colour bands) in engine/glocom.js. Stocks use the heatmap's own glocom_latest where it exists; industries and sectors are rated per market and globally, with rank history and moves (GLOCOM / LOCOM page). |
+| 36 | M | LOCOM integration | Built | Same rule sheet with a stock's own industry group as the peer set (3+ stocks). Interpretation of 'local' to be confirmed. |
+| 37 | C | GLOCOM / LOCOM definitions | Built | Rule sheet supplied 2026-11-15; colours dark green / light green / yellow / light red / dark red. |
 | 38 | M | CW Weight Watcher | Built | engine/weightWatcher.js; Weight Watcher page. |
 | 39 | M | Stock WW | Built | Stocks in a country sector, one line each. |
 | 40 | M | Sector and industry WW | Built | Sectors and industry groups in a country; sectors in regions / global. |

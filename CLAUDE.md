@@ -13,8 +13,8 @@ NOT part of the heatmap dashboard and must not be wired into it.
 - **Fields go through `engine/fields.js`.** Screens, heatmap colours, alerts and the NL
   parser read the registry; adding a screenable value means adding a field there (and it
   automatically joins the flat screen row).
-- **Do not invent GLOCOM, LOCOM or IMB formulas.** GLOCOM is read from the heatmap's
-  `glocom_latest`; the others wait for their definitions (requirements #35-37, #95).
+- **GLOCOM / LOCOM follow the owner's rule sheet** in `engine/glocom.js` (do not alter thresholds without it).
+  A stock's GLOCOM is the heatmap's `glocom_latest` where present. **IMB is not defined: do not invent it** (#95).
 - **Never label estimated data as observed.** Historical market caps (constant shares),
   carried FX and stale constituents are estimated / flagged; keep it that way.
 - The demo is synthetic and must keep its "DEMO DATA" banner.
@@ -91,3 +91,15 @@ Local end-to-end check of the batch engine against a throw-away Postgres:
   than assume an exchange offers depth, tape or SPAN. Freeze limits there must be checked against circulars.
 - Chart patterns (`engine/patterns.js`) are computed in the batch engine for D and W (snapshot `chartPatterns`) and
   appear as screen fields `chartPattern*`; the chart lab recomputes them for the bars on screen.
+
+## GLOCOM / LOCOM (added 2026-11-15)
+
+- Rule sheet (owner's picture, rows tested in order, first match wins) and the five band colours
+  (dark green, light green, yellow, light red, dark red) live in `engine/glocom.js`; tests in `tests/glocom.test.mjs`.
+- Peer sets: a stock's GLOCOM = vs its market (heatmap `glocom_latest` wins when present, `source` says which);
+  LOCOM = vs its own GICS industry group (needs 3+ stocks); industries / sectors = vs the other groups of the market,
+  on the EQUAL-WEIGHTED average of their constituents' 1W / 6M / 1Y returns (calendar look-backs, as returns_latest).
+  "LOCOM = within industry" is our reading of "local" and still to be confirmed with the owner.
+- Group rank 1 = best (band, then the heatmap's 50/30/20 score). History of the last `methodology.glocom.historySessions`
+  sessions is stored in `tas_glocom_group` (`C:<country>|industry|sector`, `G|...` in USD); the page computes moves
+  (`groupMoves`, `groupTimeline`). Jump > 0 = moved up that many places.

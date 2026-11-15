@@ -63,6 +63,8 @@ export function createData(pool, log = console.log) {
     },
     async events(id) { const { rows } = await pool.query(`select events from tas_events where id = $1`, [id]); return decodeEvents(rows[0]?.events); },
     async eventsMany(ids) { const { rows } = await pool.query(`select id, events from tas_events where id = any($1)`, [ids]); return Object.fromEntries(rows.map((r) => [r.id, decodeEvents(r.events)])); },
+    async glocomScopes() { const { rows } = await pool.query(`select scope_key from tas_glocom_group`).catch(() => ({ rows: [] })); return rows.map((r) => r.scope_key); },
+    async glocomGroups(scope) { const { rows } = await pool.query(`select data from tas_glocom_group where scope_key = $1`, [scope]).catch(() => ({ rows: [] })); return rows[0]?.data || null; },
     async rotation(scope) { const { rows } = await pool.query(`select sectors from tas_rotation where scope_key = $1`, [scope]); return rows[0]?.sectors || null; },
     async breadth(scope) { const { rows } = await pool.query(`select data from tas_breadth where scope_key = $1`, [scope]); return rows[0]?.data || null; },
     async ewcw() { const { rows } = await pool.query(`select * from tas_ewcw`); return rows.map((r) => ({ pairKey: r.pair_key, scopeKey: r.scope_key, ccy: r.ccy, name: r.name, level: r.level, asOf: r.as_of, ratio: r.ratio, chg: r.chg, aboveTrend: r.above_trend, label: r.label })); },

@@ -11,6 +11,7 @@ import { applyScope } from "../components/pickers.jsx";
 import { changeOver, HBARS } from "../lib/indexMath.js";
 import { fmtPct, fmtMoney, fmtNum } from "../lib/format.js";
 import { CAPS } from "../../engine/indexEngine.js";
+import { glocomBand } from "../../engine/glocom.js";
 
 const COLOR_BY = [
   { value: "ret", label: "Absolute return" }, { value: "rsc", label: "RSC vs country" }, { value: "rsi", label: "RSI (weekly)" },
@@ -18,7 +19,8 @@ const COLOR_BY = [
   { value: "fund", label: "Revenue growth" }, { value: "glocom", label: "GLOCOM" }, { value: "score", label: "AI score" },
 ];
 const MMA_COL = { bull: "#15803d", above: "#4d7c0f", mixed: "#4b5563", below: "#b45309", bear: "#b91c1c" };
-const GLOCOM_COL = (code) => (code == null ? "#4b5563" : divergingColor(4 - code, 3));
+const GLOCOM_COL = (code) => glocomBand(code).bg;
+const GLOCOM_FG = (bg) => [1, 2, 3, 4, 5].map(glocomBand).find((b) => b.bg === bg)?.fg;
 
 export default function Heatmap({ route }) {
   const d = useData();
@@ -74,13 +76,13 @@ export default function Heatmap({ route }) {
           case "mma": color = categoricalColor(f.mmaW, MMA_COL); sub = f.mmaW; break;
           case "ww": color = divergingColor(f.wwChange4, 20); sub = f.wwChange4 != null ? fmtPct(f.wwChange4) : "—"; break;
           case "fund": color = divergingColor(f.revenueGrowthYoY, 25); sub = fmtPct(f.revenueGrowthYoY); break;
-          case "glocom": color = GLOCOM_COL(f.glocomCode); sub = f.glocom || "not connected"; break;
+          case "glocom": color = GLOCOM_COL(f.glocomCode); sub = f.glocom || "—"; break;
           case "score": color = divergingColor(f.score != null ? f.score - 50 : null, 30); sub = `score ${f.score ?? "—"}`; break;
           case "ewcw": color = divergingColor(val, h === "1W" ? 4 : 12); sub = fmtPct(val); break;
           default: color = divergingColor(val, h === "1W" ? 4 : h === "1M" ? 8 : 15); sub = fmtPct(val);
         }
         return {
-          key: r.id, label: r.sec.symbol, title: `${r.sec.symbol} · ${r.sec.name}`, size: sizeBy === "equal" ? 1 : Math.max(cap, 1), color, sub,
+          key: r.id, label: r.sec.symbol, title: `${r.sec.symbol} · ${r.sec.name}`, size: sizeBy === "equal" ? 1 : Math.max(cap, 1), color, sub, fg: colorBy === "glocom" ? GLOCOM_FG(color) : undefined,
           onClick: () => navigate(`stock/${r.id}`),
           tip: [["Price", `${fmtNum(f.close)} ${r.sec.currency}`], ["Market cap", fmtMoney(cap)], ["Weight in view", tot ? `${((cap / tot) * 100).toFixed(2)}%` : "—"],
             [`Return ${h} (${ccy === "USD" ? "USD" : "local"})`, fmtPct(ret)], [`RSC vs country ${h === "1W" ? "1M" : h}`, fmtPct(f[`rscChg_country_${h === "1W" ? "1M" : h}`])],
@@ -104,10 +106,11 @@ export default function Heatmap({ route }) {
         const rs = d.rows.filter((r) => matchScope(r, g.scope));
         const key = { rsc: `rscChg_country_${h === "1W" ? "1M" : h}`, rsi: "rsiW", score: "score", fund: "revenueGrowthYoY", ww: "wwChange4", glocom: "glocomCode" }[colorBy];
         if (colorBy === "mma") { const b = rs.filter((r) => r.flat.mmaW === "bull").length; const pct = rs.length ? (b / rs.length) * 100 : null; color = divergingColor(pct != null ? pct - 30 : null, 30); sub = `${pct?.toFixed(0) ?? "—"}% bullish MMA`; }
+        else if (colorBy === "glocom" && g.scope.startsWith("C:") && g.scope.includes("|S:")) { const v = rs.find((r) => r.flat.sectorGlocomCode != null)?.flat; color = GLOCOM_COL(v?.sectorGlocomCode); sub = v?.sectorGlocom || "—"; }
         else { let a = 0, w = 0; for (const r of rs) { const v = r.flat[key]; const c = r.sec.capUsdNow || 0; if (v != null && c) { a += v * c; w += c; } } const v = w ? a / w : null; color = colorBy === "glocom" ? GLOCOM_COL(v != null ? Math.round(v) : null) : divergingColor(colorBy === "rsi" || colorBy === "score" ? (v != null ? v - 50 : null) : v, colorBy === "rsi" ? 20 : 15); sub = v != null ? `${fmtNum(v, 1)}` : "—"; }
       }
       return {
-        key: g.scope, label: g.name, size: sizeBy === "equal" ? 1 : Math.max(capNow, 1), color, sub,
+        key: g.scope, label: g.name, size: sizeBy === "equal" ? 1 : Math.max(capNow, 1), color, sub, fg: colorBy === "glocom" ? GLOCOM_FG(color) : undefined,
         onClick: g.drill ? () => navigate("heatmap", { ...q, ...g.drill }) : undefined,
         tip: [[`${s.family} return ${h}`, fmtPct(ret)], ["vs parent", fmtPct(ret != null && parentRet != null ? ret - parentRet : null)], ["Market cap (USD)", fmtMoney(capNow)],
           ["Index weight", capTot ? `${((capNow / capTot) * 100).toFixed(2)}%` : "—"], ["Constituents", se.n?.at(-1) ?? "—"]],

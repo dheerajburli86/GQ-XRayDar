@@ -37,7 +37,7 @@ export function squarify(items, x, y, w, h) {
   return out;
 }
 
-/** items: [{key, label, size, color, sub, tip: [[k,v],...], onClick}] */
+/** items: [{key, label, size, color, fg?, sub, tip: [[k,v],...], onClick}] */
 export function Treemap({ items, height = 560 }) {
   const ref = useRef(null);
   const [w, setW] = useState(900);
@@ -52,7 +52,7 @@ export function Treemap({ items, height = 560 }) {
   return (
     <div ref={ref} className="treemap" style={{ height }} onMouseLeave={() => setTip(null)}>
       {cells.map((c) => (
-        <div key={c.key} className="tm-cell" style={{ left: c.x, top: c.y, width: c.w, height: c.h, background: c.color }}
+        <div key={c.key} className="tm-cell" style={{ left: c.x, top: c.y, width: c.w, height: c.h, background: c.color, ...(c.fg ? { color: c.fg } : {}) }}
           onClick={c.onClick} onMouseMove={(e) => setTip({ x: e.clientX, y: e.clientY, c })}>
           {c.w > 46 && c.h > 22 && <div className="n" style={{ fontSize: Math.max(10, Math.min(16, c.w / 9)) }}>{c.label}</div>}
           {c.w > 46 && c.h > 36 && <div className="v">{c.sub}</div>}

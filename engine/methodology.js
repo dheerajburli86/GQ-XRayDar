@@ -77,6 +77,7 @@ export const METHODOLOGY = Object.freeze({
 
   ww: { turnLookbackQuarters: 8, sidewaysRel: 0.05 },
   rotation: { smaWeeks: 26, momentumWeeks: 4, tailWeeks: 26 },
+  glocom: { historySessions: 63 },
   regime: { erWeeks: 26, trendER: 0.35, volPctHigh: 80, volLookbackDays: 756 },
   events: { horizons: { "1M": 21, "3M": 63, "6M": 126, "12M": 252 }, excursionBars: 63, storeYears: 6 },
 

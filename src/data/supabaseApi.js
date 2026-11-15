@@ -100,6 +100,8 @@ export function createSupabaseApi(url, key) {
     async breadthKeys() { return (await all("tas_breadth", "scope_key,light")).map((r) => ({ key: r.scope_key, light: r.light })); },
     async breadth(key) { const r = await one(sb.from("tas_breadth").select("data").eq("scope_key", key).maybeSingle()); return r?.data || null; },
     async rotationScopes() { return (await all("tas_rotation", "scope_key")).map((r) => r.scope_key); },
+    async glocomScopes() { return (await all("tas_glocom_group", "scope_key")).map((r) => r.scope_key); },
+    async glocomGroups(key) { const r = await one(sb.from("tas_glocom_group").select("data").eq("scope_key", key).maybeSingle()); return r?.data || null; },
     async rotation(key) { const r = await one(sb.from("tas_rotation").select("sectors").eq("scope_key", key).maybeSingle()); return r?.sectors || null; },
     async regimes() { const rows = await all("tas_regime", "index_key,data"); return Object.fromEntries(rows.map((r) => [r.index_key, r.data])); },
     async ewcw() {

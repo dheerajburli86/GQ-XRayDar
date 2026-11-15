@@ -26,6 +26,8 @@ import { scoreSetup } from "./scoring.js";
 import { buildFlat } from "./screenRow.js";
 import { securityIssues, applyCorporateActions } from "./quality.js";
 import { BacktestAccumulator } from "./backtest.js";
+import { GroupAccumulator, checkpointReturns, rateGlocom, groupMoves } from "./glocom.js";
+import { UNCLASSIFIED } from "./classification.js";
 
 /**
  * source: see docs/ARCHITECTURE.md ("Source interface")
@@ -177,6 +179,11 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
   ci = 0;
   const fundAll = source.fundamentals ? true : false;
   const glocom = source.glocom ? await source.glocom() : new Map();
+  // GLOCOM / LOCOM: group rank history per market (local currency) and globally (USD)
+  const gK = m.glocom.historySessions;
+  const ckG = dates.slice(-gK);
+  const accG = { industry: new GroupAccumulator(ckG), sector: new GroupAccumulator(ckG) };
+  const glocomGroups = {};
   for (const country of countries) {
     progress("signals", ci++, countries.length, country);
     const stocks = await loadCountry(country);
@@ -198,6 +205,9 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
     const recentFrom = addDays(lastDate, -365);
 
     const snaps = [], events = new Map(), issues = [];
+    const ckC = sessions.length >= 2 ? sessions.slice(-gK) : ckG;
+    const accC = { industry: new GroupAccumulator(ckC), sector: new GroupAccumulator(ckC) };
+    const latestRet = new Map();
     const secOfId = new Map(stocks.map((x) => [x.sec.id, x.sec]));
     for (const s of stocks) {
       const { sec } = s;
@@ -213,6 +223,12 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
       const an = analyzeSecurity(b, usd, cc, { country: bCountry, countrySector: bSector, region: bRegion, global: bGlobal }, { divisor: sec.currencyDivisor }, m);
       issues.push(...securityIssues(sec, b, { countryLatest, countrySessions: sessions, recentFrom, sessionsBetween }));
       if (!an) continue;
+      if (isStock(sec) && sec.industryGroup && sec.industryGroup !== UNCLASSIFIED) {
+        const rc = checkpointReturns(b.time, cc, ckC), rg = checkpointReturns(b.time, usd, ckG);
+        accC.industry.add(sec.industryGroup, rc); accC.sector.add(sec.sector, rc);
+        accG.industry.add(sec.industryGroup, rg); accG.sector.add(sec.sector, rg);
+        if (rc[rc.length - 1]) latestRet.set(sec.id, rc[rc.length - 1]);
+      }
       const shares = estimateSharesFromRow(sec, b, fx, T);
       const capNow = shares ? shares * b.close[b.time.length - 1] * fxo[T - 1] : null;
       const f = funds.get(sec.id);
@@ -264,6 +280,7 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
       for (let t = T - 1; t >= 0; t--) if (sc.f.n50[t] > 0) return Math.round((sc.f.a50[t] / sc.f.n50[t]) * 100);
       return null;
     };
+    applyGlocom(country, snaps, secOfId, latestRet, accC, glocomGroups);
     const fpct = fundamentalPercentiles(snaps.map((x) => ({ id: x.id, f: x.f })));
     for (const x of snaps) {
       const sec = secOf.get(x.id);
@@ -294,6 +311,8 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
     if (sectors.length >= 2) rot[sc] = rotation(sectors, base, m.rotation);
   }
   await sink.rotation?.(rot);
+  for (const lv of ["industry", "sector"]) glocomGroups[`G|${lv}`] = accG[lv].history();
+  await sink.glocomGroups?.(glocomGroups);
   await sink.regimes?.(regimeRows);
   await sink.ewcw?.(ewcwRows);
   await sink.backtest?.(bt.rows());
@@ -326,6 +345,36 @@ function indexAtOrBeforeMap(dates, d, map) {
   const i = lowerBound(dates, d);
   return i < dates.length && dates[i] === d ? i : i - 1;
 }
+// Stock GLOCOM (vs the market), LOCOM (vs its industry group) and its industry's
+// GLOCOM rank and movement. The heatmap's own stock GLOCOM (glocom_latest) wins
+// where it exists, so both products show the same label for a stock.
+function applyGlocom(country, snaps, secOfId, latestRet, accC, out) {
+  const hist = { industry: accC.industry.history(), sector: accC.sector.history() };
+  out[`C:${country}|industry`] = hist.industry; out[`C:${country}|sector`] = hist.sector;
+  const ids = [...latestRet.keys()];
+  const market = new Map(rateGlocom(ids.map((id) => ({ key: id, ...latestRet.get(id) }))).map((x) => [x.key, x]));
+  const byGroup = new Map();
+  for (const id of ids) { const g = secOfId.get(id).industryGroup; if (!byGroup.has(g)) byGroup.set(g, []); byGroup.get(g).push(id); }
+  const locom = new Map();
+  for (const list of byGroup.values()) if (list.length >= 3) for (const x of rateGlocom(list.map((id) => ({ key: id, ...latestRet.get(id) })))) locom.set(x.key, x);
+  const mv = (lv, back) => new Map(groupMoves(hist[lv], back).map((x) => [x.name, x]));
+  const ind1 = mv("industry", 1), ind5 = mv("industry", 5), sec1 = mv("sector", 1);
+  const pick = (x) => x && { code: x.code, label: x.label, pW: rd(x.pW), p6m: rd(x.p6m), p1y: rd(x.p1y), rank: x.rank };
+  for (const s of snaps) {
+    const sec = secOfId.get(s.id);
+    const own = market.get(s.id);
+    const base = s.glocom ? { ...s.glocom, source: "heatmap" } : own ? { ...pick(own), source: "engine" } : null;
+    const i1 = ind1.get(sec.industryGroup), i5 = ind5.get(sec.industryGroup), s1 = sec1.get(sec.sector);
+    const extra = {
+      locom: pick(locom.get(s.id)) || null,
+      industry: i1 ? { name: i1.name, code: i1.code, label: i1.label, rank: i1.rank, of: i1.of, jump1D: i1.jump, jump1W: i5?.jump ?? null, bandMove1D: i1.bandMove } : null,
+      sector: s1 ? { name: s1.name, code: s1.code, label: s1.label, rank: s1.rank, of: s1.of, jump1D: s1.jump } : null,
+    };
+    s.glocom = base || extra.locom || extra.industry ? { ...(base || {}), ...extra } : null;
+  }
+}
+const rd = (v) => (v == null ? null : Math.round(v * 1000) / 1000);
+
 function lowerBoundNum(a, v) { let lo = 0, hi = a.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (a[mid] < v) lo = mid + 1; else hi = mid; } return lo; }
 function mostCommon(xs) { const m = new Map(); for (const x of xs) m.set(x, (m.get(x) || 0) + 1); return [...m].sort((a, b) => b[1] - a[1])[0]?.[0] || "USD"; }
 

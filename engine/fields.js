@@ -152,9 +152,19 @@ add("wwChange4", "WW weight change over 4 quarters %", "Weight Watcher", "pct", 
 add("score", "AI setup score", "Scores", "num", (r) => r.score?.total);
 for (const k of ["technical", "relative", "participation", "fundamentals", "timeframe"]) add(`score_${k}`, `Score: ${k}`, "Scores", "num", (r) => r.score?.components?.[k]?.score);
 
-// GLOCOM (heatmap-computed; available once connected)
+// GLOCOM / LOCOM (engine/glocom.js; a stock's GLOCOM is the heatmap's own where it has one)
+// codes: 1 dark green (US/LTS 80), 2 light green (US/LTS 60), 3 neutral, 4 light red (UW/LTW 40), 5 dark red (UW/LTW 30)
 add("glocom", "GLOCOM label", "GLOCOM", "cat", (r) => r.glocom?.label);
 add("glocomCode", "GLOCOM code", "GLOCOM", "num", (r) => r.glocom?.code);
+add("locom", "LOCOM label (vs industry peers)", "GLOCOM", "cat", (r) => r.glocom?.locom?.label);
+add("locomCode", "LOCOM code", "GLOCOM", "num", (r) => r.glocom?.locom?.code);
+add("industryGlocom", "Industry GLOCOM label", "GLOCOM", "cat", (r) => r.glocom?.industry?.label);
+add("industryGlocomCode", "Industry GLOCOM code", "GLOCOM", "num", (r) => r.glocom?.industry?.code);
+add("industryGlocomRank", "Industry GLOCOM rank (1 = best)", "GLOCOM", "num", (r) => r.glocom?.industry?.rank);
+add("industryRankJump1D", "Industry rank change, 1 session (+ = up)", "GLOCOM", "num", (r) => r.glocom?.industry?.jump1D);
+add("industryRankJump1W", "Industry rank change, 1 week (+ = up)", "GLOCOM", "num", (r) => r.glocom?.industry?.jump1W);
+add("sectorGlocom", "Sector GLOCOM label", "GLOCOM", "cat", (r) => r.glocom?.sector?.label);
+add("sectorGlocomCode", "Sector GLOCOM code", "GLOCOM", "num", (r) => r.glocom?.sector?.code);
 
 export const FIELDS = F;
 export const FIELD = Object.fromEntries(F.map((f) => [f.key, f]));

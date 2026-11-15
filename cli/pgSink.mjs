@@ -13,7 +13,7 @@ import { stableStringify, hashString, METHODOLOGY } from "../engine/methodology.
 import { encodeEvents } from "../engine/eventCodec.js";
 import { SCREEN_KEYS } from "../engine/screenRow.js";
 
-const CURRENT_STATE = ["tas_snapshot", "tas_events", "tas_security", "tas_ww", "tas_breadth", "tas_rotation", "tas_regime", "tas_ewcw", "tas_backtest", "tas_fx"];
+const CURRENT_STATE = ["tas_snapshot", "tas_events", "tas_security", "tas_ww", "tas_breadth", "tas_rotation", "tas_glocom_group", "tas_regime", "tas_ewcw", "tas_backtest", "tas_fx"];
 
 async function upsertJson(client, table, rows, conflict, cols) {
   if (!rows.length) return;
@@ -141,6 +141,9 @@ export function pgSink(pool, { log = console.log, dryRun = false } = {}) {
     },
     async rotation(r) {
       await simple("tas_rotation", Object.entries(r).map(([k, v]) => ({ scope_key: k, sectors: v, run_id: runId })), ["scope_key"], ["scope_key", "sectors", "run_id"]);
+    },
+    async glocomGroups(g) {
+      await simple("tas_glocom_group", Object.entries(g).map(([k, v]) => ({ scope_key: k, data: v, run_id: runId })), ["scope_key"], ["scope_key", "data", "run_id"]);
     },
     async regimes(r) {
       await simple("tas_regime", Object.entries(r).map(([k, v]) => ({ index_key: k, label: v.label, data: v, run_id: runId })), ["index_key"], ["index_key", "label", "data", "run_id"]);
