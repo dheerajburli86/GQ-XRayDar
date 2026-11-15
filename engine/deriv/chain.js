@@ -41,7 +41,8 @@ export function forwardFor(day, expiry, T, r = DERIV_DEFAULTS.riskFree) {
  */
 export function enrichChain(day, opts = {}) {
   const o = { ...DERIV_DEFAULTS, ...opts };
-  const exps = [...new Set(day.options.map((x) => x.expiry))].filter((e) => e >= day.date).sort();
+  // End-of-day data: a contract expiring today has already settled at the close, so only later expiries are live.
+  const exps = [...new Set(day.options.map((x) => x.expiry))].filter((e) => e > day.date).sort();
   const expiries = exps.map((expiry) => {
     const T = Math.max(yearFrac(day.date, expiry), 0.5 / 365); // expiry day: half a day left at the close is still informative for Greeks
     const { F, source } = forwardFor(day, expiry, T, o.riskFree);

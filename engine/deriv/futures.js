@@ -7,7 +7,7 @@ export const futPrice = (f) => (f.vol > 0 && f.close > 0 ? f.close : f.settle ||
 
 /** One row per live futures contract with basis, carry and fair value. r: risk-free, q: dividend yield used for fair value. */
 export function futuresTable(day, { r = 0.065, q = 0 } = {}) {
-  const futs = (day.futures || []).filter((f) => f.expiry >= day.date).sort((a, b) => (a.expiry < b.expiry ? -1 : 1));
+  const futs = (day.futures || []).filter((f) => f.expiry > day.date).sort((a, b) => (a.expiry < b.expiry ? -1 : 1));
   return futs.map((f, i) => {
     const F = futPrice(f), T = Math.max(yearFrac(day.date, f.expiry), 1 / 365), S = day.spot;
     const basis = F - S;
