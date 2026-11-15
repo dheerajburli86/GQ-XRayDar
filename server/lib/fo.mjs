@@ -10,6 +10,8 @@ import { summarizeDay, withHistory } from "../../engine/deriv/summary.js";
 import { encodeDay } from "../../engine/deriv/codec.js";
 import { unzipEntries } from "./zip.mjs";
 
+// Bump when the summary logic changes: stored sessions from an older version are re-processed.
+export const FO_VERSION = 2;
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 const istNow = () => new Date(Date.now() + 5.5 * 3600_000);
 const iso = (d) => d.toISOString().slice(0, 10);
@@ -21,7 +23,7 @@ export function foConfig(e = process.env) {
     enabled: (e.FO_ENABLED || "true").toLowerCase() !== "false",
     backfill: Math.max(5, +e.FO_BACKFILL_SESSIONS || 120),
     keepChains: Math.max(5, +e.FO_CHAIN_KEEP_SESSIONS || 60),
-    maxPerTick: Math.max(1, +e.FO_MAX_PER_TICK || 12),
+    maxPerTick: Math.max(1, +e.FO_MAX_PER_TICK || 25),
     pollMinutes: Math.max(5, +e.FO_POLL_MINUTES || 20),
     readyIst: e.FO_READY_IST || "19:30", // the day's files are normally out by then
     // NSE's archive does not answer cloud data-centre IPs; the Supabase edge function
@@ -76,13 +78,13 @@ export function createFo({ pool, log = console.log, fetchImpl = fetch, cfg = foC
     const now = istNow(), today = iso(now), hm = now.toISOString().slice(11, 16);
     const dates = [];
     for (let d = today; dates.length < cfg.backfill; d = addDays(d, -1)) if (weekday(d)) dates.push(d);
-    const { rows } = await pool.query(`select date::text d, status, attempts from tas_fo_day where date >= $1`, [dates[dates.length - 1]]);
+    const { rows } = await pool.query(`select date::text d, status, attempts, (files->>'v')::int v from tas_fo_day where date >= $1`, [dates[dates.length - 1]]);
     const have = new Map(rows.map((r) => [r.d, r]));
     return dates.filter((d) => {
       if (d === today && hm < cfg.readyIst) return false;
       const h = have.get(d);
       if (!h) return true;
-      if (h.status === "ok") return false;
+      if (h.status === "ok") return (h.v || 1) < FO_VERSION;
       if (h.status === "error") return h.attempts < 8;     // transport / parse failures are retried
       return d >= addDays(today, -4) && h.attempts < 8;     // "not published" is retried only while recent
     }).sort();
@@ -95,7 +97,7 @@ export function createFo({ pool, log = console.log, fetchImpl = fetch, cfg = foC
 
   async function loadDate(date) {
     const u = nseUrls(date);
-    const files = {};
+    const files = { v: FO_VERSION };
     const bhav = text(await get(u.bhav), true);
     if (!bhav) { await mark(date, "none", null, 0, 0, { bhav: "not published" }); return { date, status: "none" }; }
     const parsed = parseFoBhavcopy(bhav);
@@ -163,7 +165,7 @@ export function createFo({ pool, log = console.log, fetchImpl = fetch, cfg = foC
       let streak = 0;
       for (const d of todo) {
         if (streak >= 2) { log("[fo] two failures in a row: stopping this pass (the exchange may be refusing this server)"); break; }
-        try { const r = await loadDate(d); done.push(r); streak = 0; log(`[fo] ${d}: ${r.status}${r.underlyings ? ` (${r.underlyings} underlyings; ${Object.entries(r.files).map(([k, v]) => `${k} ${typeof v === "string" ? v : "ok"}`).join(", ")})` : ""}`); }
+        try { const r = await loadDate(d); done.push(r); streak = 0; log(`[fo] ${d}: ${r.status}${r.underlyings ? ` (${r.underlyings} underlyings; ${Object.entries(r.files).filter(([k]) => k !== "v").map(([k, v]) => `${k} ${typeof v === "string" ? v : "ok"}`).join(", ")})` : ""}`); }
         catch (e) { streak++; done.push({ date: d, status: "error", error: e.message }); log(`[fo] ${d}: ERROR ${e.message}`); await mark(d, "error", null, 0, 0, { error: e.message.slice(0, 500) }).catch(() => {}); }
         await new Promise((r) => setTimeout(r, 1500));
       }
