@@ -42,12 +42,20 @@ export class ChartSync {
  * series: [{ id, type, data: [{time, value} | {time, open, high, low, close}], options, priceLines?: [...], markers?: [...] }]
  * The first series is the "anchor" used for crosshair sync.
  */
-export function TvChart({ series, height = 300, sync, onReady, logScale = false, scaleMargins, visibleRange, fit = true, rangeKey }) {
+/** Merge a fixed look (e.g. the black Analyst screens) over the app theme, one level deep. */
+function withTheme(base, theme) {
+  if (!theme) return base;
+  const out = { ...base };
+  for (const [k, v] of Object.entries(theme)) out[k] = v && typeof v === "object" && !Array.isArray(v) ? { ...(base[k] || {}), ...v } : v;
+  return out;
+}
+
+export function TvChart({ series, height = 300, sync, onReady, logScale = false, scaleMargins, visibleRange, fit = true, rangeKey, theme }) {
   const el = useRef(null), chartRef = useRef(null), seriesRef = useRef([]), memberRef = useRef(null);
   const viewKey = useRef(undefined); // the view is set once per rangeKey, so toggling a line never resets the zoom
 
   useEffect(() => {
-    const chart = createChart(el.current, { ...themeOptions(), autoSize: true, height });
+    const chart = createChart(el.current, { ...withTheme(themeOptions(), theme), autoSize: true, height });
     chartRef.current = chart;
     const member = { chart, valueAt: null };
     memberRef.current = member;
@@ -58,7 +66,7 @@ export function TvChart({ series, height = 300, sync, onReady, logScale = false,
       chart.subscribeCrosshairMove((p) => sync.cross(member, p?.time ?? null));
     }
     onReady?.(chart);
-    const mo = new MutationObserver(() => chart.applyOptions(themeOptions()));
+    const mo = new MutationObserver(() => chart.applyOptions(withTheme(themeOptions(), theme)));
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     return () => { mo.disconnect(); unsub?.(); chart.remove(); chartRef.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps

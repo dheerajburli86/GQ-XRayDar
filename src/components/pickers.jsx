@@ -4,6 +4,7 @@ import { FIELD, fieldValue } from "../../engine/fields.js";
 import { fmtField, signClass } from "../lib/format.js";
 import { Select, StockLink } from "./ui.jsx";
 import { CAPS } from "../../engine/indexEngine.js";
+import { ANALYST_TFS, normaliseTf, tfLabel } from "../../engine/calendar.js";
 
 /** Table column from a field key. */
 export function fieldColumn(key, opts = {}) {
@@ -67,5 +68,34 @@ export function InstrumentPicker({ value, onChange, placeholder = "Search stock 
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Timeframe picker: the standard list (D, W, 1-11 months, 1 and 2 years) plus any
+ * timeframe the user types ("18M", "3Y", "13W"). Invalid input is refused, never guessed.
+ */
+export function TfPicker({ value, onChange, title = "Candle period", dark = false }) {
+  const [custom, setCustom] = useState(false);
+  const [text, setText] = useState("");
+  const bad = text.trim() !== "" && !normaliseTf(text);
+  const opts = ANALYST_TFS.includes(value) ? ANALYST_TFS : [...ANALYST_TFS, value];
+  const style = dark ? { background: "#111", color: "#eee", border: "1px solid #444" } : undefined;
+  if (custom) {
+    return (
+      <input autoFocus className="input sm" style={{ width: 92, ...style, ...(bad ? { borderColor: "#dc2626" } : {}) }} value={text} placeholder="e.g. 18M, 3Y, 13W"
+        title="Months (M), weeks (W) or years (Y). Enter to apply, Esc to cancel"
+        onChange={(e) => setText(e.target.value)} onBlur={() => setCustom(false)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setCustom(false);
+          if (e.key === "Enter") { const tf = normaliseTf(text); if (tf) { onChange(tf); setCustom(false); setText(""); } }
+        }} />
+    );
+  }
+  return (
+    <select className="input sm" style={style} title={title} value={value} onChange={(e) => (e.target.value === "__custom" ? setCustom(true) : onChange(e.target.value))}>
+      {opts.map((t) => <option key={t} value={t}>{tfLabel(t)}</option>)}
+      <option value="__custom">Custom…</option>
+    </select>
   );
 }

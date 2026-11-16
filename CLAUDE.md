@@ -117,3 +117,15 @@ Local end-to-end check of the batch engine against a throw-away Postgres:
   is appended to `tas_eti_change` (first sight is silent), which is what the "eti" alert kind reads.
 - `unknown` (null) means the rule could not be checked. Never show or filter it as "no".
 - Definitions / labels: `engine/eti.js` (mirror of the ETI README). Screen fields `eti_<key>`.
+
+## Analyst-style screens (added 2026-11-16, owner's screenshots of the "Analyst" software)
+
+- `screens/RSIMMA|RSIACC|RSCMMA|RSCACC` (`src/pages/StackedScreens.jsx`): black look in every theme, two timeframes side
+  by side (default Daily | Weekly), log scale ON by default for every pane including RSIs, "Averages only" hides every
+  price / RSI / RSC line in one click. RSI screens have 4 rows, RSC screens 5 (RSI up to three deep on RSC).
+  RSC benchmark defaults to BSE 500 for Indian stocks. All maths: `engine/analyst.js` (tests `tests/analyst.test.mjs`).
+- Timeframes: D, W, M, 2M, Q, 4M, 5M, 6M, 7M, 8M, 9M, 10M, 11M, Y, 2Y plus anything typed (`normaliseTf`: "18M", "3Y",
+  "13W"). n-month candles sit on a fixed grid from January 2000, n-week from Monday 3 Jan 2000 (`periodKey`).
+  `TfPicker` (components/pickers.jsx) is the selector; chart lab and workspace use it too.
+- Open with the owner: the 5th RSC row is labelled "RSI 14,21" in Analyst; we draw RSI 14 three deep until he says
+  what the 21 is.

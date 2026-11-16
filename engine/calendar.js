@@ -41,8 +41,73 @@ export function periodKey(date, tf) {
     const sm = 2000 * 12 + k * 9, sy = Math.floor(sm / 12), mm = (sm % 12) + 1;
     return `${sy}-${String(mm).padStart(2, "0")}-N`;
   }
+  const g = gridTf(tf);
+  if (g) {
+    if (g.unit === "M") {
+      // n-month candles on a fixed grid of n-month blocks counted from January 2000.
+      // For n that divides 12 the grid is the calendar (2M = Jan-Feb, 4M = Jan-Apr, 24M = even years).
+      const k = Math.floor(((y - 2000) * 12 + (m - 1)) / g.n);
+      const sm = 2000 * 12 + k * g.n, sy = Math.floor(sm / 12), mm = (sm % 12) + 1;
+      return `${sy}-${String(mm).padStart(2, "0")}-${g.n}M`;
+    }
+    // n-week candles on a grid of n-week blocks counted from Monday 3 January 2000
+    const k = Math.floor((toUTC(periodKey(date, "W")) - toUTC("2000-01-03")) / (7 * g.n * DAY));
+    return `${addDays("2000-01-03", k * 7 * g.n)}-${g.n}W`;
+  }
   return String(y);
 }
+
+// ---- multi-month / multi-week and user-defined timeframes --------------------
+// A timeframe is one of the letters above or "<n>M" / "<n>W" (n = 1..120 / 1..104).
+// Equivalent spellings are folded onto the letters: 1M = M, 3M = Q, 6M = H, 9M = N, 12M = Y, 1W = W.
+const LETTER_FOR = { "1D": "D", "1W": "W", "1M": "M", "3M": "Q", "6M": "H", "9M": "N", "12M": "Y" };
+const GRID_CACHE = new Map();
+function gridTf(tf) {
+  if (GRID_CACHE.has(tf)) return GRID_CACHE.get(tf);
+  const m = /^(\d{1,3})([MW])$/.exec(tf);
+  const g = m ? { n: +m[1], unit: m[2] } : null;
+  GRID_CACHE.set(tf, g);
+  return g;
+}
+/** Canonical spelling of a timeframe, or null when it is not one. Accepts "D", "w", "5m", "2y", "13W", "18 months". */
+export function normaliseTf(input) {
+  if (input == null) return null;
+  let s = String(input).trim().toUpperCase().replace(/\s+/g, "");
+  if (TIMEFRAMES.includes(s)) return s;
+  s = s.replace(/MONTHS?$|MTHS?$/, "M").replace(/WEEKS?$|WKS?$/, "W").replace(/YEARS?$|YRS?$/, "Y").replace(/DAYS?$/, "D");
+  const m = /^(\d{1,3})([DWMY])$/.exec(s);
+  if (!m) return null;
+  let n = +m[1], u = m[2];
+  if (n < 1) return null;
+  if (u === "Y") { n *= 12; u = "M"; }
+  if (u === "D") return n === 1 ? "D" : null; // n-day candles are not offered (sessions, not dates, would define them)
+  const k = `${n}${u}`;
+  if (LETTER_FOR[k]) return LETTER_FOR[k];
+  if ((u === "M" && n > 120) || (u === "W" && n > 104)) return null;
+  return k;
+}
+export function tfLabel(tf) {
+  if (TF_LABEL[tf]) return TF_LABEL[tf];
+  const g = gridTf(tf);
+  if (!g) return tf;
+  if (g.unit === "M") return g.n % 12 === 0 ? `${g.n / 12}-year` : `${g.n}-month`;
+  return `${g.n}-week`;
+}
+export function tfShort(tf) {
+  if (TF_SHORT[tf]) return TF_SHORT[tf];
+  const g = gridTf(tf);
+  if (g?.unit === "M" && g.n % 12 === 0) return `${g.n / 12}Y`;
+  return tf;
+}
+/** Approximate candle length in months (for default zoom windows). */
+export function tfMonths(tf) {
+  const fixed = { D: 1 / 21, W: 1 / 4.3, M: 1, Q: 3, H: 6, N: 9, Y: 12 };
+  if (fixed[tf] != null) return fixed[tf];
+  const g = gridTf(tf);
+  return g ? (g.unit === "M" ? g.n : g.n / 4.3) : 1;
+}
+/** Timeframes offered on the Analyst-style screens (owner, 2026-11-16): D, W, 1-11 months, 1 and 2 years; more can be typed. */
+export const ANALYST_TFS = ["D", "W", "M", "2M", "Q", "4M", "5M", "H", "7M", "8M", "N", "10M", "11M", "Y", "24M"];
 
 function weekStart(date) {
   const t = toUTC(date);

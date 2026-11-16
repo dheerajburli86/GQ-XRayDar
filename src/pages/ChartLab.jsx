@@ -1,4 +1,3 @@
-import { CHART_TFS } from "../../engine/calendar.js";
 // Chart lab (features 1.3-1.9, 4.4, 5.4, 6.8): one instrument with
 //   chart styles   candles, Heikin-Ashi, line, Renko, Kagi, Point & Figure
 //   overlays       EMA 20/50/200, MMA groups, support/resistance, compare line,
@@ -14,7 +13,7 @@ import { useData } from "../data/store.jsx";
 import { useAsync } from "../lib/useAsync.js";
 import { navigate } from "../lib/router.js";
 import { PageHead, Seg, Check, Loading, Badge, Empty } from "../components/ui.jsx";
-import { InstrumentPicker } from "../components/pickers.jsx";
+import { InstrumentPicker, TfPicker } from "../components/pickers.jsx";
 import { loadInstrument } from "../lib/series.js";
 import { aggregate, emaStrict, rsi, macd } from "../../engine/indicators.js";
 import { heikinAshi, supportResistance, renko, kagi, pointFigure, volumeProfile, fibonacci } from "../../engine/chartTools.js";
@@ -121,7 +120,7 @@ export default function ChartLab({ route }) {
       </PageHead>
       <div className="card tight">
         <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-          <Seg value={v.tf} options={CHART_TFS} onChange={(tf) => set({ tf })} title="Candle period" />
+          <TfPicker value={v.tf} onChange={(tf) => set({ tf })} />
           <Seg value={v.style} options={STYLES.map(([value, label]) => ({ value, label }))} onChange={(style) => set({ style })} />
           <span className="sep" />
           <Check checked={v.ema} onChange={(x) => set({ ema: x })}>EMA 20/50/200</Check>

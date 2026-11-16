@@ -1,4 +1,3 @@
-import { CHART_TFS } from "../../engine/calendar.js";
 // Multi-chart workspace: any securities, indices, benchmarks and indicator
 // panels side by side, saved as named layouts.
 import { useMemo, useState } from "react";
@@ -6,7 +5,7 @@ import { useData } from "../data/store.jsx";
 import { useAsync } from "../lib/useAsync.js";
 import { PageHead, Seg, Select, Loading } from "../components/ui.jsx";
 import { TvChart, ChartSync, lineData } from "../components/TvChart.jsx";
-import { InstrumentPicker } from "../components/pickers.jsx";
+import { InstrumentPicker, TfPicker } from "../components/pickers.jsx";
 import { loadInstrument, alignCurrency } from "../lib/series.js";
 import { aggregate, ema, emaStrict, rsi, macd, rsc } from "../../engine/indicators.js";
 import { usePersistent, uid } from "../lib/storage.js";
@@ -74,7 +73,7 @@ function ChartPanel({ p, onChange, onRemove, sync }) {
       <div className="panel-head">
         <InstrumentPicker value={p.inst} onChange={(r) => onChange({ inst: r })} width={210} />
         <div className="row">
-          <Seg value={p.tf} options={CHART_TFS} onChange={(tf) => onChange({ tf })} />
+          <TfPicker value={p.tf} onChange={(tf) => onChange({ tf })} />
           <Select value={p.ind} options={INDICATORS} onChange={(ind) => onChange({ ind })} />
           {p.ind === "rsc" && <InstrumentPicker value={p.bench} onChange={(r) => onChange({ bench: r })} width={170} placeholder="Benchmark…" />}
           <button className="btn sm ghost" onClick={onRemove} title="Remove panel">✕</button>

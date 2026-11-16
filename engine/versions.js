@@ -21,6 +21,7 @@ export const MODEL_VERSIONS = {
   validation: "1.0 walk-forward, parameter grid, Brier and calibration",
   glocom: "1.1 heatmap rule sheet (LTW 40 = 6M >= 0.4, as scraper_common.classify) (1W / 6M / 1Y percentiles); LOCOM within industry group; group rank history",
   chartPatterns: "1.0 pivot-based classical patterns",
+  analystScreens: "1.0 two-column RSI/RSC stacks, MMA 3-15/30-60, ACC 4/14/26/39, n-month / n-week candles",
   assistant: "1.0 deterministic parser + stored calculations (built-in)",
   foCollector: "3 (FO_VERSION)",
 };
