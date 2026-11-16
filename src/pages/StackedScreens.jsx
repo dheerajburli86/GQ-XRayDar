@@ -46,8 +46,8 @@ export default function StackedScreens({ route }) {
   const left = tfs?.left || "D", right = tfs?.right || "W";
   const setTf = (side, tf) => setTfs({ left, right, [side]: tf });
   // date range: From opens the window (and, when "candles from From" is on, starts the candle grid); To ends the data
-  const [range, setRange] = usePersistent("analyst.range", { from: "", to: "", anchor: true });
-  const rg = { from: "", to: "", anchor: true, ...(range || {}) };
+  const [range, setRange] = usePersistent("analyst.range.v2", { from: "", to: "", anchor: false });
+  const rg = { from: "", to: "", anchor: false, ...(range || {}) };
   const setRg = (patch) => setRange({ ...rg, ...patch });
   const badRange = rg.from && rg.to && rg.from > rg.to;
   const from = badRange ? "" : rg.from, to = badRange ? "" : rg.to;
