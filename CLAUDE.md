@@ -130,5 +130,6 @@ Local end-to-end check of the batch engine against a throw-away Postgres:
 - From / To dates on the Analyst screens: To drops every bar after it; From opens the window and, with "Candles start
   from From date" ticked (off by default: candles count from January), anchors every candle of 2 months or longer (and n-week) on From's month / week
   (`periodKey(date, tf, anchor)`). Bars before From still warm up the RSIs and EMAs. Without From, the grids above apply.
-- RSI period is 14 by default and the user can change it on the page (owner 2026-11-16: "RSI 14 by default, one can change if
-  wishes"), so the 5th RSC row's "21" in Analyst is just a changed period, not a second indicator.
+- RSI period is 14 on every row and every timeframe (owner 2026-11-16: "keep 14 default for all period"). The "14,21" in
+  Analyst's 5th RSC row label is NOT used: no 21, no second indicator. The page has an RSI period box for anyone who wants
+  to change it; the default stays 14.
