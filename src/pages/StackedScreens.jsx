@@ -52,6 +52,7 @@ export default function StackedScreens({ route }) {
   const badRange = rg.from && rg.to && rg.from > rg.to;
   const from = badRange ? "" : rg.from, to = badRange ? "" : rg.to;
   const anchor = from && rg.anchor ? from : null;
+  const [rsiN, setRsiN] = usePersistent("analyst.rsiPeriod", null); // null = the methodology default (14)
   const [active, setActive] = useState(1);
   const [rangeKey, setRangeKey] = useState(0);
   const [syncs] = useState(() => [new ChartSync(), new ChartSync()]);
@@ -78,7 +79,9 @@ export default function StackedScreens({ route }) {
 
   useEffect(() => { setRangeKey((k) => k + 1); }, [secId, mode, left, right, from, to, anchor]);
 
-  const m = d.info.methodology.indicators;
+  const m0 = d.info.methodology.indicators;
+  const rsiPer = Number.isInteger(rsiN) && rsiN >= 2 && rsiN <= 200 ? rsiN : m0.rsiPeriod;
+  const m = useMemo(() => ({ ...m0, rsiPeriod: rsiPer }), [m0, rsiPer]);
   const columns = useMemo(() => {
     if (!data?.inst) return null;
     const { inst, bench, aligned } = data;
@@ -107,6 +110,10 @@ export default function StackedScreens({ route }) {
       <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
         <button className={`btn sm ${v.avgOnly ? "primary" : ""}`} onClick={() => setV({ avgOnly: !v.avgOnly })} title="Hide every price / RSI / RSC line and keep only the averages">{v.avgOnly ? "Averages only: ON" : "Averages only"}</button>
         <Check checked={v.log} onChange={(x) => setV({ log: x })}>Log scale</Check>
+        <span className="small muted">RSI period</span>
+        <input type="number" min="2" max="200" value={rsiPer} style={{ width: 56 }} title="RSI length in candles (default 14)"
+          onChange={(e) => { const n = parseInt(e.target.value, 10); setRsiN(Number.isFinite(n) ? n : null); }} />
+        {rsiPer !== m0.rsiPeriod && <button className="btn sm" onClick={() => setRsiN(null)}>Reset to {m0.rsiPeriod}</button>}
         {cfg.overlay === "mma" ? <>
           <Check checked={v.short} onChange={(x) => setV({ short: x })} color={YELLOW}>Short EMA 3-15</Check>
           <Check checked={v.long} onChange={(x) => setV({ long: x })} color={RED}>Long EMA 30-60</Check>
