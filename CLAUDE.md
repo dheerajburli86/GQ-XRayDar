@@ -127,5 +127,8 @@ Local end-to-end check of the batch engine against a throw-away Postgres:
 - Timeframes: D, W, M, 2M, Q, 4M, 5M, 6M, 7M, 8M, 9M, 10M, 11M, Y, 2Y plus anything typed (`normaliseTf`: "18M", "3Y",
   "13W"). n-month candles sit on a fixed grid from January 2000, n-week from Monday 3 Jan 2000 (`periodKey`).
   `TfPicker` (components/pickers.jsx) is the selector; chart lab and workspace use it too.
+- From / To dates on the Analyst screens: To drops every bar after it; From opens the window and, with "Candles start
+  from From date" on (default), anchors every candle of 2 months or longer (and n-week) on From's month / week
+  (`periodKey(date, tf, anchor)`). Bars before From still warm up the RSIs and EMAs. Without From, the grids above apply.
 - Open with the owner: the 5th RSC row is labelled "RSI 14,21" in Analyst; we draw RSI 14 three deep until he says
   what the 21 is.

@@ -54,3 +54,29 @@ test("Analyst screens: rows, nested RSI, header", () => {
   assert.equal(noBench.rows[1].missing, "no comparison series");
   assert.equal(analystDate("2026-11-13"), "13-Nov-2026");
 });
+
+test("start date anchors multi-month candles; To cuts the data", () => {
+  // 5-month blocks from March 2021: Mar-Jul 2021, Aug-Dec 2021, Jan-May 2022 ...
+  assert.equal(periodKey("2021-03-01", "5M", "2021-03-15"), "2021-03-5M");
+  assert.equal(periodKey("2021-07-30", "5M", "2021-03-15"), "2021-03-5M");
+  assert.equal(periodKey("2021-08-02", "5M", "2021-03-15"), "2021-08-5M");
+  assert.equal(periodKey("2021-02-26", "5M", "2021-03-15"), "2020-10-5M"); // before the anchor: blocks run backwards too
+  // quarters anchored on February: Feb-Apr, May-Jul ...
+  assert.equal(periodKey("2024-04-30", "Q", "2024-02-01"), periodKey("2024-02-01", "Q", "2024-02-01"));
+  assert.notEqual(periodKey("2024-05-02", "Q", "2024-02-01"), periodKey("2024-04-30", "Q", "2024-02-01"));
+  // D / W / M ignore the anchor
+  assert.equal(periodKey("2024-04-30", "M", "2024-02-11"), "2024-04");
+  // 3-week blocks from the anchor's Monday
+  assert.equal(periodKey("2024-01-24", "3W", "2024-01-10"), "2024-01-08-3W");
+  assert.equal(periodKey("2024-01-29", "3W", "2024-01-10"), "2024-01-29-3W");
+
+  const time = [], close = [];
+  for (let t = Date.UTC(2020, 0, 1); t <= Date.UTC(2023, 11, 31); t += 86400000) {
+    const d = new Date(t); if (d.getUTCDay() === 0 || d.getUTCDay() === 6) continue;
+    time.push(d.toISOString().slice(0, 10)); close.push(100 + time.length * 0.1);
+  }
+  const bars = { time, open: close, high: close, low: close, close };
+  const col = buildAnalystColumn({ mode: "RSIMMA", tf: "5M", bars, to: "2022-09-15", anchor: "2021-03-01" });
+  assert.equal(col.header.date, "2022-09-15");            // the last candle stops at To
+  assert.ok(col.rows[0].time.includes("2021-07-30"));     // Mar-Jul 2021 candle ends on its last session
+});

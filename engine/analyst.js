@@ -28,7 +28,8 @@ export function analystRows(mode) {
 }
 
 export function rowLabel(row, tf, per, benchLabel) {
-  const t = `${per}${tfShort(tf)}`;
+  const short = tfShort(tf);
+  const t = short.length === 1 ? `${per}${short}` : `${per} (${short})`; // "RSI 14W", but "RSI 14 (5M)" not "145M"
   if (row.kind === "price") return "Price";
   if (row.kind === "rsc") return `RSC vs ${benchLabel || "benchmark"}`;
   const src = row.of === "rsc" ? `RSC vs ${benchLabel || "benchmark"}` : "Close";
@@ -43,11 +44,23 @@ export const analystDate = (d) => (d ? `${d.slice(8, 10)}-${ISO_MON[+d.slice(5, 
  * One column of a screen.
  * bars: daily columns {time, open, high, low, close, volume?}; bench: {time, close} for RSC modes;
  * rscCloses: the stock's closes in the benchmark's currency when the two differ (defaults to bars.close).
+ * to ("YYYY-MM-DD", optional): drop every bar after it, so the last candle is the one holding that date.
+ * anchor ("YYYY-MM-DD", optional): count multi-month / multi-week candles from that date (periodKey).
+ * Bars before the start date still feed the RSIs and averages, so they are warmed up when the window opens.
  * Returns { tf, header, rows: [{ kind, depth, label, time, base, avgs: [{ period, group, values }] }] }.
  */
-export function buildAnalystColumn({ mode, tf, bars, bench = null, rscCloses = null, benchLabel = "", rsiPeriod = 14, rsiMethod = "house", rscBase = 100 }) {
+export function buildAnalystColumn({ mode, tf, bars, bench = null, rscCloses = null, benchLabel = "", rsiPeriod = 14, rsiMethod = "house", rscBase = 100, to = null, anchor = null }) {
   const m = ANALYST_MODES[mode];
-  const agg = aggregate({ ...bars, volume: bars.volume || bars.close.map(() => 0) }, tf);
+  if (to) {
+    let k = bars.time.length;
+    while (k > 0 && bars.time[k - 1] > to) k--;
+    if (k < bars.time.length) {
+      const cut = (a) => (Array.isArray(a) ? a.slice(0, k) : a);
+      bars = { ...bars, time: cut(bars.time), open: cut(bars.open), high: cut(bars.high), low: cut(bars.low), close: cut(bars.close), volume: cut(bars.volume) };
+      if (rscCloses) rscCloses = rscCloses.slice(0, k);
+    }
+  }
+  const agg = aggregate({ ...bars, volume: bars.volume || bars.close.map(() => 0) }, tf, anchor);
   const n = agg.time.length;
   const header = n ? {
     open: agg.open[n - 1], high: agg.high[n - 1], low: agg.low[n - 1], close: agg.close[n - 1],
@@ -55,7 +68,7 @@ export function buildAnalystColumn({ mode, tf, bars, bench = null, rscCloses = n
     date: agg.time[n - 1], candles: n,
   } : null;
   let rel = null;
-  if (m.base === "rsc" && bench) rel = rsc(bars.time, rscCloses || bars.close, bench.time, bench.close, tf, rscBase);
+  if (m.base === "rsc" && bench) rel = rsc(bars.time, rscCloses || bars.close, bench.time, bench.close, tf, rscBase, anchor);
   const periods = m.overlay === "mma" ? [...MMA_SHORT, ...MMA_LONG] : ACC_PERIODS;
   const rows = analystRows(mode).map((row) => {
     let time, base;

@@ -186,12 +186,12 @@ export function realisedVol(xs, n, i = xs.length - 1, periodsPerYear = 252) {
  *  its LAST session, so a weekly candle ends on the Friday (or holiday-shortened
  *  last day) it actually covers. EMA N on the result is N candles of that
  *  timeframe -- never a daily EMA resampled. */
-export function aggregate(b, tf) {
+export function aggregate(b, tf, anchor = null) {
   if (tf === "D") return b;
   const out = { time: [], open: [], high: [], low: [], close: [], volume: [], key: [] };
   let cur = -1, lastKey = null;
   for (let i = 0; i < b.time.length; i++) {
-    const k = periodKey(b.time[i], tf);
+    const k = periodKey(b.time[i], tf, anchor);
     if (k !== lastKey) {
       out.time.push(b.time[i]); out.open.push(b.open[i]); out.high.push(b.high[i]); out.low.push(b.low[i]);
       out.close.push(b.close[i]); out.volume.push(b.volume ? b.volume[i] || 0 : 0); out.key.push(k);
@@ -208,12 +208,12 @@ export function aggregate(b, tf) {
 }
 
 /** Close-only series aggregated to a timeframe: [{key,time,close}] arrays. */
-export function aggregateCloses(times, closes, tf) {
+export function aggregateCloses(times, closes, tf, anchor = null) {
   const res = { time: [], close: [], key: [] };
   let last = null;
   for (let i = 0; i < times.length; i++) {
     if (!isNum(closes[i])) continue;
-    const k = tf === "D" ? times[i] : periodKey(times[i], tf);
+    const k = tf === "D" ? times[i] : periodKey(times[i], tf, anchor);
     if (k !== last) { res.time.push(times[i]); res.close.push(closes[i]); res.key.push(k); last = k; }
     else { res.time[res.time.length - 1] = times[i]; res.close[res.close.length - 1] = closes[i]; }
   }
@@ -224,8 +224,8 @@ export function aggregateCloses(times, closes, tf) {
  *  Both are aggregated to tf FIRST, then joined on the candle key, so a weekly
  *  RSC is (A's weekly close / B's weekly close) for the same week. Rebased to
  *  `base` at the first common candle. Returns {time, value, key}. */
-export function rsc(aTimes, aCloses, bTimes, bCloses, tf = "D", base = 100) {
-  const A = aggregateCloses(aTimes, aCloses, tf), B = aggregateCloses(bTimes, bCloses, tf);
+export function rsc(aTimes, aCloses, bTimes, bCloses, tf = "D", base = 100, anchor = null) {
+  const A = aggregateCloses(aTimes, aCloses, tf, anchor), B = aggregateCloses(bTimes, bCloses, tf, anchor);
   const bMap = new Map(B.key.map((k, i) => [k, B.close[i]]));
   const out = { time: [], value: [], key: [] };
   let first = null;

@@ -22,39 +22,50 @@ export const dayOfWeek = (d) => new Date(toUTC(d)).getUTCDay();
 export const isWeekday = (d) => { const w = dayOfWeek(d); return w !== 0 && w !== 6; };
 
 const WEEK_CACHE = new Map();
-/** Period bucket for a candle timeframe. */
-export function periodKey(date, tf) {
+/** Period bucket for a candle timeframe.
+ *  anchor ("YYYY-MM-DD", optional): count multi-month and multi-week candles from this date's
+ *  month / week instead of the default grid (calendar for Q / 6M / Y, January 2000 for the rest).
+ *  D, W and M ignore it: a day, a week and a month are the same whatever the start. */
+export function periodKey(date, tf, anchor = null) {
   if (tf === "D") return date;
-  if (tf === "W") {
-    let w = WEEK_CACHE.get(date);
-    if (w === undefined) { w = weekStart(date); if (WEEK_CACHE.size > 200000) WEEK_CACHE.clear(); WEEK_CACHE.set(date, w); }
-    return w;
-  }
+  if (tf === "W") return weekKey(date);
   const y = +date.slice(0, 4), m = +date.slice(5, 7);
   if (tf === "M") return date.slice(0, 7);
+  if (anchor) {
+    const n = tf === "Q" ? 3 : tf === "H" ? 6 : tf === "N" ? 9 : tf === "Y" ? 12 : null;
+    const g = n ? { n, unit: "M" } : gridTf(tf);
+    if (g) return g.unit === "M" ? monthBlock(y, m, g.n, +anchor.slice(0, 4), +anchor.slice(5, 7))
+      : weekBlock(date, g.n, weekKey(anchor));
+  }
   if (tf === "Q") return `${y}-Q${Math.floor((m - 1) / 3) + 1}`;
   if (tf === "H") return `${y}-H${m <= 6 ? 1 : 2}`;
-  if (tf === "N") {
-    // 9-month candles do not fit a calendar year, so they run on a fixed grid
-    // of 9-month blocks counted from January 2000 (Jan-Sep 2000, Oct 2000-Jun 2001, ...).
-    const k = Math.floor(((y - 2000) * 12 + (m - 1)) / 9);
-    const sm = 2000 * 12 + k * 9, sy = Math.floor(sm / 12), mm = (sm % 12) + 1;
-    return `${sy}-${String(mm).padStart(2, "0")}-N`;
-  }
+  // 9-month candles do not fit a calendar year: fixed grid of 9-month blocks from January 2000
+  if (tf === "N") return monthBlock(y, m, 9, 2000, 1).replace(/9M$/, "N"); // key kept as "YYYY-MM-N"
   const g = gridTf(tf);
   if (g) {
-    if (g.unit === "M") {
-      // n-month candles on a fixed grid of n-month blocks counted from January 2000.
-      // For n that divides 12 the grid is the calendar (2M = Jan-Feb, 4M = Jan-Apr, 24M = even years).
-      const k = Math.floor(((y - 2000) * 12 + (m - 1)) / g.n);
-      const sm = 2000 * 12 + k * g.n, sy = Math.floor(sm / 12), mm = (sm % 12) + 1;
-      return `${sy}-${String(mm).padStart(2, "0")}-${g.n}M`;
-    }
-    // n-week candles on a grid of n-week blocks counted from Monday 3 January 2000
-    const k = Math.floor((toUTC(periodKey(date, "W")) - toUTC("2000-01-03")) / (7 * g.n * DAY));
-    return `${addDays("2000-01-03", k * 7 * g.n)}-${g.n}W`;
+    // n-month candles on a fixed grid of n-month blocks counted from January 2000.
+    // For n that divides 12 the grid is the calendar (2M = Jan-Feb, 4M = Jan-Apr, 24M = even years).
+    if (g.unit === "M") return monthBlock(y, m, g.n, 2000, 1);
+    return weekBlock(date, g.n, "2000-01-03"); // n-week blocks from Monday 3 January 2000
   }
   return String(y);
+}
+function weekKey(date) {
+  let w = WEEK_CACHE.get(date);
+  if (w === undefined) { w = weekStart(date); if (WEEK_CACHE.size > 200000) WEEK_CACHE.clear(); WEEK_CACHE.set(date, w); }
+  return w;
+}
+/** Start of the n-month block holding (y, m), blocks counted from (ay, am). Key "YYYY-MM-<n>M". */
+function monthBlock(y, m, n, ay, am) {
+  const a = ay * 12 + (am - 1);
+  const k = Math.floor((y * 12 + (m - 1) - a) / n);
+  const sm = a + k * n, sy = Math.floor(sm / 12), mm = (sm % 12) + 1;
+  return `${sy}-${String(mm).padStart(2, "0")}-${n}M`;
+}
+/** Monday starting the n-week block holding date, blocks counted from Monday a0. */
+function weekBlock(date, n, a0) {
+  const k = Math.floor((toUTC(weekKey(date)) - toUTC(a0)) / (7 * n * DAY));
+  return `${addDays(a0, k * 7 * n)}-${n}W`;
 }
 
 // ---- multi-month / multi-week and user-defined timeframes --------------------

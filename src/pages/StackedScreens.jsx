@@ -45,6 +45,13 @@ export default function StackedScreens({ route }) {
   const [tfs, setTfs] = usePersistent(`analyst.tf.${mode}`, null);
   const left = tfs?.left || "D", right = tfs?.right || "W";
   const setTf = (side, tf) => setTfs({ left, right, [side]: tf });
+  // date range: From opens the window (and, when "candles from From" is on, starts the candle grid); To ends the data
+  const [range, setRange] = usePersistent("analyst.range", { from: "", to: "", anchor: true });
+  const rg = { from: "", to: "", anchor: true, ...(range || {}) };
+  const setRg = (patch) => setRange({ ...rg, ...patch });
+  const badRange = rg.from && rg.to && rg.from > rg.to;
+  const from = badRange ? "" : rg.from, to = badRange ? "" : rg.to;
+  const anchor = from && rg.anchor ? from : null;
   const [active, setActive] = useState(1);
   const [rangeKey, setRangeKey] = useState(0);
   const [syncs] = useState(() => [new ChartSync(), new ChartSync()]);
@@ -69,7 +76,7 @@ export default function StackedScreens({ route }) {
     return { inst, bench, aligned };
   }, [secId, cfg.base, benchRef.kind, benchRef.key, benchRef.id]);
 
-  useEffect(() => { setRangeKey((k) => k + 1); }, [secId, mode, left, right]);
+  useEffect(() => { setRangeKey((k) => k + 1); }, [secId, mode, left, right, from, to, anchor]);
 
   const m = d.info.methodology.indicators;
   const columns = useMemo(() => {
@@ -78,9 +85,9 @@ export default function StackedScreens({ route }) {
     return [left, right].map((tf) => buildAnalystColumn({
       mode, tf, bars: inst, benchLabel,
       bench: bench && aligned ? { time: bench.time, close: aligned.b } : null, rscCloses: aligned?.a,
-      rsiPeriod: m.rsiPeriod, rsiMethod: m.rsiMethod, rscBase: m.rscRebase,
+      rsiPeriod: m.rsiPeriod, rsiMethod: m.rsiMethod, rscBase: m.rscRebase, to: to || null, anchor,
     }));
-  }, [data, left, right, mode, benchLabel, m]);
+  }, [data, left, right, mode, benchLabel, m, to, anchor]);
 
   const go = (r) => navigate(`screens/${mode}/${r.id}`, route.query.bench ? { bench: route.query.bench } : undefined);
   const setBench = (r) => navigate(`screens/${mode}/${secId}`, { bench: r.kind === "index" ? `idx:${r.key}` : r.id });
@@ -104,6 +111,13 @@ export default function StackedScreens({ route }) {
           <Check checked={v.short} onChange={(x) => setV({ short: x })} color={YELLOW}>Short EMA 3-15</Check>
           <Check checked={v.long} onChange={(x) => setV({ long: x })} color={RED}>Long EMA 30-60</Check>
         </> : ACC_PERIODS.map((p) => <Check key={p} checked={v.acc[p]} onChange={(x) => setV({ acc: { ...v.acc, [p]: x } })} color={ACC_COLOR[p]}>EMA {p}</Check>)}
+        <span className="small muted">From</span>
+        <input type="date" value={rg.from} max={rg.to || undefined} onChange={(e) => setRg({ from: e.target.value })} title="Start date: the chart opens here" />
+        <span className="small muted">To</span>
+        <input type="date" value={rg.to} min={rg.from || undefined} onChange={(e) => setRg({ to: e.target.value })} title="End date: nothing after it is used" />
+        <Check checked={rg.anchor} onChange={(x) => setRg({ anchor: x })}>Candles start from From date</Check>
+        {(rg.from || rg.to) && <button className="btn sm" onClick={() => setRg({ from: "", to: "" })}>Clear dates</button>}
+        {badRange && <Badge kind="r">From is after To: dates ignored</Badge>}
         <button className="btn sm" onClick={() => setRangeKey((k) => k + 1)} title="Back to the default window">⇥ Latest</button>
         {sec && <a className="btn sm" href={`#/stock/${sec.id}`}>Stock page</a>}
         {data?.aligned && data.aligned.currency === "USD" && data.inst.currency !== "USD" && <Badge>RSC in USD (different currencies)</Badge>}
@@ -117,19 +131,19 @@ export default function StackedScreens({ route }) {
                 {tfLabel(col.tf)}{col.header ? `  ${fmt(col.header.open)}  ${fmt(col.header.high)}  ${fmt(col.header.low)}  ${fmt(col.header.close)}  [ ${col.header.chg == null ? "—" : `${col.header.chg >= 0 ? "" : "-"}${Math.abs(col.header.chg * 100).toFixed(2)}%`} ] - ${analystDate(col.header.date)}` : "  no data"}
               </div>
               {col.rows.map((row, ri) => (
-                <Pane key={`${ci}-${ri}`} row={row} ri={ri} last={ri === col.rows.length - 1} mode={mode} overlay={cfg.overlay} v={v} tf={col.tf}
+                <Pane key={`${ci}-${ri}`} row={row} ri={ri} last={ri === col.rows.length - 1} mode={mode} overlay={cfg.overlay} v={v} tf={col.tf} from={from}
                   height={ri === 0 ? Math.round(paneH * 1.35) : paneH} sync={syncs[ci]} rangeKey={`${rangeKey}|${ci}`} />
               ))}
             </div>
           ))}
         </div>
       )}
-      <div className="small muted">RSI {m.rsiPeriod} and every EMA are counted in candles of that column. n-month candles run on a fixed grid from January 2000 (2M, 4M and 2Y line up with the calendar). Click a column to select it.</div>
+      <div className="small muted">RSI {m.rsiPeriod} and every EMA are counted in candles of that column. {anchor ? `Candles of 2 months and longer are counted from ${analystDate(anchor)}; data before it still warms up the RSIs and averages.` : "n-month candles run on a fixed grid from January 2000 (2M, 4M and 2Y line up with the calendar)."}{to ? ` Nothing after ${analystDate(to)} is used.` : ""} Click a column to select it.</div>
     </div>
   );
 }
 
-function Pane({ row, ri, last, mode, overlay, v, tf, height, sync, rangeKey }) {
+function Pane({ row, ri, last, mode, overlay, v, tf, from, height, sync, rangeKey }) {
   const built = useMemo(() => {
     if (!row.time.length) return null;
     const keep = (x) => x != null && Number.isFinite(x) && (!v.log || x > 0);
@@ -153,11 +167,16 @@ function Pane({ row, ri, last, mode, overlay, v, tf, height, sync, rangeKey }) {
   const visibleRange = useMemo(() => {
     const t = row.time, n = t.length;
     if (!n) return null;
+    if (from) {
+      // first candle holding a session on or after From (its stamp is its last session)
+      const i = t.findIndex((x) => x >= from);
+      return i < 0 ? null : { from: t[i], to: t[n - 1] };
+    }
     const months = tfMonths(tf);
     if (months >= 1) return null;
     const show = months < 0.1 ? 500 : 520;
     return { from: t[Math.max(0, n - show)], to: t[n - 1] };
-  }, [row.time, tf]);
+  }, [row.time, tf, from]);
 
   return (
     <div className="anl-pane">
