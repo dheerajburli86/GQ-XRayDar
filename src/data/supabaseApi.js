@@ -11,17 +11,28 @@ const PAGE = Number(import.meta.env.VITE_PAGE_ROWS) || 1000;
 export function createSupabaseApi(url, key) {
   const sb = createClient(url, key, { auth: { persistSession: false } });
 
+  // Pages are fetched in parallel (PostgREST caps a response at PAGE rows, so a 29k-row table is 29 requests).
+  // The first page also returns the row count; the rest go out PAR at a time and are joined in order.
+  const PAR = 8;
   async function all(table, select, build = (q) => q, order = null) {
-    const out = [];
-    for (let from = 0; ; from += PAGE) {
-      let q = sb.from(table).select(select).range(from, from + PAGE - 1);
+    const page = async (from, count) => {
+      let q = sb.from(table).select(select, count ? { count: "exact" } : undefined).range(from, from + PAGE - 1);
       if (order) q = q.order(order, { ascending: true });
       q = build(q);
-      const { data, error } = await q;
+      const { data, error, count: n } = await q;
       if (error) throw new Error(`${table}: ${error.message}`);
-      out.push(...data);
-      if (data.length < PAGE) break;
-    }
+      return { data, n };
+    };
+    const first = await page(0, true);
+    if (first.data.length < PAGE) return first.data;
+    const pages = Math.ceil((first.n ?? first.data.length) / PAGE);
+    const parts = new Array(pages); parts[0] = first.data;
+    let next = 1;
+    const worker = async () => { while (next < pages) { const i = next++; parts[i] = (await page(i * PAGE)).data; } };
+    await Promise.all(Array.from({ length: Math.min(PAR, pages - 1) }, worker));
+    // a table that grew while loading: keep going serially until a short page
+    let out = parts.flat();
+    if (parts[pages - 1].length === PAGE) for (let from = pages * PAGE; ; from += PAGE) { const { data } = await page(from); out = out.concat(data); if (data.length < PAGE) break; }
     return out;
   }
   const one = async (q) => { const { data, error } = await q; if (error) throw new Error(error.message); return data; };

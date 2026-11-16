@@ -6,6 +6,7 @@ import { decodeFlat } from "../../engine/screenRow.js";
 import { usePersistent } from "../lib/storage.js";
 import { METHODOLOGY } from "../../engine/methodology.js";
 import { clearSeriesCache } from "../lib/series.js";
+import { idbGet, idbSet } from "../lib/idbCache.js";
 
 const Ctx = createContext(null);
 export const useData = () => useContext(Ctx);
@@ -30,7 +31,15 @@ export function DataProvider({ children }) {
       try {
         if (reloadKey) { await api.clearCache?.(); clearSeriesCache(); }
         const info = await api.info();
-        const [secs, srows, idx, regimes] = await Promise.all([api.securities(), api.screenRows(), api.indexList(), api.regimes()]);
+        // the startup tables only change when the engine finishes a new run, so they are cached per run
+        const ck = DATA_SOURCE === "supabase" && info.run?.runId ? `bundle:${info.run.runId}:${info.run.finished || ""}` : null;
+        let bundle = ck && !reloadKey ? await idbGet(ck) : null;
+        if (!bundle) {
+          const [secs, srows, idx, regimes] = await Promise.all([api.securities(), api.screenRows(), api.indexList(), api.regimes()]);
+          bundle = { secs, srows, idx, regimes };
+          if (ck) idbSet(ck, bundle);
+        }
+        const { secs, srows, idx, regimes } = bundle;
         if (!alive) return;
         const secById = new Map(secs.map((x) => [x.id, x]));
         const keys = info.screenKeys;
