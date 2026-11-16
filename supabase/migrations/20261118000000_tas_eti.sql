@@ -15,7 +15,7 @@ create table if not exists tas_eti_characteristic (
   characteristic text not null,
   framework      text not null,
   isin           text, nse_symbol text, bse_code text, company_name text,
-  instrument_id  bigint,              -- heatmap instruments.id (india_stocks), matched by ISIN then NSE symbol
+  instrument_id  uuid,                -- heatmap instruments.id (india_stocks), matched by ISIN then NSE symbol
   as_of          date,
   meets          boolean,
   value          jsonb,
@@ -31,7 +31,7 @@ create index if not exists tas_eti_characteristic_inst on tas_eti_characteristic
 create table if not exists tas_eti_change (
   id             bigserial primary key,
   company_id     bigint not null,
-  instrument_id  bigint,
+  instrument_id  uuid,
   characteristic text not null,
   from_meets     boolean,
   to_meets       boolean,
