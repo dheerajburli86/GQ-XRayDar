@@ -45,3 +45,17 @@ test("rate limiter: blocks over the limit and forgets idle keys", () => {
   l.sweep(Date.now() + 61_000);
   assert.equal(l.hits.size, 0);
 });
+
+test("push: real VAPID keys switch it on; bad keys switch it off without throwing", async () => {
+  const { createPush } = await import("../server/lib/push.mjs");
+  const mod = await import("web-push");
+  const keys = (mod.default?.generateVAPIDKeys ? mod.default : mod).generateVAPIDKeys();
+  const on = await createPush({ vapidPublic: keys.publicKey, vapidPrivate: keys.privateKey, vapidSubject: "mailto:t@gquants.com" }, null, () => {});
+  assert.equal(on.enabled, true);
+  const logs = [];
+  const bad = await createPush({ vapidPublic: "nope", vapidPrivate: "nope", vapidSubject: "mailto:t@gquants.com" }, null, (m) => logs.push(m));
+  assert.equal(bad.enabled, false);
+  assert.match(logs[0], /disabled/);
+  const none = await createPush({}, null);
+  assert.equal(none.enabled, false);
+});

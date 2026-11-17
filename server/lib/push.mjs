@@ -1,9 +1,19 @@
 // Web push (phone / desktop pop-ups for the installed app). Optional: on only
 // when VAPID keys are set. Generate them once with: npx web-push generate-vapid-keys
 export async function createPush(cfg, pool, log = console.log) {
-  if (!cfg.vapidPublic || !cfg.vapidPrivate) return { enabled: false, publicKey: null, async notify() { return { skipped: "push not configured" }; } };
-  const { default: webpush } = await import("web-push");
-  webpush.setVapidDetails(cfg.vapidSubject, cfg.vapidPublic, cfg.vapidPrivate);
+  const off = (why) => ({ enabled: false, publicKey: null, reason: why, async notify() { return { skipped: why }; } });
+  if (!cfg.vapidPublic || !cfg.vapidPrivate) return off("push not configured");
+  // web-push is CommonJS: under ESM its functions sit on the module itself, not on .default
+  let webpush;
+  try {
+    const mod = await import("web-push");
+    webpush = mod.default?.setVapidDetails ? mod.default : mod;
+    webpush.setVapidDetails(cfg.vapidSubject, cfg.vapidPublic, cfg.vapidPrivate);
+  } catch (e) {
+    // bad keys must switch phone pop-ups off, never stop the whole server
+    log(`[push] disabled: ${e.message}`);
+    return off(`push disabled: ${e.message}`);
+  }
   return {
     enabled: true, publicKey: cfg.vapidPublic,
     async notify(userId, payload) {
