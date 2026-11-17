@@ -133,3 +133,12 @@ Local end-to-end check of the batch engine against a throw-away Postgres:
 - RSI period is 14 on every row and every timeframe (owner 2026-11-16: "keep 14 default for all period"). The "14,21" in
   Analyst's 5th RSC row label is NOT used: no 21, no second indicator. The page has an RSI period box for anyone who wants
   to change it; the default stays 14.
+
+## Robustness and speed (added 2026-11-17)
+
+- **Every page sits inside `ErrorBoundary`** (`src/components/ErrorBoundary.jsx`, wired in `App.jsx`): a page that throws shows "Try again / Reload" instead of a blank screen, and the menu keeps working. A missing page file after a deploy retries once, then reloads the app once (30 s guard in sessionStorage).
+- **Charts never throw on bad data**: `cleanSeriesData` in `TvChart.jsx` sorts, de-duplicates and drops non-numeric rows; each series is added in its own try/catch (Chart lab uses the same helper). Do not call `series.setData` on raw rows elsewhere.
+- **Supabase reads are cached and retried** (`src/data/supabaseApi.js`): an in-memory LRU shares in-flight requests; index series, breadth, rotation, GLOCOM, WW, EWCW and backtest results are also kept in IndexedDB per engine run (`runGet/runSet`, purged when a new run lands). Transient network errors retry twice. Answers are shared: pages must not mutate them.
+- A failed load that a page does not render shows a Retry banner (`gqta-load-error` event from `useAsync`). Page files are prefetched in idle time after startup.
+- **Server**: per-request timeout (150 s, 200 s for the agent), pg pool timeouts + `statement_timeout`, gzip for JSON over 2 KB, `/livez` (process) vs `/health` (database), the data cache keeps serving the last good run if a refresh fails, unhandled rejections are logged not fatal, Telegram 429 waits once and retries. Pinned by `tests/http.test.mjs`.
+- Testing tools used: `/tmp/pw/monkey.mjs` style headless click-through (every button/select/row on every page) against a local PostgREST over the throw-away Postgres. Never run two such scripts in one browser tab: they fight over the hash and look like 30-second hangs.

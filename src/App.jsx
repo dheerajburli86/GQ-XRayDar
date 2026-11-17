@@ -7,49 +7,72 @@ import { usePersistent } from "./lib/storage.js";
 import { AccountProvider, useAccount } from "./components/Account.jsx";
 import { AgentPanel } from "./components/AgentPanel.jsx";
 import { resolveTheme, watchSystemTheme } from "./lib/theme.js";
+import { ErrorBoundary } from "./components/ErrorBoundary.jsx";
+
+// A page file can be missing after a new version is deployed while this tab stays open (the
+// old file names no longer exist). One retry, then one reload of the app, instead of a blank screen.
+const loaders = {};
+function page(name, load) {
+  loaders[name] = load;
+  return lazy(() => load().catch(() => new Promise((r) => setTimeout(r, 600)).then(load)).catch((e) => {
+    try {
+      const last = Number(sessionStorage.getItem("gqta.chunkReload") || 0);
+      if (Date.now() - last > 30000) { sessionStorage.setItem("gqta.chunkReload", String(Date.now())); window.location.reload(); return new Promise(() => {}); }
+    } catch { /* storage blocked */ }
+    throw e;
+  }));
+}
+/** After the app is up, fetch the page files in the background so every menu click is instant. */
+function prefetchPages() {
+  const names = Object.keys(loaders);
+  const idle = window.requestIdleCallback || ((f) => setTimeout(f, 200));
+  const next = () => { const n = names.shift(); if (!n) return; loaders[n]().catch(() => {}).finally(() => idle(next)); };
+  if (navigator.connection?.saveData) return;
+  setTimeout(() => idle(next), 2500);
+}
 
 const pages = {
-  home: lazy(() => import("./pages/CommandCentre.jsx")),
-  explorer: lazy(() => import("./pages/Explorer.jsx")),
-  heatmap: lazy(() => import("./pages/Heatmap.jsx")),
-  indices: lazy(() => import("./pages/Indices.jsx")),
-  ewcw: lazy(() => import("./pages/EwCw.jsx")),
-  ww: lazy(() => import("./pages/WeightWatcher.jsx")),
-  screens: lazy(() => import("./pages/StackedScreens.jsx")),
-  workspace: lazy(() => import("./pages/Workspace.jsx")),
-  rs: lazy(() => import("./pages/RelativeStrength.jsx")),
-  screener: lazy(() => import("./pages/Screener.jsx")),
-  early: lazy(() => import("./pages/EarlyStage.jsx")),
-  funnel: lazy(() => import("./pages/Funnel.jsx")),
-  rotation: lazy(() => import("./pages/Rotation.jsx")),
-  glocom: lazy(() => import("./pages/Glocom.jsx")),
-  imbeti: lazy(() => import("./pages/ImbEti.jsx")),
-  breadth: lazy(() => import("./pages/Breadth.jsx")),
-  scores: lazy(() => import("./pages/Scores.jsx")),
-  assistant: lazy(() => import("./pages/Assistant.jsx")),
-  briefs: lazy(() => import("./pages/Briefs.jsx")),
-  backtest: lazy(() => import("./pages/Backtest.jsx")),
-  alerts: lazy(() => import("./pages/Alerts.jsx")),
-  watchlists: lazy(() => import("./pages/Watchlists.jsx")),
-  notes: lazy(() => import("./pages/Notes.jsx")),
-  data: lazy(() => import("./pages/DataCentre.jsx")),
-  stock: lazy(() => import("./pages/Stock.jsx")),
-  chart: lazy(() => import("./pages/ChartLab.jsx")),
-  scanners: lazy(() => import("./pages/Scanners.jsx")),
-  tasks: lazy(() => import("./pages/Tasks.jsx")),
-  paper: lazy(() => import("./pages/Paper.jsx")),
-  myindex: lazy(() => import("./pages/MyIndices.jsx")),
-  xasset: lazy(() => import("./pages/CrossAsset.jsx")),
-  dhome: lazy(() => import("./pages/deriv/DerivHome.jsx")),
-  dchain: lazy(() => import("./pages/deriv/OptionChain.jsx")),
-  dfut: lazy(() => import("./pages/deriv/Futures.jsx")),
-  dvol: lazy(() => import("./pages/deriv/VolLab.jsx")),
-  dstrat: lazy(() => import("./pages/deriv/Strategy.jsx")),
-  dexpiry: lazy(() => import("./pages/deriv/Expiry.jsx")),
-  dunusual: lazy(() => import("./pages/deriv/Unusual.jsx")),
-  dscreen: lazy(() => import("./pages/deriv/DerivScreener.jsx")),
-  dresearch: lazy(() => import("./pages/deriv/DerivResearch.jsx")),
-  drisk: lazy(() => import("./pages/deriv/Risk.jsx")),
+  home: page("home", () => import("./pages/CommandCentre.jsx")),
+  explorer: page("explorer", () => import("./pages/Explorer.jsx")),
+  heatmap: page("heatmap", () => import("./pages/Heatmap.jsx")),
+  indices: page("indices", () => import("./pages/Indices.jsx")),
+  ewcw: page("ewcw", () => import("./pages/EwCw.jsx")),
+  ww: page("ww", () => import("./pages/WeightWatcher.jsx")),
+  screens: page("screens", () => import("./pages/StackedScreens.jsx")),
+  workspace: page("workspace", () => import("./pages/Workspace.jsx")),
+  rs: page("rs", () => import("./pages/RelativeStrength.jsx")),
+  screener: page("screener", () => import("./pages/Screener.jsx")),
+  early: page("early", () => import("./pages/EarlyStage.jsx")),
+  funnel: page("funnel", () => import("./pages/Funnel.jsx")),
+  rotation: page("rotation", () => import("./pages/Rotation.jsx")),
+  glocom: page("glocom", () => import("./pages/Glocom.jsx")),
+  imbeti: page("imbeti", () => import("./pages/ImbEti.jsx")),
+  breadth: page("breadth", () => import("./pages/Breadth.jsx")),
+  scores: page("scores", () => import("./pages/Scores.jsx")),
+  assistant: page("assistant", () => import("./pages/Assistant.jsx")),
+  briefs: page("briefs", () => import("./pages/Briefs.jsx")),
+  backtest: page("backtest", () => import("./pages/Backtest.jsx")),
+  alerts: page("alerts", () => import("./pages/Alerts.jsx")),
+  watchlists: page("watchlists", () => import("./pages/Watchlists.jsx")),
+  notes: page("notes", () => import("./pages/Notes.jsx")),
+  data: page("data", () => import("./pages/DataCentre.jsx")),
+  stock: page("stock", () => import("./pages/Stock.jsx")),
+  chart: page("chart", () => import("./pages/ChartLab.jsx")),
+  scanners: page("scanners", () => import("./pages/Scanners.jsx")),
+  tasks: page("tasks", () => import("./pages/Tasks.jsx")),
+  paper: page("paper", () => import("./pages/Paper.jsx")),
+  myindex: page("myindex", () => import("./pages/MyIndices.jsx")),
+  xasset: page("xasset", () => import("./pages/CrossAsset.jsx")),
+  dhome: page("dhome", () => import("./pages/deriv/DerivHome.jsx")),
+  dchain: page("dchain", () => import("./pages/deriv/OptionChain.jsx")),
+  dfut: page("dfut", () => import("./pages/deriv/Futures.jsx")),
+  dvol: page("dvol", () => import("./pages/deriv/VolLab.jsx")),
+  dstrat: page("dstrat", () => import("./pages/deriv/Strategy.jsx")),
+  dexpiry: page("dexpiry", () => import("./pages/deriv/Expiry.jsx")),
+  dunusual: page("dunusual", () => import("./pages/deriv/Unusual.jsx")),
+  dscreen: page("dscreen", () => import("./pages/deriv/DerivScreener.jsx")),
+  dresearch: page("dresearch", () => import("./pages/deriv/DerivResearch.jsx")),
+  drisk: page("drisk", () => import("./pages/deriv/Risk.jsx")),
 };
 
 const NAV = [
@@ -68,7 +91,16 @@ function CommandBar() {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [listening, setListening] = useState(false);
-  const recRef = useRef(null);
+  const recRef = useRef(null), inputRef = useRef(null);
+  // Ctrl / Cmd + K (or "/") jumps to the search box from anywhere
+  useEffect(() => {
+    const h = (e) => {
+      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "") || document.activeElement?.isContentEditable;
+      if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") || (e.key === "/" && !typing)) { e.preventDefault(); inputRef.current?.focus(); inputRef.current?.select(); }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
   const sugg = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s || !d.secs) return [];
@@ -105,7 +137,7 @@ function CommandBar() {
   return (
     <div className="cmd">
       <span className="ico">⌕</span>
-      <input value={q} placeholder='Search or ask: "strongest weekly IT stocks with improving relative strength"'
+      <input ref={inputRef} value={q} title="Search (Ctrl+K)" placeholder='Search or ask: "strongest weekly IT stocks with improving relative strength"'
         onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={(e) => { if (e.key === "Enter" && q.trim()) run(q.trim()); if (e.key === "Escape") setOpen(false); }} />
       <div className="btns">
@@ -132,6 +164,22 @@ function Shell() {
     apply();
     return d.settings.theme === "system" ? watchSystemTheme(apply) : undefined;
   }, [d.settings.theme]);
+  const ready = d.state.phase === "ready";
+  useEffect(() => { if (ready) prefetchPages(); }, [ready]);
+  const [offline, setOffline] = useState(typeof navigator !== "undefined" && navigator.onLine === false);
+  useEffect(() => {
+    const on = () => setOffline(false), off = () => setOffline(true);
+    window.addEventListener("online", on); window.addEventListener("offline", off);
+    return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
+  }, []);
+  const [loadErr, setLoadErr] = useState(null);
+  const [retryKey, setRetryKey] = useState(0);
+  useEffect(() => {
+    const h = (e) => setLoadErr(e.detail);
+    window.addEventListener("gqta-load-error", h);
+    return () => window.removeEventListener("gqta-load-error", h);
+  }, []);
+  useEffect(() => { setLoadErr(null); }, [route.path]);
   const Page = pages[route.page] || pages.home;
   const activeKey = route.page === "screens" ? `screens/${route.args[0] || "RSIMMA"}` : route.page;
 
@@ -167,6 +215,7 @@ function Shell() {
       </nav>
       <div className="main">
         {d.mode === "demo" && <div className="banner demo"><b>DEMO DATA</b> Synthetic universe generated in your browser and run through the real calculation engine. Connect the heatmap Supabase database to see live markets (README).</div>}
+        {offline && <div className="banner demo" role="status"><b>OFFLINE</b> No internet connection. What is already on screen still works; new data loads when the connection is back.</div>}
         <div className="topbar">
           <CommandBar />
           <div className="grow" />
@@ -178,16 +227,24 @@ function Shell() {
           {acct.email && <span className="small muted" title={acct.email}>{acct.email.split("@")[0]}{acct.session ? <a style={{ marginLeft: 6, cursor: "pointer" }} onClick={acct.signOut}>sign out</a> : null}</span>}
         </div>
         <div className="content">
-          <Suspense fallback={<Loading />}>
-            <Page route={route} key={route.page + (route.args[0] || "")} />
-          </Suspense>
+          {loadErr && (
+            <div className="note warn row between" role="alert" style={{ marginBottom: 8 }}>
+              <span>Some data on this page could not be loaded ({String(loadErr).slice(0, 160)}). Check the connection and try again.</span>
+              <span className="row" style={{ gap: 6 }}><button className="btn sm primary" onClick={() => { setLoadErr(null); setRetryKey((k) => k + 1); }}>Retry</button><button className="btn sm ghost" onClick={() => setLoadErr(null)}>Dismiss</button></span>
+            </div>
+          )}
+          <ErrorBoundary resetKey={route.path + retryKey}>
+            <Suspense fallback={<Loading />}>
+              <Page route={route} key={route.page + (route.args[0] || "") + retryKey} />
+            </Suspense>
+          </ErrorBoundary>
         </div>
       </div>
-      <AgentPanel />
+      <ErrorBoundary silent><AgentPanel /></ErrorBoundary>
     </div>
   );
 }
 
 export default function App() {
-  return <AccountProvider><DataProvider><Shell /></DataProvider></AccountProvider>;
+  return <ErrorBoundary title="GQ XRayDar hit a problem"><AccountProvider><DataProvider><Shell /></DataProvider></AccountProvider></ErrorBoundary>;
 }

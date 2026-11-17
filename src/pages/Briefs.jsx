@@ -2,7 +2,8 @@
 import { useState } from "react";
 import { useData } from "../data/store.jsx";
 import { useAsync } from "../lib/useAsync.js";
-import { PageHead, Seg, Loading } from "../components/ui.jsx";
+import { copyText } from "../lib/exporters.js";
+import { PageHead, Seg, Loading, ErrorBox } from "../components/ui.jsx";
 import { writeBrief } from "../../engine/briefs.js";
 import { breadthDivergence } from "../../engine/breadth.js";
 import { downloadBlob } from "../lib/exporters.js";
@@ -10,12 +11,14 @@ import { downloadBlob } from "../lib/exporters.js";
 export default function Briefs() {
   const d = useData();
   const [period, setPeriod] = useState("weekly");
-  const { data, loading } = useAsync(async () => {
+  const [copied, setCopied] = useState(null);
+  const { data, loading, error } = useAsync(async () => {
     const [gc, ge, br, rot, ewcw] = await Promise.all([d.api.indexSeries("CW|USD|G"), d.api.indexSeries("EW|USD|G"), d.api.breadth("G"), d.api.rotation("G"), d.api.ewcw()]);
     const regions = await Promise.all(d.regions.map(async (r) => ({ name: r, series: await d.api.indexSeries(`CW|USD|R:${r}`) })));
     const countries = await Promise.all(d.countries.map(async (c) => ({ name: c, series: await d.api.indexSeries(`CW|USD|C:${c}`) })));
     return { gc, ge, br, rot, ewcw, regions, countries };
   }, []);
+  if (error) return <ErrorBox error={error} />;
   if (loading || !data) return <Loading what="brief inputs" />;
   const bars = { daily: 1, weekly: 5, monthly: 21 }[period];
   const since = data.br?.dates?.[Math.max(0, data.br.dates.length - 1 - bars)];
@@ -26,7 +29,7 @@ export default function Briefs() {
     <div className="stack">
       <PageHead title="Market briefs" sub="Automated research summaries. Every number comes from the stored index, breadth, rotation and signal calculations for the date shown.">
         <Seg value={period} options={["daily", "weekly", "monthly"]} onChange={setPeriod} />
-        <button className="btn sm" onClick={() => navigator.clipboard?.writeText(text)}>Copy</button>
+        <button className="btn sm" onClick={() => copyText(text).then((ok) => setCopied(ok ? "Copied" : "Select the text and press Ctrl+C"))}>{copied || "Copy"}</button>
         <button className="btn sm" onClick={() => downloadBlob(new Blob([text], { type: "text/markdown" }), `gq_${period}_brief_${brief.asOf}.md`)}>Download</button>
       </PageHead>
       <div className="card brief" style={{ maxWidth: 980 }}>

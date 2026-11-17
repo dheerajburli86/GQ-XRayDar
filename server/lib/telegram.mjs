@@ -2,10 +2,19 @@
 // share the GQ agent's bot token without stealing its messages.
 export function createTelegram(cfg, fetchImpl = fetch, log = console.log) {
   const enabled = !!cfg.telegramToken;
-  async function call(method, body) {
-    const r = await fetchImpl(`${cfg.telegramApiBase}/bot${cfg.telegramToken}/${method}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  async function call(method, body, attempt = 0) {
+    let r;
+    try {
+      r = await fetchImpl(`${cfg.telegramApiBase}/bot${cfg.telegramToken}/${method}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(20_000) });
+    } catch (e) { const x = new Error(`telegram unreachable: ${e.name === "TimeoutError" ? "timed out" : e.message}`); x.code = 0; throw x; }
     const j = await r.json().catch(() => ({}));
-    if (!j.ok) { const e = new Error(j.description || `telegram ${r.status}`); e.code = j.error_code || r.status; throw e; }
+    if (!j.ok) {
+      // Telegram asked us to slow down: wait as told (once, and only for a short wait) and send again.
+      // Nothing was delivered on a 429, so this cannot double-send.
+      const wait = j.parameters?.retry_after;
+      if ((j.error_code || r.status) === 429 && attempt === 0 && wait > 0 && wait <= 10) { await new Promise((res) => setTimeout(res, wait * 1000 + 250)); return call(method, body, 1); }
+      const e = new Error(j.description || `telegram ${r.status}`); e.code = j.error_code || r.status; throw e;
+    }
     return j.result;
   }
   /** html: Telegram HTML subset. Splits long messages at line breaks. */

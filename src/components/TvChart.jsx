@@ -50,12 +50,34 @@ function withTheme(base, theme) {
   return out;
 }
 
+/**
+ * lightweight-charts throws (and takes the page down) on rows out of time order, duplicate
+ * times or non-numeric prices. Bad rows are dropped here so one odd bar never blanks a chart.
+ */
+const num = (v) => typeof v === "number" && Number.isFinite(v);
+export function cleanSeriesData(data) {
+  if (!Array.isArray(data) || !data.length) return [];
+  let ok = true, prev = null;
+  for (const d of data) {
+    if (!d || d.time == null || (prev != null && !(d.time > prev)) || !("value" in d ? num(d.value) : num(d.open) && num(d.high) && num(d.low) && num(d.close))) { ok = false; break; }
+    prev = d.time;
+  }
+  if (ok) return data;
+  const rows = data.filter((d) => d && d.time != null && ("value" in d ? num(d.value) : num(d.open) && num(d.high) && num(d.low) && num(d.close)));
+  rows.sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
+  const out = [];
+  for (const d of rows) { if (out.length && out[out.length - 1].time === d.time) out[out.length - 1] = d; else out.push(d); }
+  return out;
+}
+
 export function TvChart({ series, height = 300, sync, onReady, logScale = false, scaleMargins, visibleRange, fit = true, rangeKey, theme }) {
   const el = useRef(null), chartRef = useRef(null), seriesRef = useRef([]), memberRef = useRef(null);
   const viewKey = useRef(undefined); // the view is set once per rangeKey, so toggling a line never resets the zoom
 
   useEffect(() => {
-    const chart = createChart(el.current, { ...withTheme(themeOptions(), theme), autoSize: true, height });
+    let chart;
+    try { chart = createChart(el.current, { ...withTheme(themeOptions(), theme), autoSize: true, height }); }
+    catch (e) { console.warn(`[chart] could not start: ${e.message}`); return undefined; }
     chartRef.current = chart;
     const member = { chart, valueAt: null };
     memberRef.current = member;
@@ -66,9 +88,9 @@ export function TvChart({ series, height = 300, sync, onReady, logScale = false,
       chart.subscribeCrosshairMove((p) => sync.cross(member, p?.time ?? null));
     }
     onReady?.(chart);
-    const mo = new MutationObserver(() => chart.applyOptions(withTheme(themeOptions(), theme)));
+    const mo = new MutationObserver(() => { try { chart.applyOptions(withTheme(themeOptions(), theme)); } catch { /* removed */ } });
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    return () => { mo.disconnect(); unsub?.(); chart.remove(); chartRef.current = null; };
+    return () => { mo.disconnect(); unsub?.(); try { chart.remove(); } catch { /* already removed */ } chartRef.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sync]);
 
@@ -81,15 +103,28 @@ export function TvChart({ series, height = 300, sync, onReady, logScale = false,
     seriesRef.current = [];
     let anchor = null, anchorData = null;
     for (const spec of series || []) {
-      if (!spec || !spec.data?.length) continue;
-      const s = chart.addSeries(TYPES[spec.type || "line"], { priceLineVisible: false, lastValueVisible: true, ...spec.options }, spec.pane || 0);
-      s.setData(spec.data);
-      for (const pl of spec.priceLines || []) s.createPriceLine({ lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: true, ...pl });
-      if (spec.markers?.length) createSeriesMarkers(s, spec.markers);
+      if (!spec) continue;
+      const data = cleanSeriesData(spec.data);
+      if (!data.length) continue;
+      let s = null;
+      try {
+        s = chart.addSeries(TYPES[spec.type || "line"] || LineSeries, { priceLineVisible: false, lastValueVisible: true, ...spec.options }, spec.pane || 0);
+        s.setData(data);
+        for (const pl of spec.priceLines || []) if (num(pl?.price)) s.createPriceLine({ lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: true, ...pl });
+        if (spec.markers?.length) {
+          const t0 = data[0].time, t1 = data[data.length - 1].time;
+          const mk = spec.markers.filter((m) => m && m.time >= t0 && m.time <= t1).sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
+          if (mk.length) createSeriesMarkers(s, mk);
+        }
+      } catch (e) {
+        console.warn(`[chart] series ${spec.id || ""} skipped: ${e.message}`);
+        if (s) { try { chart.removeSeries(s); } catch { /* not added */ } }
+        continue;
+      }
       seriesRef.current.push(s);
-      if (!anchor) { anchor = s; anchorData = spec.data; }
+      if (!anchor) { anchor = s; anchorData = data; }
     }
-    chart.priceScale("right").applyOptions({ mode: logScale ? 1 : 0, ...(scaleMargins ? { scaleMargins } : {}) });
+    try { chart.priceScale("right").applyOptions({ mode: logScale ? 1 : 0, ...(scaleMargins ? { scaleMargins } : {}) }); } catch { /* no price scale yet */ }
     if (memberRef.current && anchor) {
       const times = anchorData.map((d) => d.time);
       memberRef.current.valueAt = (t) => {
@@ -106,7 +141,7 @@ export function TvChart({ series, height = 300, sync, onReady, logScale = false,
       const apply = () => {
         if (chartRef.current !== chart) return;
         if (visibleRange) { try { chart.timeScale().setVisibleRange(visibleRange); } catch { /* no data */ } }
-        else if (fit) chart.timeScale().fitContent();
+        else if (fit) { try { chart.timeScale().fitContent(); } catch { /* removed */ } }
       };
       apply();
       // autoSize measures the container after layout; re-apply once it has its real width

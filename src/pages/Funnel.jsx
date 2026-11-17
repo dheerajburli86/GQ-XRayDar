@@ -4,7 +4,7 @@
 import { useMemo, useState } from "react";
 import { useData } from "../data/store.jsx";
 import { useAsync } from "../lib/useAsync.js";
-import { PageHead, Seg, Pct, Loading, StockLink, ScoreBar } from "../components/ui.jsx";
+import { PageHead, Seg, Pct, Loading, StockLink, ScoreBar, ErrorBox } from "../components/ui.jsx";
 import { changeOver, HBARS } from "../lib/indexMath.js";
 
 const rel = (s, b, h) => { const a = changeOver(s, HBARS[h]), c = changeOver(b, HBARS[h]); return a != null && c != null ? ((1 + a / 100) / (1 + c / 100) - 1) * 100 : null; };
@@ -14,10 +14,10 @@ export default function Funnel() {
   const [h, setH] = useState("3M");
   const [topN, setTopN] = useState(2);
   const [pick, setPick] = useState({});
-  const { data, loading } = useAsync(async () => {
+  const { data, loading, error } = useAsync(async () => {
     const g = await d.api.indexSeries("CW|USD|G");
     const reg = await Promise.all(d.regions.map(async (r) => ({ name: r, s: await d.api.indexSeries(`CW|USD|R:${r}`) })));
-    const ctry = await Promise.all(d.countries.map(async (c) => ({ name: c, region: d.secs.find((s) => s.country === c)?.region, s: await d.api.indexSeries(`CW|USD|C:${c}`), l: await d.api.indexSeries(`CW|LCL|C:${c}`) })));
+    const ctry = await Promise.all(d.countries.map(async (c) => ({ name: c, region: d.secs.find((s) => s.country === c)?.region, ...(await Promise.all([d.api.indexSeries(`CW|USD|C:${c}`), d.api.indexSeries(`CW|LCL|C:${c}`)]).then(([s, l]) => ({ s, l }))) })));
     return { g, reg: reg.filter((x) => x.s), ctry: ctry.filter((x) => x.s) };
   }, []);
   const steps = useMemo(() => {
@@ -30,15 +30,16 @@ export default function Funnel() {
   }, [data, h, topN, pick]);
   const { data: sect } = useAsync(async () => {
     if (!steps) return [];
-    const out = [];
+    const jobs = [];
     for (const c of steps.selC) {
       const base = data.ctry.find((x) => x.name === c)?.l;
       for (const s of d.sectors) {
         const key = `CW|LCL|C:${c}|S:${s}`;
         if (!d.indexByKey.has(key)) continue;
-        out.push({ country: c, name: s, v: rel(await d.api.indexSeries(key), base, h) });
+        jobs.push(d.api.indexSeries(key).then((ser) => ({ country: c, name: s, v: rel(ser, base, h) }), () => ({ country: c, name: s, v: null })));
       }
     }
+    const out = await Promise.all(jobs);
     return out.filter((x) => x.v != null).sort((a, b) => b.v - a.v);
   }, [steps?.selC.join(), h]);
   const selS = pick.sector ? sect?.filter((x) => `${x.country}|${x.name}` === pick.sector) : sect?.slice(0, topN * 2);
@@ -57,6 +58,7 @@ export default function Funnel() {
   const selIG = pick.ig ? igs.filter((g) => g.key === pick.ig) : igs.slice(0, topN * 2);
   const stocks = useMemo(() => selIG.flatMap((g) => g.rows).filter((r) => r.flat[`rscChg_country_${h}`] != null).sort((a, b) => (b.flat.score ?? 0) - (a.flat.score ?? 0)).slice(0, 25), [selIG, h]);
 
+  if (error) return <ErrorBox error={error} />;
   if (loading || !steps) return <Loading what="funnel" />;
   return (
     <div className="stack">

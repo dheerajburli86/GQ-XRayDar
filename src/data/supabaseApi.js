@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import { applyCorporateActions } from "../../engine/quality.js";
 import { decodeEvents } from "../../engine/eventCodec.js";
 import { SCREEN_KEYS } from "../../engine/screenRow.js";
+import { runGet, runSet, runPurge } from "../lib/idbCache.js";
 
 const PAGE = Number(import.meta.env.VITE_PAGE_ROWS) || 1000;
 
@@ -21,27 +22,63 @@ export function createSupabaseApi(url, key) {
       q = build(q);
       const { data, error, count: n } = await q;
       if (error) throw new Error(`${table}: ${error.message}`);
-      return { data, n };
+      return { data: data || [], n };
     };
-    const first = await page(0, true);
+    const first = await withRetry(() => page(0, true));
     if (first.data.length < PAGE) return first.data;
     const pages = Math.ceil((first.n ?? first.data.length) / PAGE);
     const parts = new Array(pages); parts[0] = first.data;
     let next = 1;
-    const worker = async () => { while (next < pages) { const i = next++; parts[i] = (await page(i * PAGE)).data; } };
+    const worker = async () => { while (next < pages) { const i = next++; parts[i] = (await withRetry(() => page(i * PAGE))).data; } };
     await Promise.all(Array.from({ length: Math.min(PAR, pages - 1) }, worker));
     // a table that grew while loading: keep going serially until a short page
     let out = parts.flat();
-    if (parts[pages - 1].length === PAGE) for (let from = pages * PAGE; ; from += PAGE) { const { data } = await page(from); out = out.concat(data); if (data.length < PAGE) break; }
+    if (parts[pages - 1].length === PAGE) for (let from = pages * PAGE; ; from += PAGE) { const { data } = await withRetry(() => page(from)); out = out.concat(data); if (data.length < PAGE) break; }
     return out;
   }
   const one = async (q) => { const { data, error } = await q; if (error) throw new Error(error.message); return data; };
+
+  // ---- caches --------------------------------------------------------------------
+  // mem: every answer of this visit (and requests still in flight, so two pages asking for the
+  //      same series share one request). Bounded; the oldest entry goes first.
+  // run: results that only change when the engine finishes a new run are also kept in
+  //      IndexedDB under that run's id, so the next visit does not download them again.
+  const mem = new Map();
+  const MEM_MAX = 400;
+  let runPrefix = null;
+  const cached = (key, loader, { persist = false } = {}) => {
+    if (mem.has(key)) { const v = mem.get(key); mem.delete(key); mem.set(key, v); return v; }
+    const p = (async () => {
+      if (persist) {
+        try {
+          if (!runPrefix) { const info = await api.info(); runPrefix = `${info.run.runId}|${info.run.finished || ""}|`; runPurge(runPrefix); }
+          const hit = await runGet(runPrefix + key);
+          if (hit != null) return hit.v;
+        } catch { /* fall through to the network */ }
+      }
+      const v = await loader();
+      if (persist && runPrefix) runSet(runPrefix + key, { v });
+      return v;
+    })();
+    mem.set(key, p);
+    p.catch(() => mem.delete(key));
+    if (mem.size > MEM_MAX) mem.delete(mem.keys().next().value);
+    return p;
+  };
+  // transient network failures (a dropped connection, a 5xx from the edge) are retried twice
+  const RETRY = /fetch|network|timeout|timed out|502|503|504|ECONN|terminated/i;
+  async function withRetry(fn) {
+    for (let i = 0; ; i++) {
+      try { return await fn(); }
+      catch (e) { if (i >= 2 || !RETRY.test(String(e?.message))) throw e; await new Promise((r) => setTimeout(r, 400 * (i + 1) + Math.random() * 300)); }
+    }
+  }
 
   let secCache = null, infoCache = null;
   const secMap = async () => { if (!secCache) { const s = await api.securities(); secCache = new Map(s.map((x) => [x.id, x])); } return secCache; };
 
   const api = {
-    async clearCache() { secCache = null; infoCache = null; },
+    async clearCache() { secCache = null; infoCache = null; mem.clear(); runPrefix = null; },
     async info() {
       if (infoCache) return infoCache;
       const runs = await one(sb.from("tas_calc_run").select("run_id,started,finished,mode,methodology_version,methodology_hash,methodology,status,stats,error").order("started", { ascending: false }).limit(20));
@@ -144,5 +181,13 @@ export function createSupabaseApi(url, key) {
     },
     async corporateActions() { return (await all("tas_corporate_action", "*")).map((r) => ({ instrumentId: r.instrument_id, exDate: r.ex_date, factor: +r.factor, type: r.type, source: r.source })); },
   };
+  // Wrap the read methods in the caches above. Answers are shared between callers, so pages
+  // must treat them as read-only (they already do: every page copies before changing anything).
+  const PERSIST = ["indexSeries", "breadth", "rotation", "glocomGroups", "ww", "ewcw", "backtestSummary", "wwGroups", "breadthKeys", "rotationScopes", "glocomScopes", "fxSeries"];
+  const MEMORY = ["snapshot", "bars", "events", "etiRows", "membership", "membershipDates", "fxSummary", "corporateActions", "issues"];
+  for (const name of [...PERSIST, ...MEMORY]) {
+    const fn = api[name], persist = PERSIST.includes(name);
+    api[name] = (...args) => cached(`${name}:${JSON.stringify(args)}`, () => withRetry(() => fn(...args)), { persist });
+  }
   return api;
 }

@@ -1,4 +1,5 @@
 // Minimal HTTP layer: routing, JSON bodies, CORS, errors. No framework needed.
+import { gzipSync } from "node:zlib";
 export class HttpError extends Error { constructor(status, message) { super(message); this.status = status; } }
 
 export function createRouter() {
@@ -15,7 +16,10 @@ export function createRouter() {
       for (const r of routes) {
         if (r.method !== method) continue;
         const m = path.match(r.re);
-        if (m) return { handler: r.handler, params: Object.fromEntries(r.keys.map((k, i) => [k, decodeURIComponent(m[i + 1])])) };
+        if (m) {
+          try { return { handler: r.handler, params: Object.fromEntries(r.keys.map((k, i) => [k, decodeURIComponent(m[i + 1])])) }; }
+          catch { throw new HttpError(400, "malformed address"); }
+        }
       }
       return null;
     },
@@ -40,18 +44,38 @@ export function cors(req, res, origins) {
   }
 }
 
-export function send(res, status, body) {
-  res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-  res.end(JSON.stringify(body));
+/** JSON response. Bodies over 2 KB are gzipped when the client accepts it (screens and series shrink ~8x). */
+export function send(res, status, body, req) {
+  if (res.headersSent || res.writableEnded) return;
+  let buf = Buffer.from(JSON.stringify(body) ?? "null");
+  const headers = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy": "no-referrer" };
+  if (buf.length > 2048 && /\bgzip\b/.test(String(req?.headers?.["accept-encoding"] || ""))) {
+    try { buf = gzipSync(buf, { level: 5 }); headers["content-encoding"] = "gzip"; headers.vary = "origin, accept-encoding"; } catch { /* send plain */ }
+  }
+  headers["content-length"] = buf.length;
+  res.writeHead(status, headers);
+  res.end(buf);
 }
 
-/** Simple per-key token bucket. */
+/** Rejects with 504 when a handler takes longer than ms (the handler keeps running; its answer is dropped). */
+export function withTimeout(promise, ms, what = "request") {
+  let t;
+  const timer = new Promise((_, rej) => { t = setTimeout(() => rej(new HttpError(504, `${what} took too long; please try again`)), ms); });
+  return Promise.race([promise, timer]).finally(() => clearTimeout(t));
+}
+
+/** Sliding one-minute window per key. Idle keys are dropped so the map cannot grow without bound. */
 export class RateLimiter {
-  constructor(perMin) { this.perMin = perMin; this.hits = new Map(); }
+  constructor(perMin) { this.perMin = perMin; this.hits = new Map(); this.sweptAt = Date.now(); }
   check(key) {
     const now = Date.now(), w = this.hits.get(key) || [];
     const recent = w.filter((t) => now - t < 60000);
-    if (recent.length >= this.perMin) throw new HttpError(429, "too many requests; slow down");
+    if (now - this.sweptAt > 120000 || this.hits.size > 20000) this.sweep(now);
+    if (recent.length >= this.perMin) { this.hits.set(key, recent); throw new HttpError(429, "too many requests; slow down"); }
     recent.push(now); this.hits.set(key, recent);
+  }
+  sweep(now = Date.now()) {
+    this.sweptAt = now;
+    for (const [k, w] of this.hits) if (!w.length || now - w[w.length - 1] >= 60000) this.hits.delete(k);
   }
 }

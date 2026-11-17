@@ -30,11 +30,15 @@ async function token() {
 export async function api(method, path, body) {
   if (!SERVER_ON) throw new Error("The Technical Analysis server is not connected (VITE_TA_SERVER_URL).");
   const t = await token();
-  const r = await fetch(SERVER_URL + path, {
+  let r;
+  // the agent can think for a couple of minutes; everything else should answer well within one
+  const ms = /\/api\/agent/.test(path) ? 180_000 : 60_000;
+  try { r = await fetch(SERVER_URL + path, {
+    signal: typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(ms) : undefined,
     method,
     headers: { "content-type": "application/json", ...(t ? { authorization: `Bearer ${t}` } : {}), ...(!t && env.VITE_DEV_EMAIL ? { "x-dev-email": env.VITE_DEV_EMAIL } : {}) },
     body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  }); } catch (e) { throw new Error(e?.name === "TimeoutError" ? "The server took too long to answer. Try again." : "Could not reach the server. Check the connection and try again."); }
   let j = null;
   try { j = await r.json(); } catch { /* empty */ }
   if (!r.ok) throw new Error(j?.error || `server answered HTTP ${r.status}`);

@@ -44,7 +44,7 @@ export async function runXasset(pool, { fmpKey = process.env.FMP_API_KEY, log = 
 async function refreshFmp(pool, symbol, from, key, fetchImpl, log) {
   const { rows } = await pool.query(`select max(date)::text d from tas_xasset_bars where symbol = $1`, [symbol]);
   const start = rows[0]?.d || from;
-  const r = await fetchImpl(`https://financialmodelingprep.com/stable/historical-price-eod/full?symbol=${symbol}&from=${start}&apikey=${key}`);
+  const r = await fetchImpl(`https://financialmodelingprep.com/stable/historical-price-eod/full?symbol=${symbol}&from=${start}&apikey=${key}`, { signal: AbortSignal.timeout(45_000) });
   if (!r.ok) { log(`[xasset] FMP ${symbol}: HTTP ${r.status}`); return; }
   const j = await r.json();
   const data = (Array.isArray(j) ? j : j?.historical || []).map((x) => ({ symbol, date: String(x.date).slice(0, 10), close: +(x.adjClose ?? x.close) })).filter((x) => x.close > 0);

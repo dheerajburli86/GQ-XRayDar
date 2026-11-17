@@ -26,6 +26,7 @@ import { usePersistent, uid } from "../lib/storage.js";
 import { NoteBox } from "./Notes.jsx";
 import { setAgentContext, openAgent } from "../components/AgentPanel.jsx";
 import { downloadBlob } from "../lib/exporters.js";
+import { cleanSeriesData } from "../components/TvChart.jsx";
 
 const UP = "#16a34a", DOWN = "#dc2626";
 const STYLES = [["candles", "Candles"], ["ha", "Heikin-Ashi"], ["line", "Line"], ["renko", "Renko"], ["kagi", "Kagi"], ["pnf", "Point & Figure"]];
@@ -196,7 +197,7 @@ function ChartCanvas({ bars, v, levels, extraLines = [], patterns = [], cmp, dra
     chartRef.current = chart;
     onChart?.(chart);
     if (!timeStyle) chart.applyOptions({ timeScale: { visible: false }, localization: { timeFormatter: () => "" } });
-    const mo = new MutationObserver(() => chart.applyOptions(themeOpts()));
+    const mo = new MutationObserver(() => { try { chart.applyOptions(themeOpts()); } catch { /* removed */ } });
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     const onClick = (p) => {
       const t = toolRef.current;
@@ -213,7 +214,7 @@ function ChartCanvas({ bars, v, levels, extraLines = [], patterns = [], cmp, dra
     // a quick second click arrives as a double-click, not a click
     chart.subscribeClick(onClick);
     chart.subscribeDblClick(onClick);
-    return () => { mo.disconnect(); chart.remove(); chartRef.current = null; onChart?.(null); };
+    return () => { mo.disconnect(); try { chart.remove(); } catch { /* already removed */ } chartRef.current = null; onChart?.(null); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => { pending.current = []; }, [tool]);
@@ -224,7 +225,15 @@ function ChartCanvas({ bars, v, levels, extraLines = [], patterns = [], cmp, dra
     if (!chart) return;
     for (const s of seriesRef.current) { try { chart.removeSeries(s); } catch { /* gone */ } }
     seriesRef.current = [];
-    const add = (type, data, opts = {}, pane = 0) => { if (!data.length) return null; const s = chart.addSeries(type, { priceLineVisible: false, lastValueVisible: false, ...opts }, pane); s.setData(data); seriesRef.current.push(s); return s; };
+    try {
+    const add = (type, raw, opts = {}, pane = 0) => {
+      const data = cleanSeriesData(raw);
+      if (!data.length) return null;
+      let s = null;
+      try { s = chart.addSeries(type, { priceLineVisible: false, lastValueVisible: false, ...opts }, pane); s.setData(data); }
+      catch (e) { console.warn(`[chart lab] a series was skipped: ${e.message}`); if (s) { try { chart.removeSeries(s); } catch { /* not added */ } } return null; }
+      seriesRef.current.push(s); return s;
+    };
     const t = bars.time;
     let main = null, pane = 0;
 
@@ -307,8 +316,9 @@ function ChartCanvas({ bars, v, levels, extraLines = [], patterns = [], cmp, dra
     const panesNow = chart.panes();
     panesNow.forEach((p, i) => { try { p.setStretchFactor(i === 0 ? 4 : 1); } catch { /* older api */ } });
     const nPts = main ? main.data().length : 0, show = timeStyle ? 400 : 250;
-    const fit = () => { if (chartRef.current !== chart) return; if (nPts > show) chart.timeScale().setVisibleLogicalRange({ from: nPts - show, to: nPts + 5 }); else chart.timeScale().fitContent(); };
+    const fit = () => { if (chartRef.current !== chart) return; try { if (nPts > show) chart.timeScale().setVisibleLogicalRange({ from: nPts - show, to: nPts + 5 }); else chart.timeScale().fitContent(); } catch { /* chart removed */ } };
     fit(); setTimeout(fit, 60);
+    } catch (e) { console.warn(`[chart lab] drawing failed: ${e.message}`); }
   }, [bars, v.ema, v.mma, v.vol, v.rsi, v.macd, v.style, levels, extraLines, patterns, cmp, drawings, timeStyle, v.tf]);
 
   // busiest price levels, drawn as bars against the price axis of the visible window
@@ -316,6 +326,9 @@ function ChartCanvas({ bars, v, levels, extraLines = [], patterns = [], cmp, dra
     const chart = chartRef.current;
     if (!chart || !v.vp || !timeStyle) { setVpBars([]); return; }
     const draw = () => {
+      try { drawVp(); } catch (e) { console.warn(`[chart lab] volume profile: ${e.message}`); setVpBars([]); }
+    };
+    const drawVp = () => {
       const r = chart.timeScale().getVisibleLogicalRange();
       if (!r || !mainRef.current) return;
       const from = Math.max(0, Math.floor(r.from)), to = Math.min(bars.time.length - 1, Math.ceil(r.to));

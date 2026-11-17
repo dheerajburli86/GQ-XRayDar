@@ -7,7 +7,13 @@ export function useAsync(fn, deps) {
     setState((s) => ({ ...s, loading: true, error: null }));
     Promise.resolve().then(fn).then(
       (data) => { if (alive) setState({ loading: false, data, error: null }); },
-      (error) => { if (alive) setState({ loading: false, data: null, error }); });
+      (error) => {
+        if (!alive) return;
+        setState({ loading: false, data: null, error });
+        // pages that do not show their own error still tell the user (banner with Retry in the shell)
+        console.warn("[load]", error);
+        try { window.dispatchEvent(new CustomEvent("gqta-load-error", { detail: String(error?.message || error) })); } catch { /* no window */ }
+      });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);

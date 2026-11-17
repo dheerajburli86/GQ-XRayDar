@@ -50,7 +50,9 @@ export function createData(pool, log = console.log) {
 
   async function get() {
     if (state && Date.now() - checkedAt < REFRESH_MS) return state;
-    if (!loading) loading = load().finally(() => { loading = null; checkedAt = Date.now(); });
+    // a refresh that fails (database blip) keeps serving the last good run instead of failing every request
+    if (!loading) loading = load().catch((e) => { if (state) { log(`[data] refresh failed, serving run ${state.run.run_id}: ${e.message}`); return state; } throw e; })
+      .finally(() => { loading = null; checkedAt = state ? Date.now() : 0; });
     return loading;
   }
 
@@ -131,5 +133,5 @@ export function createData(pool, log = console.log) {
     return s.secs.filter((x) => (x.name || "").toLowerCase().includes(low)).sort((a, b) => (b.capUsdNow || 0) - (a.capUsdNow || 0)).slice(0, limit);
   }
 
-  return { get, facade, resolve, api };
+  return { get, facade, resolve, api, peek: () => state };
 }

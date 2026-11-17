@@ -30,3 +30,14 @@ export async function exportXlsx(filename, sheets) {
   const buf = await wb.xlsx.writeBuffer();
   downloadBlob(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), filename.endsWith(".xlsx") ? filename : `${filename}.xlsx`);
 }
+
+/** Copy to the clipboard; resolves false (never throws) when the browser refuses. */
+export async function copyText(text) {
+  try { await navigator.clipboard.writeText(String(text)); return true; }
+  catch {
+    try {
+      const ta = document.createElement("textarea"); ta.value = String(text); ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select(); const ok = document.execCommand("copy"); ta.remove(); return ok;
+    } catch { return false; }
+  }
+}

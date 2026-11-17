@@ -40,7 +40,8 @@ export default function StackedScreens({ route }) {
   const secId = route.args[1] || route.query.id || [...d.rows].sort((a, b) => (b.sec.capUsdNow || 0) - (a.sec.capUsdNow || 0))[0]?.id;
   const sec = d.secById.get(secId);
   const [view, setView] = usePersistent("analyst.view", DEFAULT_VIEW);
-  const v = { ...DEFAULT_VIEW, ...view, acc: { ...DEFAULT_VIEW.acc, ...(view?.acc || {}) } };
+  // stable identity: the panes rebuild (and redraw ~130 lines) only when a view setting really changes
+  const v = useMemo(() => ({ ...DEFAULT_VIEW, ...view, acc: { ...DEFAULT_VIEW.acc, ...(view?.acc || {}) } }), [view]);
   const setV = (patch) => setView({ ...v, ...patch });
   const [tfs, setTfs] = usePersistent(`analyst.tf.${mode}`, null);
   const left = tfs?.left || "D", right = tfs?.right || "W";
@@ -82,15 +83,21 @@ export default function StackedScreens({ route }) {
   const m0 = d.info.methodology.indicators;
   const rsiPer = Number.isInteger(rsiN) && rsiN >= 2 && rsiN <= 200 ? rsiN : m0.rsiPeriod;
   const m = useMemo(() => ({ ...m0, rsiPeriod: rsiPer }), [m0, rsiPer]);
-  const columns = useMemo(() => {
+  // one memo per side: changing the left timeframe does not rebuild (and redraw) the right column
+  const buildCol = (tf) => {
     if (!data?.inst) return null;
     const { inst, bench, aligned } = data;
-    return [left, right].map((tf) => buildAnalystColumn({
+    return buildAnalystColumn({
       mode, tf, bars: inst, benchLabel,
       bench: bench && aligned ? { time: bench.time, close: aligned.b } : null, rscCloses: aligned?.a,
       rsiPeriod: m.rsiPeriod, rsiMethod: m.rsiMethod, rscBase: m.rscRebase, to: to || null, anchor,
-    }));
-  }, [data, left, right, mode, benchLabel, m, to, anchor]);
+    });
+  };
+  /* eslint-disable react-hooks/exhaustive-deps */
+  const colL = useMemo(() => buildCol(left), [data, left, mode, benchLabel, m, to, anchor]);
+  const colR = useMemo(() => buildCol(right), [data, right, mode, benchLabel, m, to, anchor]);
+  /* eslint-enable react-hooks/exhaustive-deps */
+  const columns = useMemo(() => (colL && colR ? [colL, colR] : null), [colL, colR]);
 
   const go = (r) => navigate(`screens/${mode}/${r.id}`, route.query.bench ? { bench: route.query.bench } : undefined);
   const setBench = (r) => navigate(`screens/${mode}/${secId}`, { bench: r.kind === "index" ? `idx:${r.key}` : r.id });

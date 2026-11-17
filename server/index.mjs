@@ -10,7 +10,7 @@
 import http from "node:http";
 import pg from "pg";
 import { loadConfig } from "./lib/config.mjs";
-import { createRouter, readJson, cors, send, HttpError, RateLimiter } from "./lib/http.mjs";
+import { createRouter, readJson, cors, send, HttpError, RateLimiter, withTimeout } from "./lib/http.mjs";
 import { createAuth } from "./lib/auth.mjs";
 import { createTelegram } from "./lib/telegram.mjs";
 import { createPush } from "./lib/push.mjs";
@@ -38,7 +38,14 @@ const log = (m) => console.log(`${new Date().toISOString().slice(0, 19)} ${m}`);
 
 export async function createServer(cfg = loadConfig(), deps = {}) {
   if (!cfg.databaseUrl && !deps.pool) throw new Error("DATABASE_URL is not set (Supabase -> Project settings -> Database -> connection string, Session pooler).");
-  const pool = deps.pool || new pg.Pool({ connectionString: cfg.databaseUrl, max: 8, ssl: /localhost|127\.0\.0\.1/.test(cfg.databaseUrl) ? false : { rejectUnauthorized: false } });
+  const pool = deps.pool || new pg.Pool({
+    connectionString: cfg.databaseUrl, max: 8, ssl: /localhost|127\.0\.0\.1/.test(cfg.databaseUrl) ? false : { rejectUnauthorized: false },
+    connectionTimeoutMillis: 15_000, idleTimeoutMillis: 30_000, keepAlive: true,
+    // no single statement may hold a connection for more than 2 minutes (a stuck query would starve the pool)
+    statement_timeout: 120_000, query_timeout: 125_000, application_name: "gq-xraydar-server",
+  });
+  // an idle connection dropped by the database must not take the process down
+  if (!deps.pool) pool.on("error", (e) => log(`[db] idle connection error: ${e.message}`));
   const fetchImpl = deps.fetch || fetch;
   const auth = createAuth(cfg, pool, fetchImpl);
   const telegram = createTelegram(cfg, fetchImpl, log);
@@ -70,11 +77,16 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
   const q = (url, k, d = null) => url.searchParams.get(k) ?? d;
 
   // ------------------------------------------------------------- health / meta
+  // /livez: the process is up (never touches the database). /health: ready to serve (database reachable).
+  r.get("/livez", async () => ({ ok: true, uptimeSec: Math.round((Date.now() - started) / 1000) }));
   r.get("/health", async () => {
-    let db = false, asOf = null;
-    try { await pool.query("select 1"); db = true; const s = await data.get(); asOf = s.info.asOf; } catch { /* reported below */ }
+    let db = false, asOf = null, dbError = null;
+    try { await withTimeout(pool.query("select 1"), 8000, "database check"); db = true; } catch (e) { dbError = e.message; }
+    // the data cache is reported, not awaited: a cold cache must not fail the health check
+    if (db) { data.get().catch(() => {}); asOf = data.peek()?.info?.asOf ?? null; }
     const f = fo.status();
-    return { ok: db, db, dataAsOf: asOf, telegram: telegram.enabled, push: push.enabled, agent: agentProxy.connected(), jobs: cfg.jobsEnabled, fo: { enabled: f.enabled, running: f.running, last: f.last && { at: f.last.at, done: f.last.done.map((x) => `${x.date}:${x.status}`) } } };
+    return { ok: db, db, ...(dbError ? { dbError } : {}), dataAsOf: asOf, telegram: telegram.enabled, push: push.enabled, agent: agentProxy.connected(), jobs: cfg.jobsEnabled, uptimeSec: Math.round((Date.now() - started) / 1000),
+      fo: { enabled: f.enabled, running: f.running, last: f.last && { at: f.last.at, done: (f.last.done || []).map((x) => `${x.date}:${x.status}`) } } };
   });
   r.get("/api/me", async (req) => {
     const u = await auth.web(req);
@@ -403,29 +415,36 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
   registerPublicApi({ r, pool, tokens, audit, analysis });
 
   // ------------------------------------------------------------- HTTP plumbing
+  const HANDLER_TIMEOUT_MS = 150_000; // above the slowest legitimate call (the agent proxy waits up to 170 s on its own route)
   const server = http.createServer(async (req, res) => {
-    const url = new URL(req.url, "http://x");
-    cors(req, res, cfg.appOrigins);
-    if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
-    const m = r.match(req.method, url.pathname);
-    if (!m) return send(res, 404, { error: "not found" });
+    let url = null;
     try {
-      if (url.pathname !== "/health") limiter.check(req.headers["x-telegram-user"] || req.headers.authorization || req.socket.remoteAddress);
+      url = new URL(req.url, "http://x");
+      cors(req, res, cfg.appOrigins);
+      if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
+      const m = r.match(req.method, url.pathname);
+      if (!m) return send(res, 404, { error: "not found" }, req);
+      if (url.pathname !== "/health" && url.pathname !== "/livez") limiter.check(req.headers["x-telegram-user"] || req.headers.authorization || req.socket.remoteAddress);
       const t0 = Date.now();
       const key = `${req.method} ${url.pathname.replace(/\/(\d+|[0-9a-f-]{36}|[A-Z0-9&_-]{2,30})(?=\/|$)/g, "/:x")}`;
       const st = httpStats.get(key) || { n: 0, errors: 0, ms: [] };
       httpStats.set(key, st);
+      if (httpStats.size > 500) httpStats.delete(httpStats.keys().next().value);
       try {
-        const out = await m.handler(req, m.params, url);
+        const slow = /^\/api\/(agent|ask|assistant)/.test(url.pathname) ? 200_000 : HANDLER_TIMEOUT_MS;
+        const out = await withTimeout(Promise.resolve().then(() => m.handler(req, m.params, url)), slow);
         st.n++; st.ms.push(Date.now() - t0); if (st.ms.length > 500) st.ms.shift();
-        send(res, 200, out ?? { ok: true });
+        send(res, 200, out ?? { ok: true }, req);
       } catch (e) { st.n++; st.errors++; throw e; }
     } catch (e) {
-      const status = e.status || 500;
-      if (status >= 500) log(`[http] ${req.method} ${url.pathname}: ${e.stack || e.message}`);
-      send(res, status, { error: status >= 500 && !e.status ? "internal error" : e.message });
+      const status = Number.isInteger(e?.status) && e.status >= 400 && e.status < 600 ? e.status : 500;
+      if (status >= 500) log(`[http] ${req.method} ${url?.pathname || req.url}: ${e?.stack || e?.message || e}`);
+      try { send(res, status, { error: status >= 500 && !e?.status ? "internal error" : String(e?.message || "error") }, req); } catch { try { res.destroy(); } catch { /* gone */ } }
     }
   });
+  // slow or stalled clients cannot hold sockets open forever; keep-alive outlives the platform proxy's
+  server.requestTimeout = 210_000; server.headersTimeout = 30_000; server.keepAliveTimeout = 65_000;
+  server.on("clientError", (_e, socket) => { try { if (socket.writable) socket.end("HTTP/1.1 400 Bad Request\r\nconnection: close\r\n\r\n"); else socket.destroy(); } catch { /* gone */ } });
 
   stream = attachStream({ server, tokens, audit, log });
   alerts.hooks.onFired = (user, fired) => stream.broadcast("alerts", { at: new Date().toISOString(), alerts: fired.map((f) => ({ symbol: f.symbol, text: f.text, value: f.value, asOf: f.asOf, kind: f.kind || "stock" })) }, { userId: user.id });
@@ -463,6 +482,9 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const cfg = loadConfig();
+  // one failed promise or late socket error must be logged, never fatal; a real crash exits so Railway restarts it
+  process.on("unhandledRejection", (e) => log(`[process] unhandled rejection: ${e?.stack || e}`));
+  process.on("uncaughtException", (e) => { log(`[process] uncaught exception: ${e?.stack || e}`); setTimeout(() => process.exit(1), 500).unref(); });
   const app = await createServer(cfg);
   app.server.listen(cfg.port, () => log(`[server] listening on ${cfg.port}; auth=${cfg.authMode}; telegram=${!!cfg.telegramToken}; agent=${cfg.agentUrl || "built-in"}`));
   app.startJobs();
