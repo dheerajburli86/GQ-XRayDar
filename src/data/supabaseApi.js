@@ -1,6 +1,7 @@
 // Data API over Supabase (anon key, read only). Market data comes from the
 // heatmap dashboard's tables; computed analytics from this app's tas_* tables,
 // which the batch engine (cli/run.mjs) fills.
+import { CAP_UNRELIABLE_COUNTRIES } from "../../engine/geography.js";
 import { createClient } from "@supabase/supabase-js";
 import { applyCorporateActions, removeBadPrints } from "../../engine/quality.js";
 import { decodeEvents } from "../../engine/eventCodec.js";
@@ -90,14 +91,14 @@ export function createSupabaseApi(url, key) {
     },
     async securities() {
       const rows = await all("tas_security", "*", undefined, "id");
-      return rows.map((r) => ({
+      return rows.map((r) => (CAP_UNRELIABLE_COUNTRIES.has(r.country) ? { ...r, cap_local: null, cap_currency: null, cap_usd: null, cap_usd_now: null, cap_segment: null } : r)).map((r) => ({
         id: r.id, symbol: r.symbol, name: r.name, universe: r.universe, exchange: r.exchange, isin: r.isin, country: r.country, region: r.region,
         classification: r.classification, geoAssigned: r.geo_assigned, currency: r.currency, currencyMajor: r.currency_major, currencyDivisor: r.currency_divisor,
         countryCurrency: r.country_currency, sector: r.sector, industryGroup: r.industry_group, industry: r.industry, classSource: r.class_source,
         capLocal: r.cap_local, capCurrency: r.cap_currency, capUsd: r.cap_usd, capUsdNow: r.cap_usd_now, capSegment: r.cap_segment, assetClass: r.asset_class || "Stock", active: r.active,
       }));
     },
-    async screenRows() { return (await all("tas_snapshot", "id,flat,rs_rank", undefined, "id")).map((r) => ({ id: r.id, flat: r.flat, rsRank: r.rs_rank })); },
+    async screenRows() { return (await all("tas_snapshot", "id,flat,rs_rank", undefined, "id")).map((r) => ({ id: r.id, flat: r.flat?.country === "India" ? Object.fromEntries(Object.entries(r.flat).map(([k, v]) => [k, /^cap/i.test(k) ? null : v])) : r.flat, rsRank: r.rs_rank })); },
     async snapshot(id) {
       const r = await one(sb.from("tas_snapshot").select("id,snap,f,ww,glocom,rs_rank,score").eq("id", id).maybeSingle());
       return r ? { id: r.id, snap: r.snap, f: r.f, ww: r.ww, glocom: r.glocom, rsRank: r.rs_rank, score: r.score } : null;

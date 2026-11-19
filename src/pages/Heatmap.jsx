@@ -84,7 +84,7 @@ export default function Heatmap({ route }) {
         return {
           key: r.id, label: r.sec.symbol, title: `${r.sec.symbol} · ${r.sec.name}`, size: sizeBy === "equal" ? 1 : Math.max(cap, 1), color, sub, fg: colorBy === "glocom" ? GLOCOM_FG(color) : undefined,
           onClick: () => navigate(`stock/${r.id}`),
-          tip: [["Price", `${fmtNum(f.close)} ${r.sec.currency}`], ["Market cap", fmtMoney(cap)], ["Weight in view", tot ? `${((cap / tot) * 100).toFixed(2)}%` : "—"],
+          tip: [["Price", `${fmtNum(f.close)} ${r.sec.currency}`], ["Market cap", cap ? fmtMoney(cap) : "not published"], ["Weight in view", tot ? `${((cap / tot) * 100).toFixed(2)}%` : "—"],
             [`Return ${h} (${ccy === "USD" ? "USD" : "local"})`, fmtPct(ret)], [`RSC vs country ${h === "1W" ? "1M" : h}`, fmtPct(f[`rscChg_country_${h === "1W" ? "1M" : h}`])],
             ["RSI (W)", fmtNum(f.rsiW, 1)], ["MMA (W)", f.mmaW || "—"], ["Sector", r.sec.sector], ["Cap segment", r.sec.capSegment || "—"]],
         };

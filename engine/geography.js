@@ -13,6 +13,13 @@
 // listed below map to region "Unassigned" and classification "Unclassified",
 // and are reported by the data-health page rather than guessed.
 
+/**
+ * Countries whose market caps are not reliable enough to publish (owner, 2026-11-19: India, no dependable source;
+ * the heatmap hides them for the same reason). Their stocks keep charts, screens and scans, but carry NO cap, so they
+ * join no CW, EW or Weight Watcher index and no "top N by cap" list. Remove a country here to bring it back.
+ */
+export const CAP_UNRELIABLE_COUNTRIES = new Set(["India"]);
+
 export const REGIONS = ["US", "Asia", "Europe", "Africa", "LATAM", "Other Americas"];
 export const CLASSIFICATIONS = ["US", "Emerging Markets", "European Developed Markets", "Other Developed Markets"];
 

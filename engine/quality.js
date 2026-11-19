@@ -1,3 +1,4 @@
+import { CAP_UNRELIABLE_COUNTRIES } from "./geography.js";
 // Data health: problems that would otherwise surface only as a wrong number.
 // Each issue names the instrument, the rule and the evidence. Nothing here
 // changes data -- it reports.
@@ -46,7 +47,7 @@ export function securityIssues(sec, daily, ctx) {
     }
   }
   const stock = !sec.assetClass || sec.assetClass === "Stock";
-  if (stock && !sec.capLocal && !sec.capUsd) add("warn", "missing_market_cap", "No market cap: excluded from CW and EW indices");
+  if (stock && !sec.capLocal && !sec.capUsd && !CAP_UNRELIABLE_COUNTRIES.has(sec.country)) add("warn", "missing_market_cap", "No market cap: excluded from CW and EW indices");
   if (stock && sec.sector === "Others") add("info", "unclassified_sector", `No GICS sector (evidence: ${sec.classSource})`);
   if (!sec.geoAssigned) add("warn", "unassigned_geography", `Country "${sec.country}" has no region / classification mapping`);
   if (sec.countryCurrency && sec.currencyMajor !== sec.countryCurrency) add("info", "foreign_currency_listing", `Quoted in ${sec.currency}; country currency ${sec.countryCurrency} (converted via FX)`);

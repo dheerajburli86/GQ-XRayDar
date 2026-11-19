@@ -7,7 +7,7 @@
 
 import { classifyGics, OTHERS } from "./reference/gics.js";
 import { INDUSTRY_MAP } from "./reference/industryMap.js";
-import { canonicalCountry, countryMeta } from "./geography.js";
+import { canonicalCountry, countryMeta, CAP_UNRELIABLE_COUNTRIES } from "./geography.js";
 import { majorCurrency } from "./fx.js";
 
 // Rows the heatmap marks as non-companies (ETF, index, bonds, InvITs, SPACs,
@@ -73,6 +73,7 @@ export function toSecurity(row, indiaMap = null) {
   let capCurrency = row.market_cap_currency || null;
   if (capLocal == null && row.market_cap_inr != null) { capLocal = Number(row.market_cap_inr); capCurrency = "INR"; }
   if (capLocal == null && row.market_cap_usd != null && major === "USD") { capLocal = Number(row.market_cap_usd); capCurrency = "USD"; }
+  const noCap = CAP_UNRELIABLE_COUNTRIES.has(country);
   return {
     id: row.id,
     symbol: row.symbol,
@@ -92,9 +93,9 @@ export function toSecurity(row, indiaMap = null) {
     industryGroup: g.industryGroup,
     industry: industry || null,
     classSource: g.source,
-    capLocal: capLocal && capLocal > 0 ? capLocal : null, // in capCurrency (major units)
-    capCurrency: capCurrency ? majorCurrency(capCurrency).major : null,
-    capUsd: row.market_cap_usd != null ? Number(row.market_cap_usd) : null,
+    capLocal: !noCap && capLocal && capLocal > 0 ? capLocal : null, // in capCurrency (major units)
+    capCurrency: !noCap && capCurrency ? majorCurrency(capCurrency).major : null,
+    capUsd: !noCap && row.market_cap_usd != null ? Number(row.market_cap_usd) : null,
     active: row.is_active !== false,
     assetClass: fund || "Stock",
   };
