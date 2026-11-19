@@ -142,3 +142,34 @@ Local end-to-end check of the batch engine against a throw-away Postgres:
 - A failed load that a page does not render shows a Retry banner (`gqta-load-error` event from `useAsync`). Page files are prefetched in idle time after startup.
 - **Server**: per-request timeout (150 s, 200 s for the agent), pg pool timeouts + `statement_timeout`, gzip for JSON over 2 KB, `/livez` (process) vs `/health` (database), the data cache keeps serving the last good run if a refresh fails, unhandled rejections are logged not fatal, Telegram 429 waits once and retries. Pinned by `tests/http.test.mjs`.
 - Testing tools used: `/tmp/pw/monkey.mjs` style headless click-through (every button/select/row on every page) against a local PostgREST over the throw-away Postgres. Never run two such scripts in one browser tab: they fight over the hash and look like 30-second hangs.
+
+## Never deploy during the engine run (added 2026-11-19)
+
+The engine service (`railway.engine.json`, cron `40 2 * * 2-6`, ~4 h) is redeployed by every push to main, and a
+redeploy ENDS the job that is running. On 2026-11-19 a push at 06:26 UTC killed that day's run (marked failed in
+`tas_calc_run`; the app kept serving the previous complete run). Push only between ~07:00 and 02:30 UTC.
+
+## Added 2026-11-19 (owner's improvements list + additional feature list)
+
+- **Bad prints / share breaks** (`engine/quality.js`): `removeBadPrints` drops a 1-5 bar jump of x1.8+ that comes
+  straight back (QH Thailand 31 Dec 2021 = 899,101); applied in the engine AND in every bar loader (browser, server)
+  so charts and numbers agree. `shareBreaks` + `methodology.eligibility.maxCapUsd / maxCapMultiple`: before a x3+
+  step confirmed by FMP share counts (or any x10 step) constant-share caps are unusable, so the stock joins CW / EW /
+  WW only from then (LATAM Airlines, Delcath). Both are reported in data health.
+- **Weight Watcher** leaves a date empty when a big country of the parent had < 25% of its stocks (`tas_ww.gaps`);
+  industry-group views added; line names on hover only (`TvChart hoverNames`).
+- **Ticker search** (`src/lib/instruments.js`): categories INDIA / US / EUROPE / Emerging / JAPAN / Indices / Currency /
+  Commodity / Crypto; chart refs `s:<id>`, `i:<index key>`, `x:<symbol>`. Extra chart-only instruments (more indices,
+  yields, commodity futures, currency pairs from tas_fx) are in `tas_extra_series`, built by `cli/extraJob.mjs` on the
+  server. MSCI index levels are licensed and not available; MSCI tracker ETFs are tagged instead.
+- **Keys** (`src/lib/chartKeys.js`): D W M Q H Y period, C (or typing) opens the ticker popup. Wheel zoom keeps the
+  last bar fixed (`rightBarStaysOnScroll`). The last instrument opened carries across chart screens.
+- **Multi-tile screen** (`src/pages/Tiles.jsx`, parser `engine/tiles.js`): command → top-N by cap of a country /
+  group, relative to a listed index with the group's name (PHLX Semiconductor) else the house country-sector CW.
+- **GLOCOM / LOCOM**: same rule sheet; called LOCOM for Indian industries / sectors, GLOCOM elsewhere (owner's
+  improvements list, supersedes the 2026-11-15 wording). Stock vs its industry = "GLOCOM within industry". History
+  kept 70 sessions so the 3-month move works.
+- **Chart lab**: studies (`engine/studies.js`), drawing geometry (`engine/drawings.js`), formula language
+  (`engine/formula.js`, no eval, own-property names only), projections (`engine/projection.js`), seasonality,
+  TPO from candles, replay with practice orders, paper stats (`engine/paperStats.js`). Alerts accept `match: any`,
+  `once`, and `{kind: level|line}` conditions limited to `universe.ids`.
