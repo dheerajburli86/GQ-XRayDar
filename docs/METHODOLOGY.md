@@ -25,6 +25,7 @@ rules that produced it. Items marked **[C]** are defaults awaiting sign-off.
 - Calendar: every date on which at least 50 instruments traded, from the start date.
 - Rebalance: last session of each calendar quarter. **[C]**
 - Eligibility at a rebalance: ≥ 60 sessions of history, traded within the last 10
+- Minimum market cap at each rebalance (owner, 2026-11-19): USD 1B for developed markets, USD 200M for emerging (`eligibility.minCapUsd`; caps are estimated from the latest share count). Not applied to India, which has no reliable cap yet (equal-weight indices, no size filter, until a cap source exists). Methodology 1.1.0.
   sessions, market cap known. A stock without a cap joins **neither** CW nor EW, so the
   two families always hold identical constituents.
 - Cap segments per country at each rebalance, by cumulative market cap sorted

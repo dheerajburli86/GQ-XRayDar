@@ -198,3 +198,7 @@ redeploy ENDS the job that is running. On 2026-11-19 a push at 06:26 UTC killed 
 - **Turnover** (`engine/turnover.js`, `tas_security.turnover_usd`, migration 20261119000200): median daily close x volume in USD over 60 sessions (>= 20 with volume). A liquidity measure, never shown as a cap. `secRankCmp` orders capped stocks by cap first, uncapped by turnover; every top-N / default-instrument / search ordering uses it. Heatmap tile size and tooltip switch to "traded value" when no stock in the view has a cap; Tiles titles say "by turnover".
 - **Proxy**: "India CW (Nifty 500, official index)" is the stored Nifty 500 level series, offered in ticker search (All / India / Indices) as a chart / RSC line only. It is not a house index and is in no roll-up.
 - Stored India CW / WW series remain in the database until the next engine run (02:40 UTC) rewrites the index tables; `tests/indiaCap.test.mjs`, `tests/turnover.test.mjs` pin all of the above.
+
+## Index minimum market cap (added 2026-11-19, owner / Alok Sir)
+
+- `methodology.eligibility.minCapUsd` = USD 1B developed, USD 200M emerging, tested on the (estimated) cap at every rebalance in `IndexBuilder.addCountry`, before the Large/Mid/Small split (so the percentile bands are computed on the stocks that pass). Countries without a reliable cap (India) skip it and the bands: wait for a cap source, do not substitute turnover. Methodology version 1.1.0; the stored indices change at the next engine run.

@@ -105,7 +105,7 @@ test("CW and EW returns are exact, and the USD index = local relatives x FX rela
   const { dates, mk } = tinyUniverse();
   const stocks = [mk("a", [10, 10, 11, 12, 12, 13, 13, 14], 100), mk("b", [20, 20, 20, 18, 18, 18, 19, 19], 300), mk("c", [5, 5, 5.5, 5.5, 6, 6, 6, 6], 50)];
   const fx = buildFxTable(dates, { EUR: { dates, usd: [1.1, 1.1, 1.12, 1.1, 1.08, 1.1, 1.11, 1.1] } });
-  const m = { ...METHODOLOGY, eligibility: { ...METHODOLOGY.eligibility, minListingDays: 0 }, capBreakpoints: { large: 0.7, mid: 0.85, small: 1.01 } };
+  const m = { ...METHODOLOGY, eligibility: { ...METHODOLOGY.eligibility, minListingDays: 0, minCapUsd: { developed: 0, emerging: 0 } }, capBreakpoints: { large: 0.7, mid: 0.85, small: 1.01 } };
   const b = new IndexBuilder({ dates, rebalanceIdx: [1, 5], fx, methodology: m });
   b.addCountry("Germany", "EUR", stocks, "Europe", "European Developed Markets");
   const cwL = b.series.get("CW|LCL|C:Germany"), cwU = b.series.get("CW|USD|C:Germany"), ewL = b.series.get("EW|LCL|C:Germany");
@@ -133,7 +133,7 @@ test("a delisted constituent leaves on its last bar; survivors carry the index",
   const s2 = mk("b", [10, 10, 10, 10, 10, 10, 10, 10], 100, "Financials", "EUR", 3);
   for (let t = 4; t < T; t++) s2.close[t] = 10; // forward-filled after its last bar
   const fx = buildFxTable(dates, {}, { EUR: 1.1 });
-  const m = { ...METHODOLOGY, eligibility: { ...METHODOLOGY.eligibility, minListingDays: 0 }, capBreakpoints: { large: 0.7, mid: 0.85, small: 1.01 } };
+  const m = { ...METHODOLOGY, eligibility: { ...METHODOLOGY.eligibility, minListingDays: 0, minCapUsd: { developed: 0, emerging: 0 } }, capBreakpoints: { large: 0.7, mid: 0.85, small: 1.01 } };
   const b = new IndexBuilder({ dates, rebalanceIdx: [1, 5], fx, methodology: m });
   b.addCountry("Germany", "EUR", [s1, s2], "Europe", "European Developed Markets");
   const cw = b.series.get("CW|LCL|C:Germany");

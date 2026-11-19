@@ -120,7 +120,7 @@ export class IndexBuilder {
     this.higher = new Map();     // scopeKey -> acc (USD)
     this.series = new Map();     // indexKey -> series record
     this.memberships = [];       // {country, date, idx, latest, members:[...]}
-    this.stats = { countries: 0, stocksSeen: 0, stocksIndexed: new Set(), excluded: { noCap: 0, notListed: 0, stale: 0, micro: 0, shareBreak: 0, capImplausible: 0 } };
+    this.stats = { countries: 0, stocksSeen: 0, stocksIndexed: new Set(), excluded: { noCap: 0, notListed: 0, stale: 0, micro: 0, shareBreak: 0, capImplausible: 0, belowMinCap: 0 } };
     this.splitGuarded = []; // [{id, date, ratio}]
   }
 
@@ -184,6 +184,8 @@ export class IndexBuilder {
         if (!(capU > 0)) continue;
         // an estimate above the largest company there has ever been, or more than maxCapMultiple
         // times the stock's own cap at its last bar, is a share-count change, not a market cap
+        const minCap = cls === "Emerging Markets" ? m.eligibility.minCapUsd?.emerging : m.eligibility.minCapUsd?.developed;
+        if (minCap > 0 && capU < minCap) { this.stats.excluded.belowMinCap++; continue; }
         const capLastU = s.shares * s.close[s.last] * s.fxOwn[s.last];
         if (capU > m.eligibility.maxCapUsd || (capLastU > 0 && capU > m.eligibility.maxCapMultiple * capLastU)) {
           this.stats.excluded.capImplausible++;
