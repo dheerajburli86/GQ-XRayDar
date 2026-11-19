@@ -22,7 +22,7 @@ export const DARK = {
 export const DARK_NO_AXIS = { ...DARK, timeScale: { ...DARK.timeScale, visible: false } };
 
 
-export function Pane({ row, ri, last, mode, overlay, v, tf, from, height, sync, rangeKey }) {
+export function Pane({ row, ri, last, mode, overlay, v, tf, from, height, sync, rangeKey, extra = null }) {
   const built = useMemo(() => {
     if (!row.time.length) return null;
     const keep = (x) => x != null && Number.isFinite(x) && (!v.log || x > 0);
@@ -43,8 +43,14 @@ export function Pane({ row, ri, last, mode, overlay, v, tf, from, height, sync, 
       if (overlay === "acc" && color === baseColor) color = GREEN;
       series.push({ id: `e${a.period}`, type: "line", data: line(a.values), options: { color, lineWidth: 1, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false } });
     }
+    // studies, formulas and projections laid over the price row (specs built by lib/chartOverlays.js)
+    if (row.kind === "price" && extra) {
+      series.push(...(extra.price || []).map((sp, i) => ({ id: `x${i}`, ...sp })));
+      if (extra.markers?.length) series[0] = { ...series[0], markers: extra.markers };
+      if (extra.levels?.length) series[0] = { ...series[0], priceLines: [...(series[0].priceLines || []), ...extra.levels.map((l) => ({ price: l.price, color: l.color, title: l.title || "" }))] };
+    }
     return series;
-  }, [row, ri, mode, overlay, v]);
+  }, [row, ri, mode, overlay, v, extra]);
 
   // default window: about 2 years of daily candles, 10 years of weekly, everything from monthly up
   const visibleRange = useMemo(() => {
@@ -66,6 +72,24 @@ export function Pane({ row, ri, last, mode, overlay, v, tf, from, height, sync, 
       <div className="anl-label">{row.label}</div>
       {built ? <TvChart height={height} series={built} sync={sync} logScale={v.log} visibleRange={visibleRange} rangeKey={rangeKey} fit theme={last ? DARK : DARK_NO_AXIS} />
         : <div className="anl-empty" style={{ height }}>{row.missing || "no data"}</div>}
+    </div>
+  );
+}
+
+/** A study that needs its own pane (stochastic, ADX, ATR, OBV ...), drawn under the Analyst rows. */
+export function StudyPane({ pane, time, last, height, sync, rangeKey, tf, from }) {
+  const visibleRange = useMemo(() => {
+    const n = time.length;
+    if (!n) return null;
+    if (from) { const i = time.findIndex((x) => x >= from); return i < 0 ? null : { from: time[i], to: time[n - 1] }; }
+    if (tfMonths(tf) >= 1) return null;
+    return { from: time[Math.max(0, n - 500)], to: time[n - 1] };
+  }, [time, tf, from]);
+  const series = useMemo(() => pane.specs.map((sp, i) => ({ id: `${pane.key}${i}`, ...sp })), [pane]);
+  return (
+    <div className="anl-pane">
+      <div className="anl-label">{pane.title}</div>
+      <TvChart height={height} series={series} sync={sync} visibleRange={visibleRange} rangeKey={rangeKey} fit theme={last ? DARK : DARK_NO_AXIS} />
     </div>
   );
 }

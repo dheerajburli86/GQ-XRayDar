@@ -1,5 +1,6 @@
 // One registry of every screenable / displayable field. Screens, tables,
 import { ETI_CHARACTERISTICS } from "./eti.js";
+import { confluence } from "./confluence.js";
 // heatmap colouring, alerts and the natural-language parser all read fields
 // through here, so a "3M return" means the same number everywhere.
 //
@@ -135,6 +136,13 @@ for (const tf of ["D", "W"]) {
   add(`sarUp${tf}`, `Parabolic SAR below price (${T})`, "Trend & MMA", "bool", (r) => (S(r)?.sar == null ? null : S(r).sar > 0));
   add(`ichimokuCloud${tf}`, `Price vs Ichimoku cloud (${T})`, "Trend & MMA", "cat", (r) => S(r)?.cloud, { values: ["above", "inside", "below"] });
   add(`cmf${tf}`, `Chaikin Money Flow x100 (${T})`, "Volume & liquidity", "num", (r) => S(r)?.cmf);
+}
+// confluence: how many signals agree (a count with every vote visible on the chart page), daily and weekly
+for (const tf of ["D", "W"]) {
+  const T = tf === "D" ? "Daily" : "Weekly";
+  const C = (r) => confluence(r.snap?.tf?.[tf]);
+  add(`confluenceNet${tf}`, `Signals agreeing: bullish minus bearish (${T})`, "Trend & MMA", "num", (r) => C(r)?.net);
+  add(`confluenceLean${tf}`, `Signals lean (${T})`, "Trend & MMA", "cat", (r) => { const c = C(r); return c && c.lean !== "too few signals" ? c.lean : null; }, { values: ["bullish", "mixed", "bearish"] });
 }
 add("above20", "Above 20-day EMA", "Trend & MMA", "bool", (r) => r.snap?.day?.above20);
 add("above50", "Above 50-day EMA", "Trend & MMA", "bool", (r) => r.snap?.day?.above50);

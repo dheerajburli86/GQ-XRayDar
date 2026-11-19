@@ -168,3 +168,38 @@ export function formulaFromText(text) {
   for (const [re, f] of T) if (re.test(s)) { const [name, formula] = f(); return { name, formula, understood: `read "${t}" as ${formula}` }; }
   return null;
 }
+
+/**
+ * Import own indicators from a file's text. Accepted, one per line or as JSON:
+ *   name = formula          (lines starting with # or // are comments)
+ *   [{ "name": "...", "formula": "...", "pane": "own"|"price", "color": "#22d3ee" }]
+ * Only this formula language is read. Scripts in another language (Pine, AFL, JavaScript) are not run:
+ * a line that is not a valid formula is reported, never executed.
+ * Returns { items: [{ name, formula, pane, color }], errors: [string] }.
+ */
+export function importFormulas(text, { max = 200 } = {}) {
+  const items = [], errors = [];
+  const src = String(text || "").replace(/^\uFEFF/, "").trim();
+  let raw = [];
+  if (src.startsWith("[") || src.startsWith("{")) {
+    try { const j = JSON.parse(src); raw = (Array.isArray(j) ? j : Array.isArray(j.indicators) ? j.indicators : [j]).map((x, i) => ({ ...x, at: `entry ${i + 1}` })); } catch (e) { return { items, errors: [`not valid JSON: ${e.message}`] }; }
+  } else {
+    src.split(/\r?\n/).forEach((line, i) => {
+      const t = line.trim();
+      if (!t || t.startsWith("#") || t.startsWith("//")) return;
+      const m = t.match(/^([^=<>!]{1,60}?)\s=\s(.+)$/) || t.match(/^([A-Za-z_][\w .%-]{0,40}?)\s*:\s*(.+)$/);
+      raw.push(m ? { name: m[1].trim(), formula: m[2].trim(), at: `line ${i + 1}` } : { name: "", formula: t, at: `line ${i + 1}` });
+    });
+  }
+  for (const r of raw.slice(0, max)) {
+    const f = String(r.formula || "").trim();
+    if (!f) { errors.push(`${r.at}: no formula`); continue; }
+    try { parseFormula(f); } catch (e) { errors.push(`${r.at}: ${e.message}`); continue; }
+    items.push({ name: String(r.name || f.slice(0, 24)).slice(0, 60), formula: f, pane: r.pane === "price" ? "price" : "own", color: /^#[0-9a-f]{6}$/i.test(r.color || "") ? r.color : "#22d3ee" });
+  }
+  if (raw.length > max) errors.push(`only the first ${max} entries were read`);
+  return { items, errors };
+}
+
+/** The reverse: own indicators as JSON text that importFormulas reads back. */
+export const exportFormulas = (list) => JSON.stringify((list || []).map(({ name, formula, pane, color }) => ({ name, formula, pane, color })), null, 2);

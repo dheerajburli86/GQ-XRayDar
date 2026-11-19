@@ -173,3 +173,12 @@ redeploy ENDS the job that is running. On 2026-11-19 a push at 06:26 UTC killed 
   (`engine/formula.js`, no eval, own-property names only), projections (`engine/projection.js`), seasonality,
   TPO from candles, replay with practice orders, paper stats (`engine/paperStats.js`). Alerts accept `match: any`,
   `once`, and `{kind: level|line}` conditions limited to `universe.ids`.
+
+## Added 2026-11-19 (remaining items from the owner's list)
+
+- **Stacked screens** now take indicators (`Indicators` button: studies, formulas, projections from the shared stores, each on its own pane via `StudyPane`). Price pane `ohlc` carries volume for the volume studies.
+- **Workspace** price panels draw the projections saved in the chart lab (shared `projections` store, keyed by instrument id); they are edited in the lab only.
+- **Confluence** (`engine/confluence.js`, version `CONFLUENCE_VERSION`) is a COUNT of agreeing signals, never a forecast or a score of quality. Screen fields `confluenceNet*` / `confluenceLean*`; Chart lab tab shows the signals behind the count.
+- **Script import / export** (`importFormulas` / `exportFormulas` in `engine/formula.js`) moves OUR formula language as text. It never runs Pine or JS; unsupported lines are reported, not guessed.
+- **Events** (chart lab tab) are entered by the user; no calendar feed exists, so none is shown as fact.
+- **Derivatives paper trading** (`engine/deriv/paperBook.js`, `src/components/DerivPaper.jsx`, store `paper.deriv`, INR): fills at the stored end-of-day price, pays `INDIA_COSTS`, NO margin check, NO slippage, no live quote. Futures move cash only when closed; options pay / receive the premium at once. Expired contracts are marked at expiry value but not auto-settled yet.

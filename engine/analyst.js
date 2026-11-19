@@ -73,7 +73,7 @@ export function buildAnalystColumn({ mode, tf, bars, bench = null, rscCloses = n
   const rows = analystRows(mode).map((row) => {
     let time, base;
     let ohlc = null;
-    if (row.kind === "price") { time = agg.time; base = agg.close; ohlc = { open: agg.open, high: agg.high, low: agg.low, close: agg.close }; }
+    if (row.kind === "price") { time = agg.time; base = agg.close; ohlc = { open: agg.open, high: agg.high, low: agg.low, close: agg.close, volume: agg.volume }; }
     else if (row.kind === "rsc" || row.of === "rsc") {
       if (!rel) return { ...row, label: rowLabel(row, tf, rsiPeriod, benchLabel), time: [], base: [], avgs: [], missing: "no comparison series" };
       time = rel.time; base = rel.value;

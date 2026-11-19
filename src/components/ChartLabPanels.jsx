@@ -5,7 +5,8 @@ import { useMemo, useState } from "react";
 import { Check, Badge, Seg } from "./ui.jsx";
 import { STUDIES } from "../../engine/studies.js";
 import { DRAW_TOOLS, alertLevels } from "../../engine/drawings.js";
-import { FORMULA_HELP, parseFormula, isCondition } from "../../engine/formula.js";
+import { FORMULA_HELP, parseFormula, isCondition, importFormulas, exportFormulas } from "../../engine/formula.js";
+import { confluenceAcross } from "../../engine/confluence.js";
 import { METHODS, parseProjectionText } from "../../engine/projection.js";
 import { paperStats } from "../../engine/paperStats.js";
 import { seasonality } from "../../engine/seasonality.js";
@@ -45,6 +46,7 @@ export function StudiesPanel({ studies = {}, onChange }) {
 /** Own indicators written as formulas; saved for every chart. */
 export function FormulaPanel({ list, setList, onScan }) {
   const [draft, setDraft] = useState({ name: "", formula: "", pane: "own", color: "#22d3ee" });
+  const [imp, setImp] = useState(null);
   let err = null;
   try { if (draft.formula.trim()) parseFormula(draft.formula); } catch (e) { err = e.message; }
   const add = () => { if (err || !draft.formula.trim()) return; setList([...list, { id: uid(), on: true, name: draft.name || draft.formula.slice(0, 24), formula: draft.formula, pane: draft.pane, color: draft.color }]); setDraft({ ...draft, name: "", formula: "" }); };
@@ -58,6 +60,21 @@ export function FormulaPanel({ list, setList, onScan }) {
         <button className="btn sm primary" disabled={!!err || !draft.formula.trim()} onClick={add}>Add</button>
       </div>
       {err && <div className="note warn small">{err}</div>}
+      <div className="row small" style={{ gap: 6 }}>
+        <label className="btn sm" title="Import formulas from a .txt or .json file: one 'name = formula' per line, or a JSON list. Only this formula language is read; Pine, AFL or JavaScript is not run.">
+          Import file…<input type="file" accept=".txt,.json,.csv,.formula" style={{ display: "none" }} onChange={async (e) => {
+            const f = e.target.files?.[0]; e.target.value = "";
+            if (!f) return;
+            const r = importFormulas(await f.text());
+            const have = new Set(list.map((x) => `${x.name}|${x.formula}`));
+            const fresh = r.items.filter((x) => !have.has(`${x.name}|${x.formula}`));
+            if (fresh.length) setList([...list, ...fresh.map((x) => ({ id: uid(), on: true, ...x }))]);
+            setImp({ added: fresh.length, dup: r.items.length - fresh.length, errors: r.errors, file: f.name });
+          }} /></label>
+        {list.length > 0 && <button className="btn sm" onClick={() => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([exportFormulas(list)], { type: "application/json" })); a.download = "my_formulas.json"; a.click(); }}>Export my formulas</button>}
+        {imp && <span className={imp.errors.length ? "warn" : "muted"}>{imp.file}: {imp.added} added{imp.dup ? `, ${imp.dup} already there` : ""}{imp.errors.length ? `, ${imp.errors.length} not read` : ""}</span>}
+      </div>
+      {imp?.errors?.length > 0 && <div className="note warn small">{imp.errors.slice(0, 6).map((m, i) => <div key={i}>{m}</div>)}{imp.errors.length > 6 && <div>…and {imp.errors.length - 6} more</div>}</div>}
       {list.map((f) => (
         <div key={f.id} className="row small" style={{ gap: 6 }}>
           <Check checked={f.on} onChange={(on) => setList(list.map((x) => (x.id === f.id ? { ...x, on } : x)))} color={f.color}><b>{f.name}</b></Check>
@@ -252,6 +269,54 @@ export function TpoView({ bars }) {
         </svg>
       </div>
       <div className="small muted">Red line = point of control (most letters); blue band = value area (70% of letters); orange letters = single prints.</div>
+    </div>
+  );
+}
+
+const VOTE = { 1: ["g", "bullish"], [-1]: ["r", "bearish"], 0: ["", "neutral"] };
+/** How many signals agree on the chart's instrument, with every vote and its reason. A count, not a forecast. */
+export function ConfluencePanel({ snap }) {
+  const tf = snap?.snap?.tf;
+  if (!tf) return <div className="small muted">No stored calculation for this instrument yet.</div>;
+  const x = confluenceAcross(tf);
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      <div className="row" style={{ gap: 8 }}><b>{x.text}</b><Badge kind={x.aligned ? (x.D.lean === "bullish" ? "g" : "r") : ""}>{x.aligned ? "daily and weekly aligned" : "not aligned"}</Badge></div>
+      <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 10 }}>
+        {["D", "W"].map((k) => { const c = x[k]; return (
+          <div key={k} className="card tight" style={{ padding: 8 }}>
+            <div className="row" style={{ gap: 6 }}><b>{k === "D" ? "Daily" : "Weekly"}</b>{c ? <><Badge kind={c.lean === "bullish" ? "g" : c.lean === "bearish" ? "r" : ""}>{c.lean}{c.strength ? ` · ${c.strength}` : ""}</Badge>
+              <span className="muted small">{c.bull} bullish · {c.bear} bearish · {c.neutral} neutral of {c.counted} readable</span></> : <span className="muted small">not enough candles</span>}</div>
+            {c && <table className="small"><tbody>{c.items.map((i) => <tr key={i.key}><td>{i.label}</td><td><Badge kind={VOTE[i.vote][0]}>{VOTE[i.vote][1]}</Badge></td><td className="muted">{i.why}</td></tr>)}</tbody></table>}
+          </div>); })}
+      </div>
+      <div className="small muted">Each signal is read from the stored calculation for that timeframe and votes +1, -1 or 0; a signal that cannot be read is left out. This is a count of agreement, not a forecast, a rating or a recommendation.</div>
+    </div>
+  );
+}
+
+const EVENT_KINDS = [["results", "Results / earnings", "#38bdf8"], ["dividend", "Dividend / ex-date", "#22c55e"], ["policy", "Central bank / policy", "#f59e0b"], ["macro", "Economic data", "#a78bfa"], ["corp", "Corporate action / AGM", "#f472b6"], ["other", "Other", "#9ca3af"]];
+export const eventColor = (k) => (EVENT_KINDS.find((x) => x[0] === k) || EVENT_KINDS[5])[2];
+/** Events you enter yourself (no calendar feed is connected); shown as dots on this instrument's charts. */
+export function EventsPanel({ list, setList }) {
+  const [f, setF] = useState({ date: "", label: "", kind: "results", all: false });
+  const add = () => { if (!f.date || !f.label.trim()) return; setList([...list, { id: uid(), date: f.date, label: f.label.trim(), kind: f.kind, all: f.all }].sort((a, b) => (a.date < b.date ? -1 : 1))); setF({ ...f, label: "" }); };
+  return (
+    <div className="stack" style={{ gap: 6 }}>
+      <div className="small muted">No earnings, central-bank or economic calendar is connected, so nothing here is fetched. Add the dates you care about; they show as dots on this chart (and on every chart if you tick "all instruments"). Upcoming ones are listed first.</div>
+      <div className="row small" style={{ gap: 6, flexWrap: "wrap" }}>
+        <input type="date" className="input sm" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} />
+        <select className="input sm" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}>{EVENT_KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+        <input className="input sm" style={{ width: 260 }} placeholder="e.g. Q2 results · RBI policy · ex-dividend 12" value={f.label} onChange={(e) => setF({ ...f, label: e.target.value })} onKeyDown={(e) => e.key === "Enter" && add()} />
+        <Check checked={f.all} onChange={(all) => setF({ ...f, all })}>all instruments</Check>
+        <button className="btn sm primary" disabled={!f.date || !f.label.trim()} onClick={add}>Add event</button>
+      </div>
+      {list.length === 0 ? <div className="small muted">No events yet.</div> : list.map((e) => (
+        <div key={e.id} className="row small" style={{ gap: 6 }}>
+          <span style={{ width: 9, height: 9, borderRadius: 9, background: eventColor(e.kind), display: "inline-block" }} />
+          <span className="mono">{e.date}</span><b>{e.label}</b>{e.all && <Badge>all instruments</Badge>}
+          <button className="btn sm ghost" onClick={() => setList(list.filter((x) => x.id !== e.id))}>✕</button>
+        </div>))}
     </div>
   );
 }

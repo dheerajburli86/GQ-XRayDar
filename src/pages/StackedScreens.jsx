@@ -8,9 +8,11 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useData } from "../data/store.jsx";
 import { useAsync } from "../lib/useAsync.js";
 import { navigate } from "../lib/router.js";
-import { Seg, Check, Badge, Loading, Empty } from "../components/ui.jsx";
+import { Seg, Check, Badge, Loading, Empty, Tabs } from "../components/ui.jsx";
 import { ChartSync } from "../components/TvChart.jsx";
-import { Pane, YELLOW, RED, ACC_COLOR, PRESETS, DEFAULT_VIEW } from "../components/AnalystPane.jsx";
+import { Pane, StudyPane, YELLOW, RED, ACC_COLOR, PRESETS, DEFAULT_VIEW } from "../components/AnalystPane.jsx";
+import { StudiesPanel, FormulaPanel, ProjectionPanel } from "../components/ChartLabPanels.jsx";
+import { studyOverlays, formulaOverlays, projectionOverlays } from "../lib/chartOverlays.js";
 import { InstrumentPicker, TfPicker } from "../components/pickers.jsx";
 import { QuickTicker } from "../components/QuickTicker.jsx";
 import { useChartKeys } from "../lib/chartKeys.js";
@@ -55,6 +57,14 @@ export default function StackedScreens({ route }) {
   const anchor = from && rg.anchor ? from : null;
   const [rsiN, setRsiN] = usePersistent("analyst.rsiPeriod", null); // null = the methodology default (14)
   const [active, setActive] = useState(1);
+  // studies, own formulas and projections on the price row (the same stores the chart lab uses)
+  const [studies, setStudies] = usePersistent("analyst.studies", {});
+  const [customs, setCustoms] = usePersistent("customIndicators", []);
+  const [allProj, setAllProj] = usePersistent("projections", {});
+  const projKey = secId || instKey || "";
+  const projs = useMemo(() => allProj[projKey] || [], [allProj, projKey]);
+  const setProjs = (list) => setAllProj({ ...allProj, [projKey]: list });
+  const [tray, setTray] = usePersistent("analyst.tray", { open: false, tab: "studies" });
   const [rangeKey, setRangeKey] = useState(0);
   const [syncs] = useState(() => [new ChartSync(), new ChartSync()]);
   const [vh, setVh] = useState(window.innerHeight);
@@ -99,6 +109,17 @@ export default function StackedScreens({ route }) {
   /* eslint-enable react-hooks/exhaustive-deps */
   const columns = useMemo(() => (colL && colR ? [colL, colR] : null), [colL, colR]);
 
+  // overlays per column, from that column's own candles (a weekly ADX uses weekly candles)
+  const extras = useMemo(() => (columns || []).map((col) => {
+    const o = col.rows[0]?.ohlc;
+    if (!o || !col.rows[0].time.length) return null;
+    const b = { time: col.rows[0].time, open: o.open, high: o.high, low: o.low, close: o.close, volume: o.volume };
+    const so = studyOverlays(b, studies, col.tf), fo = formulaOverlays(b, customs), pj = projectionOverlays(b, projs, col.tf);
+    return { bars: b, price: [...so.price, ...fo.price, ...pj.price], levels: [...so.levels, ...pj.levels], markers: fo.markers, panes: [...so.panes, ...fo.panes], notes: so.notes, errors: fo.errors, projections: pj.results };
+  }), [columns, studies, customs, projs]);
+  const nExtra = Math.max(0, ...extras.map((e) => e?.panes.length || 0));
+  const nStudies = Object.values(studies).filter((x) => x?.on).length;
+
   const shotRef = useRef(null);
   const shotName = () => `${(instShort || "chart").replace(/[^\w.-]+/g, "_")}_${mode}_${left}-${right}_${columns?.[0]?.header?.date || ""}`;
   const shotMeta = () => ({
@@ -117,11 +138,11 @@ export default function StackedScreens({ route }) {
   // keyboard: D W M Q H Y set the selected column's period; C (or typing) changes the instrument
   useChartKeys({ onTf: (tf) => setTf(active === 0 ? "left" : "right", tf), onSearch: (ch) => setPicking({ initial: ch }) });
   // panes fill the window below the toolbars, so the bottom row is visible without scrolling
-  const nRows = cfg.base === "rsc" ? 5 : 4;
+  const nRows = (cfg.base === "rsc" ? 5 : 4) + nExtra * 0.8;
   const anlRef = useRef(null);
   const [top, setTop] = useState(170);
   const hasCols = !!columns;
-  useLayoutEffect(() => { const el = anlRef.current; if (el) setTop(Math.max(60, el.getBoundingClientRect().top + window.scrollY)); }, [hasCols, vh, mode, v.avgOnly, rg.from, rg.to, picking]);
+  useLayoutEffect(() => { const el = anlRef.current; if (el) setTop(Math.max(60, el.getBoundingClientRect().top + window.scrollY)); }, [hasCols, vh, mode, v.avgOnly, rg.from, rg.to, picking, tray.open, tray.tab]);
   const paneH = Math.max(70, Math.floor((vh - top - 22 - 34) / (nRows + 0.35)));
 
   return (
@@ -157,6 +178,8 @@ export default function StackedScreens({ route }) {
         {(rg.from || rg.to) && <button className="btn sm" onClick={() => setRg({ from: "", to: "" })}>Clear dates</button>}
         {badRange && <Badge kind="r">From is after To: dates ignored</Badge>}
         <button className="btn sm" onClick={() => setRangeKey((k) => k + 1)} title="Back to the default window">⇥ Latest</button>
+        <button className={`btn sm ${tray.open ? "primary" : ""}`} onClick={() => setTray({ ...tray, open: !tray.open })} title="Indicators, your own formulas and projections on the price row">
+          Indicators{nStudies + customs.filter((c) => c.on).length + projs.filter((p) => !p.hidden).length ? ` (${nStudies + customs.filter((c) => c.on).length + projs.filter((p) => !p.hidden).length})` : ""}</button>
         {sec && <a className="btn sm" href={`#/stock/${sec.id}`}>Stock page</a>}
         <a className="btn sm" href={`#/tiles?inst=${encodeURIComponent(instKey)}&mode=${mode}`} title="Open this instrument's peers in the multi-tile screen">Tiles</a>
         {columns && <><button className="btn sm" onClick={() => savePicture("png")} title="Download this whole screen as a picture">Download PNG</button>
@@ -164,6 +187,16 @@ export default function StackedScreens({ route }) {
         {data?.aligned && data.aligned.currency === "USD" && data.inst.currency !== "USD" && <Badge>RSC in USD (different currencies)</Badge>}
         {data?.inst?.adjustments?.length > 0 && <Badge kind="b">split-adjusted ({data.inst.adjustments.length})</Badge>}
       </div>
+      {tray.open && (
+        <div className="card" style={{ padding: 8 }}>
+          <Tabs value={tray.tab} onChange={(tab) => setTray({ ...tray, tab })} tabs={[{ value: "studies", label: "Indicators" }, { value: "formula", label: `My formulas (${customs.length})` }, { value: "proj", label: `Projections (${projs.length})` }]} />
+          {tray.tab === "studies" && <StudiesPanel studies={studies} onChange={setStudies} />}
+          {tray.tab === "formula" && <FormulaPanel list={customs} setList={setCustoms} />}
+          {tray.tab === "proj" && (extras[active] || extras[0] ? <ProjectionPanel list={projs} setList={setProjs} results={(extras[active] || extras[0]).projections} bars={(extras[active] || extras[0]).bars} tf={columns[extras[active] ? active : 0]?.tf || left} /> : <Empty>No candles yet</Empty>)}
+          {extras.flatMap((e) => e?.errors || []).slice(0, 3).map((m, i) => <div key={i} className="note warn small">{m}</div>)}
+          {(extras[0]?.notes || []).map((m, i) => <div key={i} className="small muted">{m}</div>)}
+        </div>
+      )}
       {!inst ? <Empty>Pick an instrument</Empty> : loading ? <Loading what="series" /> : error ? <div className="note warn">{String(error.message)}</div> : !columns ? <Empty>No price history</Empty> : (
         <div className="anl" ref={(el) => { shotRef.current = el; anlRef.current = el; }}>
           {columns.map((col, ci) => (
@@ -172,8 +205,11 @@ export default function StackedScreens({ route }) {
                 {tfLabel(col.tf)}{col.header ? `  ${fmt(col.header.open)}  ${fmt(col.header.high)}  ${fmt(col.header.low)}  ${fmt(col.header.close)}  [ ${col.header.chg == null ? "—" : `${col.header.chg >= 0 ? "" : "-"}${Math.abs(col.header.chg * 100).toFixed(2)}%`} ] - ${analystDate(col.header.date)}` : "  no data"}
               </div>
               {col.rows.map((row, ri) => (
-                <Pane key={`${ci}-${ri}`} row={row} ri={ri} last={ri === col.rows.length - 1} mode={mode} overlay={cfg.overlay} v={v} tf={col.tf} from={from}
-                  height={ri === 0 ? Math.round(paneH * 1.35) : paneH} sync={syncs[ci]} rangeKey={`${rangeKey}|${ci}`} />
+                <Pane key={`${ci}-${ri}`} row={row} ri={ri} last={ri === col.rows.length - 1 && !(extras[ci]?.panes?.length)} mode={mode} overlay={cfg.overlay} v={v} tf={col.tf} from={from}
+                  height={ri === 0 ? Math.round(paneH * 1.35) : paneH} sync={syncs[ci]} rangeKey={`${rangeKey}|${ci}`} extra={ri === 0 ? extras[ci] : null} />
+              ))}
+              {(extras[ci]?.panes || []).map((pn, pi, all) => (
+                <StudyPane key={pn.key} pane={pn} time={col.rows[0].time} last={pi === all.length - 1} tf={col.tf} from={from} height={Math.round(paneH * 0.8)} sync={syncs[ci]} rangeKey={`${rangeKey}|${ci}`} />
               ))}
             </div>
           ))}

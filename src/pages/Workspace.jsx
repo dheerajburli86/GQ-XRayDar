@@ -10,7 +10,7 @@ import { loadInstrument, alignCurrency } from "../lib/series.js";
 import { aggregate, ema, emaStrict, rsi, macd, rsc } from "../../engine/indicators.js";
 import { priceSeries } from "../lib/chartStyle.js";
 import { STUDIES } from "../../engine/studies.js";
-import { studyOverlays } from "../lib/chartOverlays.js";
+import { studyOverlays, projectionOverlays } from "../lib/chartOverlays.js";
 import { usePersistent, uid } from "../lib/storage.js";
 import { useChartKeys } from "../lib/chartKeys.js";
 
@@ -61,6 +61,9 @@ function ChartPanel({ p, onChange, onRemove, sync }) {
     if (p.ind === "rsc" && p.bench) { bench = await loadInstrument(d.api, p.bench, d); if (inst && bench) aligned = await alignCurrency(d.api, inst, bench); }
     return { inst, bench, aligned };
   }, [p.inst?.id, p.inst?.key, p.ind, p.bench?.key, p.bench?.id]);
+  // projections drawn in the chart lab are shared by instrument; shown here on the price panels (edit them in the lab)
+  const [allProj] = usePersistent("projections", {});
+  const projList = useMemo(() => allProj[p.inst?.id ?? p.inst?.key] || [], [allProj, p.inst?.id, p.inst?.key]);
   const series = useMemo(() => {
     if (!data?.inst) return [];
     const b = aggregate({ ...data.inst, volume: data.inst.volume || data.inst.close.map(() => 0) }, p.tf);
@@ -80,9 +83,11 @@ function ChartPanel({ p, onChange, onRemove, sync }) {
       if (o.panes.length) return o.panes[0].specs;
       return [{ type: "candles", data: b.time.map((t, i) => ({ time: t, open: b.open[i], high: b.high[i], low: b.low[i], close: b.close[i] })), options: { upColor: "#16a34a", downColor: "#dc2626", borderVisible: false, wickUpColor: "#16a34a", wickDownColor: "#dc2626" } }, ...o.price];
     }
-    if (p.ind === "mma") return [base, ...[3, 5, 8, 10, 12, 15].map((n) => L(emaStrict(b.close, n), "#facc15")), ...[30, 35, 40, 45, 50, 60].map((n) => L(emaStrict(b.close, n), "#ef4444"))];
-    return [base, L(emaStrict(b.close, 20), "#22d3ee", 1, "20"), L(emaStrict(b.close, 50), "#14a44d", 1, "50"), L(emaStrict(b.close, 200), "#d97706", 1, "200")];
-  }, [data, p.tf, p.ind]);
+    let proj = [];
+    try { proj = projList.length ? projectionOverlays(b, projList, p.tf).price : []; } catch { proj = []; }
+    if (p.ind === "mma") return [base, ...[3, 5, 8, 10, 12, 15].map((n) => L(emaStrict(b.close, n), "#facc15")), ...[30, 35, 40, 45, 50, 60].map((n) => L(emaStrict(b.close, n), "#ef4444")), ...proj];
+    return [base, L(emaStrict(b.close, 20), "#22d3ee", 1, "20"), L(emaStrict(b.close, 50), "#14a44d", 1, "50"), L(emaStrict(b.close, 200), "#d97706", 1, "200"), ...proj];
+  }, [data, p.tf, p.ind, projList]);
   return (
     <div className="card tight" style={{ padding: 0 }}>
       <div className="panel-head">

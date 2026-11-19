@@ -10,6 +10,7 @@ import { InstrumentPicker } from "../components/pickers.jsx";
 import { usePersistent, uid } from "../lib/storage.js";
 import { fmtMoney } from "../lib/format.js";
 import { paperStats } from "../../engine/paperStats.js";
+import DerivPaper from "../components/DerivPaper.jsx";
 
 const START = 100000;
 
@@ -19,6 +20,7 @@ export default function Paper() {
   const [inst, setInst] = useState(null);
   const [qty, setQty] = useState(10);
   const [err, setErr] = useState(null);
+  const [tab, setTab] = useState("stocks");
   const px = (id) => { const r = d.rowById.get(id); return r ? { usd: r.flat.closeUsd, local: r.flat.close, asOf: d.info.asOf } : null; };
 
   const positions = useMemo(() => {
@@ -50,9 +52,18 @@ export default function Paper() {
     setBook({ ...book, cash: book.cash + (side === "buy" ? -1 : 1) * n * q.usd, trades: [...book.trades, { tid: uid(), id: inst.id, side, qty: n, priceUsd: q.usd, priceLocal: q.local, date: q.asOf, at: new Date().toISOString() }] });
   };
 
+  if (tab === "deriv") return (
+    <div className="stack">
+      <PageHead title="Practice portfolio" sub="Futures and options, imaginary rupees.">
+        <button className="btn sm ghost" onClick={() => setTab("stocks")}>← Stocks</button>
+      </PageHead>
+      <DerivPaper />
+    </div>
+  );
   return (
     <div className="stack">
       <PageHead title="Practice portfolio" sub={`Imaginary money: start with ${fmtMoney(START)}, buy and sell at the latest stored close (data to ${d.info.asOf}). No costs, no slippage; for practice only.`}>
+        <button className="btn sm" onClick={() => setTab("deriv")}>Futures &amp; options</button>
         <button className="btn sm ghost" onClick={() => confirm("Reset the practice portfolio to the starting cash? Every practice trade is removed.") && setBook({ cash: START, start: START, trades: [], createdAt: new Date().toISOString() })}>Reset</button>
       </PageHead>
       <div className="grid" style={{ gridTemplateColumns: "repeat(4, minmax(0,1fr))" }}>
@@ -67,7 +78,7 @@ export default function Paper() {
         <Kpi label="Expectancy per trade" value={perf.expectancy == null ? "—" : fmtMoney(perf.expectancy)} cls={(perf.expectancy || 0) >= 0 ? "pos" : "neg"} />
         <Kpi label="Deepest drop (realised)" value={fmtMoney(perf.maxDrawdown)} cls={perf.maxDrawdown < 0 ? "neg" : ""} />
       </div>
-      <div className="small muted">Trade from any chart with Practice buy / Practice sell (Chart lab), or below. Practice trades never touch a real account. Futures and options strategies are modelled in Derivatives → Strategy builder; they are not booked here.</div>
+      <div className="small muted">Trade from any chart with Practice buy / Practice sell (Chart lab), or below. Practice trades never touch a real account.</div>
       <div className="card row" style={{ flexWrap: "wrap", gap: 8 }}>
         <InstrumentPicker secOnly value={inst} onChange={setInst} width={280} />
         <label className="lbl-ctl">Shares<input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} style={{ width: 90 }} /></label>

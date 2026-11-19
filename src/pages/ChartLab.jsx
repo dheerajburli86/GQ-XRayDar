@@ -32,8 +32,8 @@ import { useChartKeys } from "../lib/chartKeys.js";
 import { useLastInstrument } from "../lib/instruments.js";
 import { priceSeries } from "../lib/chartStyle.js";
 import { Tabs } from "../components/ui.jsx";
-import { StudiesPanel, FormulaPanel, DrawingsPanel, ProjectionPanel, ReplayPanel, SeasonalityPanel, TpoView } from "../components/ChartLabPanels.jsx";
-import { studyOverlays, drawingOverlays, formulaOverlays, projectionOverlays } from "../lib/chartOverlays.js";
+import { StudiesPanel, FormulaPanel, DrawingsPanel, ProjectionPanel, ReplayPanel, SeasonalityPanel, TpoView, ConfluencePanel, EventsPanel, eventColor } from "../components/ChartLabPanels.jsx";
+import { studyOverlays, drawingOverlays, formulaOverlays, projectionOverlays, indexAt } from "../lib/chartOverlays.js";
 import { DRAW_TOOLS } from "../../engine/drawings.js";
 import { evalFormula } from "../../engine/formula.js";
 import { seasonality, seasonalOverlay } from "../../engine/seasonality.js";
@@ -114,6 +114,11 @@ export default function ChartLab({ route }) {
   const projs = useMemo(() => allProj[id] || [], [allProj, id]);
   const setProjs = (list) => setAllProj({ ...allProj, [id]: list });
   const [seasonOn, setSeasonOn] = useState(false);
+  // events typed in by the user (no calendar feed): per instrument, or on every chart
+  const [allEvents, setAllEvents] = usePersistent("events", {});
+  const events = useMemo(() => allEvents[id] || [], [allEvents, id]);
+  const setEvents = (list) => setAllEvents({ ...allEvents, [id]: list });
+  const everyEvents = useMemo(() => Object.values(allEvents).flat().filter((e) => e.all), [allEvents]);
   const [toolTab, setToolTab] = usePersistent("chartlab.toolTab", "studies");
   const [scan, setScan] = useState(null);
   const overlays = useMemo(() => {
@@ -125,9 +130,11 @@ export default function ChartLab({ route }) {
       const y = bars.time.at(-1).slice(0, 4), i0 = bars.time.findIndex((t) => t >= `${y}-01-01`);
       if (s.path.length && i0 >= 0) price.push({ type: "line", data: seasonalOverlay(s.path, `${y}-01-01`, bars.close[Math.max(0, i0 - 1)]), options: { color: "#c084fc", lineWidth: 2, lineStyle: 2, title: `seasonal (${s.years}y avg)`, lastValueVisible: false, priceLineVisible: false } });
     }
-    const markers = [...dw.markers, ...fo.markers, ...(replay?.trades || []).map((t) => ({ time: t.date, position: t.side === "buy" ? "belowBar" : "aboveBar", shape: t.side === "buy" ? "arrowUp" : "arrowDown", color: t.side === "buy" ? "#16a34a" : "#dc2626", text: `${t.side} ${t.price.toFixed(2)}` }))];
+    const evMarks = [...events, ...everyEvents.filter((e) => !events.some((x) => x.id === e.id))].filter((e) => e.date >= bars.time[0] && e.date <= bars.time.at(-1))
+      .map((e) => ({ time: bars.time[indexAt(bars.time, e.date)], position: "aboveBar", shape: "circle", color: eventColor(e.kind), text: e.label.slice(0, 18) }));
+    const markers = [...dw.markers, ...fo.markers, ...evMarks, ...(replay?.trades || []).map((t) => ({ time: t.date, position: t.side === "buy" ? "belowBar" : "aboveBar", shape: t.side === "buy" ? "arrowUp" : "arrowDown", color: t.side === "buy" ? "#16a34a" : "#dc2626", text: `${t.side} ${t.price.toFixed(2)}` }))];
     return { price, panes: [...so.panes, ...fo.panes], markers, levels: [...so.levels, ...dw.levels, ...pj.levels], notes: [...so.notes, ...dw.notes], errors: fo.errors, projections: pj.results };
-  }, [bars, v.style, v.studies, v.tf, drawings, customs, projs, seasonOn, data, replay?.trades]);
+  }, [bars, v.style, v.studies, v.tf, drawings, customs, projs, seasonOn, data, replay?.trades, events, everyEvents]);
   const levels = useMemo(() => (bars && v.sr ? supportResistance(bars, { lookback: v.tf === "D" ? 250 : 150 }) : []), [bars, v.sr, v.tf]);
   const lastPatterns = useMemo(() => (bars ? candlePatternsAt(bars, bars.time.length - 1).map((p) => CANDLE_PATTERNS[p]) : []), [bars]);
   const fib = useMemo(() => (bars && v.fib ? fibonacci(bars, { lookback: v.tf === "D" ? 250 : 120 }) : null), [bars, v.fib, v.tf]);
@@ -272,13 +279,15 @@ export default function ChartLab({ route }) {
       {fullBars && v.style !== "tpo" && (
         <div className="card">
           <Tabs value={toolTab} onChange={setToolTab} tabs={[{ value: "studies", label: "Indicators" }, { value: "formula", label: `My formulas (${customs.length})` }, { value: "draw", label: `Drawings (${drawings.length})` },
-            { value: "proj", label: `Projections (${projs.length})` }, { value: "replay", label: replay ? "Replay ●" : "Replay & practice" }, { value: "season", label: "Seasonality" }]} />
+            { value: "proj", label: `Projections (${projs.length})` }, { value: "replay", label: replay ? "Replay ●" : "Replay & practice" }, { value: "season", label: "Seasonality" }, { value: "conf", label: "Confluence" }, { value: "events", label: `Events (${events.length})` }]} />
           <div style={{ marginTop: 8 }}>
             {toolTab === "studies" && <StudiesPanel studies={v.studies} onChange={(studies) => set({ studies })} />}
             {toolTab === "formula" && <FormulaPanel list={customs} setList={setCustoms} onScan={(f) => setScan({ f })} />}
             {toolTab === "draw" && <DrawingsPanel drawings={drawings} setDrawings={setDrawings} bars={fullBars} sec={sec} notes={overlays?.notes || []} onAlert={alertFromDrawing} />}
             {toolTab === "proj" && <ProjectionPanel list={projs} setList={setProjs} results={overlays?.projections} bars={fullBars} tf={v.tf} onAlert={alertFromDrawing} />}
             {toolTab === "replay" && <ReplayPanel replay={replay} setReplay={setReplay} fullBars={fullBars} sec={sec} />}
+            {toolTab === "conf" && <ConfluencePanel snap={data?.snap} />}
+            {toolTab === "events" && <EventsPanel list={events} setList={setEvents} />}
             {toolTab === "season" && <SeasonalityPanel daily={data?.inst} overlay={seasonOn} setOverlay={setSeasonOn} />}
           </div>
           {alertMsg && <div className="note small" style={{ marginTop: 6 }}>{alertMsg}</div>}
