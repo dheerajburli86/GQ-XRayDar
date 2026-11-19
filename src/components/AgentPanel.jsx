@@ -84,12 +84,12 @@ export function AgentPanel() {
   const endRef = useRef(null);
   const viaAgent = acct.serverOn && acct.me;
 
-  const ask = async (text, ctx = pageContext) => {
+  const ask = async (text, ctx = null) => {
     if (!text.trim() || busy) return;
     setBusy(true); setQ("");
     const entry = { q: text, at: new Date().toISOString(), ctx: ctx?.symbol || null };
     try {
-      const local = await chartAction(text, ctx, d).catch((e) => [{ kind: "text", text: `Could not do that: ${e.message}` }]);
+      const local = await chartAction(text, ctx || pageContext, d).catch((e) => [{ kind: "text", text: `Could not do that: ${e.message}` }]);
       if (local) { entry.blocks = local; entry.source = "built-in"; }
       else if (viaAgent) {
         const history = hist.slice(-5).flatMap((h) => [{ role: "user", content: h.q }, { role: "assistant", content: h.text || (h.blocks || []).map((b) => b.text || (b.items || []).join("; ")).join("\n") }]);
@@ -97,8 +97,7 @@ export function AgentPanel() {
         entry.source = r.source; entry.notice = r.notice;
         if (r.answer) entry.text = r.answer; else entry.blocks = r.blocks;
       } else {
-        const t = ctx?.symbol && !/\b[A-Z]{2,}\b/.test(text) ? `${text} ${ctx.symbol}` : text;
-        const r = await answer(t, d);
+        const r = await answer(text, d);
         entry.blocks = r.blocks; entry.source = "built-in";
       }
     } catch (e) { entry.blocks = [{ kind: "text", text: `Could not answer: ${e.message}` }]; }
@@ -107,7 +106,7 @@ export function AgentPanel() {
   };
 
   useEffect(() => {
-    const h = (e) => { setOpen(true); if (e.detail?.question) ask(e.detail.question, e.detail.context || pageContext); };
+    const h = (e) => { setOpen(true); if (e.detail?.question) ask(e.detail.question, e.detail.context || null); };
     window.addEventListener("gqta-agent", h);
     return () => window.removeEventListener("gqta-agent", h);
   });
@@ -125,12 +124,10 @@ export function AgentPanel() {
           <button className="btn sm ghost" onClick={() => setOpen(false)}>✕</button>
         </div>
       </div>
-      {pageContext?.symbol && <div className="small muted">Looking at: <b>{pageContext.symbol}</b>{pageContext.tf ? ` · ${pageContext.tf}` : ""}{pageContext.view ? ` · ${pageContext.view}` : ""}</div>}
       <div className="agent-log">
         {hist.length === 0 && (
           <div className="small muted stack" style={{ gap: 4 }}>
             <div>Ask in plain English. It explains what the data shows and never says buy, sell or hold.</div>
-            {[pageContext?.symbol ? `Explain this chart` : `Is ${d.rows[0]?.sec.symbol} rising on both daily and weekly?`, "Which sectors are leading in India?", "Compare TCS and INFY", viaAgent ? "Why did this stock move today?" : "Market breadth in the US"].map((s) => <a key={s} onClick={() => ask(s)} style={{ cursor: "pointer" }}>→ {s}</a>)}
           </div>
         )}
         {hist.map((m, i) => (
@@ -143,7 +140,7 @@ export function AgentPanel() {
         <div ref={endRef} />
       </div>
       <div className="row">
-        <input style={{ flex: 1 }} value={q} placeholder={pageContext?.symbol ? `Ask about ${pageContext.symbol}…` : "Ask anything…"} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ask(q)} disabled={busy} />
+        <input style={{ flex: 1 }} value={q} placeholder="Ask…" onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ask(q)} disabled={busy} />
         <button className="btn primary" onClick={() => ask(q)} disabled={busy}>Ask</button>
       </div>
     </aside>

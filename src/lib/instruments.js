@@ -7,7 +7,7 @@ import { usePersistent } from "./storage.js";
 import { secRankCmp } from "../../engine/turnover.js";
 
 export const INDIA_PROXY_LABEL = "India CW (Nifty 500, official index)";
-export const CATEGORIES = ["All", "India", "US", "Europe", "Emerging", "Japan", "Indices", "Currency", "Commodity", "Crypto"];
+export const CATEGORIES = ["All", "India", "US", "US ETF", "Europe", "Emerging", "Japan", "Indices", "Currency", "Commodity", "Crypto"];
 export const CATEGORY_LABEL = { India: "INDIA", US: "US", Europe: "EUROPE", Japan: "JAPAN" };
 
 /** A chart reference as one string for URLs: s:<id> | i:<index key> | x:<extra symbol>. */
@@ -30,7 +30,8 @@ export function secInCategory(s, cat) {
     case "Europe": return s.region === "Europe";
     case "Emerging": return s.classification === "Emerging Markets";
     case "Japan": return s.country === "Japan";
-    case "Indices": return s.assetClass === "Index" || isMsciEtf(s);
+    case "US ETF": return s.assetClass === "ETF" && s.country === "United States";
+    case "Indices": return s.assetClass === "Index";
     case "Currency": return s.assetClass === "Currency";
     case "Commodity": return s.assetClass === "Commodity";
     case "Crypto": return s.assetClass === "Crypto";

@@ -5,7 +5,7 @@
 //
 // MSCI index levels are licensed by MSCI and are not in any feed this app has. The MSCI
 // tracker ETFs (ACWI, URTH, EEM, EFA, EWJ, INDA, ...) are already in the heatmap's US ETFs and
-// are listed under "Indices" in the ticker search, labelled as ETFs that track an MSCI index.
+// are listed under "US ETF" in the ticker search (never under "Indices"), labelled as ETFs that track an MSCI index.
 
 export const EXTRA_FMP = [
   // Europe

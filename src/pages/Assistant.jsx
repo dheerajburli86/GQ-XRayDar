@@ -41,7 +41,6 @@ export default function Assistant({ route }) {
         <button className="btn sm" onClick={() => setHistory([])}>Clear</button>
       </PageHead>
       <div className="chat">
-        {history.length === 0 && <div className="note">Try: <i>explain {d.rows[0]?.sec.symbol}</i> · <i>show strongest weekly IT stocks with improving relative strength</i> · <i>which sectors are leading in Europe</i> · <i>market breadth in India</i></div>}
         {history.map((m, i) => (
           <div key={i} className="stack" style={{ gap: 6 }}>
             <div className="msg user">{m.q}</div>

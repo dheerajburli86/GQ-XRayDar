@@ -17,6 +17,7 @@ import { useAsync } from "../lib/useAsync.js";
 import { navigate } from "../lib/router.js";
 import { PageHead, Seg, Check, Loading, Badge, Empty } from "../components/ui.jsx";
 import { InstrumentPicker, TfPicker } from "../components/pickers.jsx";
+import { rowRankCmp } from "../../engine/turnover.js";
 import { loadInstrument } from "../lib/series.js";
 import { aggregate, emaStrict, rsi, macd } from "../../engine/indicators.js";
 import { heikinAshi, supportResistance, renko, kagi, pointFigure, volumeProfile, fibonacci, valueArea } from "../../engine/chartTools.js";
@@ -43,7 +44,6 @@ import { evalFormula } from "../../engine/formula.js";
 import { seasonality, seasonalOverlay } from "../../engine/seasonality.js";
 import { rsc } from "../../engine/indicators.js";
 import { alignCurrency } from "../lib/series.js";
-import { rowRankCmp } from "../../engine/turnover.js";
 
 const UP = "#16a34a", DOWN = "#dc2626";
 const STYLES = [["candles", "Candles"], ["ha", "Heikin-Ashi"], ["line", "Line"], ["bar", "Bars"], ["renko", "Renko"], ["kagi", "Kagi"], ["pnf", "Point & Figure"], ["tpo", "Market profile"]];
@@ -68,10 +68,9 @@ const L = (time, vals) => { const out = []; for (let i = 0; i < time.length; i++
 
 export default function ChartLab({ route }) {
   const d = useData();
-  const first = useMemo(() => [...d.rows].sort(rowRankCmp)[0]?.id, [d.rows]);
   const [lastInst, setLastInst] = useLastInstrument();
   const lastSecId = lastInst?.startsWith("s:") ? lastInst.slice(2) : null;
-  const id = route.args[0] || (lastSecId && d.secById.has(lastSecId) ? lastSecId : null) || first;
+  const id = route.args[0] || (lastSecId && d.secById.has(lastSecId) ? lastSecId : null) || null;
   const sec = d.secById.get(id);
   useEffect(() => { if (id && lastInst !== `s:${id}`) setLastInst(`s:${id}`); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
   const [picking, setPicking] = useState(null);
@@ -175,7 +174,7 @@ export default function ChartLab({ route }) {
     setPaper({ ...paper, cash: paper.cash + (side === "buy" ? -1 : 1) * n * r.flat.closeUsd, trades: [...paper.trades, { tid: uid(), id, side, qty: n, priceUsd: r.flat.closeUsd, priceLocal: r.flat.close, date: d.info.asOf, at: new Date().toISOString() }] });
     setAlertMsg(`Practice ${side} of ${n} ${sec.symbol} recorded at ${r.flat.close}. See Practice portfolio.`);
   };
-  if (!sec) return <Empty>Pick a stock to chart.</Empty>;
+  if (!sec) return <div className="stack"><PageHead title="Chart lab" sub="Pick an instrument to chart." /><InstrumentPicker secOnly value={null} onChange={(r) => r.kind === "sec" && navigate(`chart/${r.id}`)} placeholder="Search stock…" width={260} /></div>;
   const timeStyle = TIME_STYLES.has(v.style);
 
   const doExplain = () => {

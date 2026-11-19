@@ -18,6 +18,15 @@ test("bad prints: alternating x2 prints are dropped, a real move is kept", () =>
   // doubled, then came part of the way back: kept
   assert.equal(removeBadPrints(mk([10, 20, 15, 12, 10.5, 10])).removed.length, 0);
 });
+test("bad prints: a JSE holiday bar carrying the US ADR price (x0.001) is dropped, even if the next day moved 20%", () => {
+  const r = removeBadPrints(mk([66354, 66100, 41.1, 66200, 66400]));
+  assert.deepEqual(r.removed.map((x) => x.close), [41.1]);
+  assert.deepEqual(r.bars.close, [66354, 66100, 66200, 66400]);
+  assert.deepEqual(removeBadPrints(mk([43499, 43300, 9.85, 9.9, 43100, 43200])).bars.close, [43499, 43300, 43100, 43200]);
+  assert.deepEqual(removeBadPrints(mk([100, 101, 5, 120, 121])).bars.close, [100, 101, 120, 121]);
+  // a real crash that stays down is kept
+  assert.equal(removeBadPrints(mk([100, 101, 5, 5.2, 5.1, 5])).removed.length, 0);
+});
 test("share-count breaks: a x3 step inside 10 sessions that holds marks where caps start", () => {
   const c = [937, 900, 512, 270, 260, ...Array(30).fill(240), 201, 35, 40, 17, 14, ...Array(30).fill(13)];
   const r = shareBreaks(mk(c.slice(0, 31)));

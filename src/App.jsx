@@ -144,7 +144,7 @@ function CommandBar() {
   return (
     <div className="cmd">
       <span className="ico">⌕</span>
-      <input ref={inputRef} value={q} title="Search (Ctrl+K)" placeholder='Search or ask: "strongest weekly IT stocks with improving relative strength"'
+      <input ref={inputRef} value={q} title="Search (Ctrl+K)" placeholder="Search or ask…"
         onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={(e) => { if (e.key === "Enter" && q.trim()) run(q.trim()); if (e.key === "Escape") setOpen(false); }} />
       <div className="btns">

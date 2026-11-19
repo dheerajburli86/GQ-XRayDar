@@ -91,10 +91,13 @@ export function removeBadPrints(daily, { jump = 1.8, back = 0.15, maxRun = 5 } =
   while (i < n) {
     const p = c[i - 1], r = c[i] / p;
     if (p > 0 && (r >= jump || r <= 1 / jump)) {
+      // a unit-sized error (a holiday bar carrying the ADR price in dollars against a price in cents: x0.001)
+      // may come back to a level a real move away from the old one, so the return test is wider for those
+      const bk = (r >= 5 || r <= 0.2) ? Math.max(back, 0.5) : back;
       let k = -1;
       for (let j = i + 1; j < n && j <= i + maxRun; j++) {
         const q = c[j] / p;
-        if (q >= 1 - back && q <= 1 + back) { k = j; break; }
+        if (q >= 1 - bk && q <= 1 + bk) { k = j; break; }
         if (q < 1.5 && q > 1 / 1.5) break; // came part-way back: a real move, not a clean bad print
       }
       if (k > 0) {

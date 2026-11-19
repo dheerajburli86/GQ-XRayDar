@@ -161,7 +161,7 @@ redeploy ENDS the job that is running. On 2026-11-19 a push at 06:26 UTC killed 
 - **Ticker search** (`src/lib/instruments.js`): categories INDIA / US / EUROPE / Emerging / JAPAN / Indices / Currency /
   Commodity / Crypto; chart refs `s:<id>`, `i:<index key>`, `x:<symbol>`. Extra chart-only instruments (more indices,
   yields, commodity futures, currency pairs from tas_fx) are in `tas_extra_series`, built by `cli/extraJob.mjs` on the
-  server. MSCI index levels are licensed and not available; MSCI tracker ETFs are tagged instead.
+  server. MSCI index levels are licensed and not available; MSCI tracker ETFs sit in the ticker category "US ETF" (not "Indices"), tagged as tracking an MSCI index.
 - **Keys** (`src/lib/chartKeys.js`): D W M Q H Y period, C (or typing) opens the ticker popup. Wheel zoom keeps the
   last bar fixed (`rightBarStaysOnScroll`). The last instrument opened carries across chart screens.
 - **Multi-tile screen** (`src/pages/Tiles.jsx`, parser `engine/tiles.js`): command → top-N by cap of a country /
