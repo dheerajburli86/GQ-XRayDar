@@ -45,6 +45,7 @@ export default function Stock({ route }) {
     }
     markers.sort((x, y) => (x.time < y.time ? -1 : 1));
     return {
+      bars: b,
       price: [
         { type: "candles", data: b.time.map((t, i) => ({ time: t, open: b.open[i], high: b.high[i], low: b.low[i], close: b.close[i] })), options: { upColor: "#16a34a", downColor: "#dc2626", borderVisible: false, wickUpColor: "#16a34a", wickDownColor: "#dc2626" }, markers },
         { type: "line", data: lineData(b.time, emaStrict(b.close, 20)), options: { color: "#22d3ee", lineWidth: 1, lastValueVisible: false } },
@@ -81,8 +82,8 @@ export default function Stock({ route }) {
           </div>
           <div className="card tight">
             <div className="row between" style={{ padding: "0 4px 4px" }}><span className="small muted">EMA 20 / 50 / 200 · purple dots = results filed (revenue YoY){data.inst.adjustments?.length ? " · split-adjusted" : ""}</span><Seg value={tf} options={CHART_TFS} onChange={setTf} /></div>
-            <TvChart height={330} series={charts.price} sync={sync} />
-            <TvChart height={90} series={charts.vol} sync={sync} />
+            <TvChart height={330} series={charts.price} sync={sync} ohlcv={{ name: sec?.symbol || "", tf, bars: charts.bars }} legend />
+            <TvChart height={90} series={charts.vol} sync={sync} ohlcv={{ name: sec?.symbol || "", tf, bars: charts.bars }} />
           </div>
           <div className="grid g2">
             <div className="card"><h3>Timeframe states</h3>

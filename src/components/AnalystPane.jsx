@@ -22,7 +22,7 @@ export const DARK = {
 export const DARK_NO_AXIS = { ...DARK, timeScale: { ...DARK.timeScale, visible: false } };
 
 
-export function Pane({ row, ri, last, mode, overlay, v, tf, from, height, sync, rangeKey, extra = null }) {
+export function Pane({ row, ri, last, mode, overlay, v, tf, from, height, sync, rangeKey, extra = null, dw = null }) {
   const built = useMemo(() => {
     if (!row.time.length) return null;
     const keep = (x) => x != null && Number.isFinite(x) && (!v.log || x > 0);
@@ -70,14 +70,14 @@ export function Pane({ row, ri, last, mode, overlay, v, tf, from, height, sync, 
   return (
     <div className="anl-pane">
       <div className="anl-label">{row.label}</div>
-      {built ? <TvChart height={height} series={built} sync={sync} logScale={v.log} visibleRange={visibleRange} rangeKey={rangeKey} fit theme={last ? DARK : DARK_NO_AXIS} />
+      {built ? <TvChart height={height} series={built} sync={sync} logScale={v.log} visibleRange={visibleRange} rangeKey={rangeKey} fit theme={last ? DARK : DARK_NO_AXIS} ohlcv={dw} legend={row.kind === "price"} />
         : <div className="anl-empty" style={{ height }}>{row.missing || "no data"}</div>}
     </div>
   );
 }
 
 /** A study that needs its own pane (stochastic, ADX, ATR, OBV ...), drawn under the Analyst rows. */
-export function StudyPane({ pane, time, last, height, sync, rangeKey, tf, from }) {
+export function StudyPane({ pane, time, last, height, sync, rangeKey, tf, from, dw = null }) {
   const visibleRange = useMemo(() => {
     const n = time.length;
     if (!n) return null;
@@ -89,7 +89,7 @@ export function StudyPane({ pane, time, last, height, sync, rangeKey, tf, from }
   return (
     <div className="anl-pane">
       <div className="anl-label">{pane.title}</div>
-      <TvChart height={height} series={series} sync={sync} visibleRange={visibleRange} rangeKey={rangeKey} fit theme={last ? DARK : DARK_NO_AXIS} />
+      <TvChart height={height} series={series} sync={sync} visibleRange={visibleRange} rangeKey={rangeKey} fit theme={last ? DARK : DARK_NO_AXIS} ohlcv={dw} />
     </div>
   );
 }

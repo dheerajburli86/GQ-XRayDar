@@ -4,6 +4,7 @@
 //   RSCMMA / RSCACC  Price | RSC | RSI of RSC | RSI of RSI of RSC | RSI of RSI of RSI of RSC
 // MMA = short EMA 3-15 (yellow) + long EMA 30-60 (red); ACC = EMA 4 / 14 / 26 / 39.
 // All maths is engine/analyst.js; this page only draws it.
+import { rowBars } from "../lib/dataWindow.js";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useData } from "../data/store.jsx";
 import { useAsync } from "../lib/useAsync.js";
@@ -117,6 +118,7 @@ export default function StackedScreens({ route }) {
     const so = studyOverlays(b, studies, col.tf), fo = formulaOverlays(b, customs), pj = projectionOverlays(b, projs, col.tf);
     return { bars: b, price: [...so.price, ...fo.price, ...pj.price], levels: [...so.levels, ...pj.levels], markers: fo.markers, panes: [...so.panes, ...fo.panes], notes: so.notes, errors: fo.errors, projections: pj.results };
   }), [columns, studies, customs, projs]);
+  const dwOf = (col) => { const b = rowBars(col.rows[0]); return b ? { name: instShort, tf: tfLabel(col.tf), bars: b } : null; };
   const nExtra = Math.max(0, ...extras.map((e) => e?.panes.length || 0));
   const nStudies = Object.values(studies).filter((x) => x?.on).length;
 
@@ -206,10 +208,10 @@ export default function StackedScreens({ route }) {
               </div>
               {col.rows.map((row, ri) => (
                 <Pane key={`${ci}-${ri}`} row={row} ri={ri} last={ri === col.rows.length - 1 && !(extras[ci]?.panes?.length)} mode={mode} overlay={cfg.overlay} v={v} tf={col.tf} from={from}
-                  height={ri === 0 ? Math.round(paneH * 1.35) : paneH} sync={syncs[ci]} rangeKey={`${rangeKey}|${ci}`} extra={ri === 0 ? extras[ci] : null} />
+                  height={ri === 0 ? Math.round(paneH * 1.35) : paneH} sync={syncs[ci]} rangeKey={`${rangeKey}|${ci}`} extra={ri === 0 ? extras[ci] : null} dw={dwOf(col)} />
               ))}
               {(extras[ci]?.panes || []).map((pn, pi, all) => (
-                <StudyPane key={pn.key} pane={pn} time={col.rows[0].time} last={pi === all.length - 1} tf={col.tf} from={from} height={Math.round(paneH * 0.8)} sync={syncs[ci]} rangeKey={`${rangeKey}|${ci}`} />
+                <StudyPane key={pn.key} pane={pn} time={col.rows[0].time} last={pi === all.length - 1} tf={col.tf} from={from} height={Math.round(paneH * 0.8)} sync={syncs[ci]} rangeKey={`${rangeKey}|${ci}`} dw={dwOf(col)} />
               ))}
             </div>
           ))}

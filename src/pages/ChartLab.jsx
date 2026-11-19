@@ -7,6 +7,9 @@
 //   explain        a plain-English read of the chart; ask the GQ Agent about it
 //   export         PNG, PDF; notes saved next to the chart
 // Everything shown is computed by the engine from stored prices.
+import { isHidden } from "../lib/features.js";
+import { OhlcvLegend } from "../components/DataWindow.jsx";
+import { reportHover } from "../lib/dataWindow.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createChart, CandlestickSeries, BarSeries, LineSeries, HistogramSeries, createSeriesMarkers, LineStyle } from "lightweight-charts";
 import { useData } from "../data/store.jsx";
@@ -254,7 +257,7 @@ export default function ChartLab({ route }) {
       </div>
       {loading || !bars ? <Loading what="prices" /> : v.style === "tpo" ? <div className="card"><TpoView bars={bars} /></div> : (
         <div className="card" style={{ padding: 6, position: "relative" }}>
-          <ChartCanvas key={`${id}|${v.style}`} bars={bars} v={v} levels={levels} extraLines={extraLines} patterns={patterns} cmp={data.cmp} drawings={timeStyle ? drawings.filter((x) => !x.hidden) : []} tool={timeStyle ? tool : "none"}
+          <ChartCanvas key={`${id}|${v.style}`} name={sec.symbol} bars={bars} v={v} levels={levels} extraLines={extraLines} patterns={patterns} cmp={data.cmp} drawings={timeStyle ? drawings.filter((x) => !x.hidden) : []} tool={timeStyle ? tool : "none"}
             onDraw={(dw) => setDrawings([...drawings, { id: uid(), ...dw }])} onChart={(c) => { chartRef.current = c; }} extra={overlays} />
           {overlays?.errors?.length > 0 && <div className="note warn small">{overlays.errors.join(" · ")}</div>}
           {replay && <div className="note small">Replay: candles after {bars.time.at(-1)} are hidden.</div>}
@@ -279,7 +282,7 @@ export default function ChartLab({ route }) {
       {fullBars && v.style !== "tpo" && (
         <div className="card">
           <Tabs value={toolTab} onChange={setToolTab} tabs={[{ value: "studies", label: "Indicators" }, { value: "formula", label: `My formulas (${customs.length})` }, { value: "draw", label: `Drawings (${drawings.length})` },
-            { value: "proj", label: `Projections (${projs.length})` }, { value: "replay", label: replay ? "Replay ●" : "Replay & practice" }, { value: "season", label: "Seasonality" }, { value: "conf", label: "Confluence" }, { value: "events", label: `Events (${events.length})` }]} />
+            { value: "proj", label: `Projections (${projs.length})` }, { value: "replay", label: replay ? "Replay ●" : "Replay & practice" }, { value: "season", label: "Seasonality" }, { value: "conf", label: "Confluence" }, ...(isHidden("chartEvents") ? [] : [{ value: "events", label: `Events (${events.length})` }])]} />
           <div style={{ marginTop: 8 }}>
             {toolTab === "studies" && <StudiesPanel studies={v.studies} onChange={(studies) => set({ studies })} />}
             {toolTab === "formula" && <FormulaPanel list={customs} setList={setCustoms} onScan={(f) => setScan({ f })} />}
@@ -287,7 +290,7 @@ export default function ChartLab({ route }) {
             {toolTab === "proj" && <ProjectionPanel list={projs} setList={setProjs} results={overlays?.projections} bars={fullBars} tf={v.tf} onAlert={alertFromDrawing} />}
             {toolTab === "replay" && <ReplayPanel replay={replay} setReplay={setReplay} fullBars={fullBars} sec={sec} />}
             {toolTab === "conf" && <ConfluencePanel snap={data?.snap} />}
-            {toolTab === "events" && <EventsPanel list={events} setList={setEvents} />}
+            {toolTab === "events" && !isHidden("chartEvents") && <EventsPanel list={events} setList={setEvents} />}
             {toolTab === "season" && <SeasonalityPanel daily={data?.inst} overlay={seasonOn} setOverlay={setSeasonOn} />}
           </div>
           {alertMsg && <div className="note small" style={{ marginTop: 6 }}>{alertMsg}</div>}
@@ -300,10 +303,11 @@ export default function ChartLab({ route }) {
 }
 
 /** The chart itself. Re-created when the instrument or style changes; series are rebuilt on option changes. */
-function ChartCanvas({ bars, v, levels, extraLines = [], patterns = [], cmp, drawings, tool, onDraw, onChart, extra = null }) {
+function ChartCanvas({ name = "", bars, v, levels, extraLines = [], patterns = [], cmp, drawings, tool, onDraw, onChart, extra = null }) {
   const el = useRef(null), chartRef = useRef(null), mainRef = useRef(null), seriesRef = useRef([]), pending = useRef([]);
-  const toolRef = useRef(tool), onDrawRef = useRef(onDraw);
-  useEffect(() => { toolRef.current = tool; onDrawRef.current = onDraw; });
+  const toolRef = useRef(tool), onDrawRef = useRef(onDraw), srcRef = useRef(null);
+  const src = useMemo(() => ({ name, tf: v.tf, bars }), [name, v.tf, bars]);
+  useEffect(() => { toolRef.current = tool; onDrawRef.current = onDraw; srcRef.current = src; });
   const [vpBars, setVpBars] = useState([]);
   const [vpInfo, setVpInfo] = useState(null);
   const timeStyle = TIME_STYLES.has(v.style);
@@ -331,6 +335,7 @@ function ChartCanvas({ bars, v, levels, extraLines = [], patterns = [], cmp, dra
       if (pending.current.length >= need) { const [a, b, c] = pending.current; pending.current = []; if (a.time !== b.time || need === 3) onDrawRef.current({ type: t, a, b, c }); }
     };
     // a quick second click arrives as a double-click, not a click
+    chart.subscribeCrosshairMove((p) => { if (srcRef.current) reportHover(srcRef.current, p?.time ?? null); });
     chart.subscribeClick(onClick);
     chart.subscribeDblClick(onClick);
     return () => { mo.disconnect(); try { chart.remove(); } catch { /* already removed */ } chartRef.current = null; onChart?.(null); };
@@ -489,6 +494,7 @@ function ChartCanvas({ bars, v, levels, extraLines = [], patterns = [], cmp, dra
   return (
     <div style={{ position: "relative" }}>
       <div ref={el} className="chartbox" style={{ height, cursor: tool !== "none" ? "crosshair" : undefined }} />
+      {timeStyle && <OhlcvLegend src={src} />}
       {vpInfo && v.vp && <div className="small muted" style={{ position: "absolute", left: 8, bottom: 2, zIndex: 4 }}>{vpInfo}</div>}
       {vpBars.length > 0 && (
         <div className="vp-overlay" title="Busiest price levels in view: volume traded at each price band">

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { href } from "../lib/router.js";
 import { fmtPct, signClass } from "../lib/format.js";
 
@@ -58,7 +59,32 @@ export function PageHead({ title, sub, children }) {
   );
 }
 
-export const StockLink = ({ sec, children }) => (sec ? <a href={href(`stock/${sec.id}`)} title={sec.name}>{children || sec.symbol}</a> : <span>—</span>);
+// A stock's name opens its page as before; the small arrow (or a right-click) offers every other screen for it
+// (owner, improvement 20: "if I click any stock there should be an option to load its screen").
+const STOCK_SCREENS = [["Stock page", (id) => `stock/${id}`], ["Chart lab", (id) => `chart/${id}`], ["RSIMMA", (id) => `screens/RSIMMA/${encodeURIComponent(`s:${id}`)}`], ["RSIACC", (id) => `screens/RSIACC/${encodeURIComponent(`s:${id}`)}`], ["RSCMMA", (id) => `screens/RSCMMA/${encodeURIComponent(`s:${id}`)}`], ["RSCACC", (id) => `screens/RSCACC/${encodeURIComponent(`s:${id}`)}`], ["Multi-tile: peers", (id) => `tiles?inst=${encodeURIComponent(`s:${id}`)}`]];
+export function StockLink({ sec, children }) {
+  const [m, setM] = useState(null);
+  useEffect(() => {
+    if (!m) return undefined;
+    const close = () => setM(null), key = (e) => e.key === "Escape" && close();
+    window.addEventListener("click", close); window.addEventListener("scroll", close, true); window.addEventListener("keydown", key);
+    return () => { window.removeEventListener("click", close); window.removeEventListener("scroll", close, true); window.removeEventListener("keydown", key); };
+  }, [m]);
+  if (!sec) return <span>—</span>;
+  const open = (e) => { e.preventDefault(); e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect?.(); setM(e.type === "contextmenu" ? { x: e.clientX, y: e.clientY } : { x: r.left, y: r.bottom + 2 }); };
+  return (
+    <span className="stocklink">
+      <a href={href(`stock/${sec.id}`)} title={sec.name} onContextMenu={open}>{children || sec.symbol}</a>
+      <button type="button" className="sl-arrow" title="Load this stock in another screen" aria-label={`Screens for ${sec.symbol}`} onClick={open}>▾</button>
+      {m && (
+        <div className="sl-menu" style={{ left: Math.min(m.x, window.innerWidth - 170), top: Math.min(m.y, window.innerHeight - 250) }} onClick={(e) => e.stopPropagation()}>
+          <div className="sl-head">{sec.symbol}</div>
+          {STOCK_SCREENS.map(([label, path]) => <a key={label} href={href(path(sec.id))} onClick={() => setM(null)}>{label}</a>)}
+        </div>
+      )}
+    </span>
+  );
+}
 export const Pct = ({ v, d = 1 }) => <span className={signClass(v)}>{fmtPct(v, d)}</span>;
 
 export const STAGE_BADGE = { 0: "r", 1: "a", 2: "", 3: "b", 4: "b", 5: "g", 6: "g", 7: "g" };

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
+import { isHidden } from "./lib/features.js";
+import { DataWindow } from "./components/DataWindow.jsx";
 import { DataProvider, useData } from "./data/store.jsx";
 import { useRoute, navigate, href } from "./lib/router.js";
 import { parseCommand } from "../engine/nl.js";
@@ -110,7 +112,7 @@ function CommandBar() {
     const out = [];
     for (const x of d.secs) { if (x.symbol.toLowerCase().startsWith(s) || (s.length > 2 && (x.name || "").toLowerCase().includes(s))) out.push({ label: `${x.symbol} · ${x.name}`, sub: `${x.country} · ${x.sector}`, go: () => navigate(`stock/${x.id}`) }); if (out.length >= 7) break; }
     for (const c of d.countries || []) if (c.toLowerCase().startsWith(s)) out.push({ label: c, sub: "Country", go: () => navigate("explorer", { country: c }) });
-    for (const [, items] of NAV) for (const [p, , l] of items) if (l.toLowerCase().includes(s)) out.push({ label: l, sub: "Page", go: () => navigate(p) });
+    for (const [, items] of NAV) for (const [p, , l] of items) if (!isHidden(p) && l.toLowerCase().includes(s)) out.push({ label: l, sub: "Page", go: () => navigate(p) });
     return out.slice(0, 12);
   }, [q, d.secs, d.countries]);
 
@@ -205,7 +207,7 @@ function Shell() {
     return () => window.removeEventListener("gqta-load-error", h);
   }, []);
   useEffect(() => { setLoadErr(null); }, [route.path]);
-  const Page = pages[route.page] || pages.home;
+  const Page = (!isHidden(route.page) && pages[route.page]) || pages.home;
   const activeKey = route.page === "screens" ? `screens/${route.args[0] || "RSIMMA"}` : route.page;
 
   if (d.state.phase === "loading") {
@@ -231,7 +233,7 @@ function Shell() {
           <div className="logo">GQ</div>
           <div className="bt"><div className="t1">GQ XRayDar</div><div className="t2">Global market intelligence · {d.mode === "demo" ? "demo data" : "live data"}</div></div>
         </div>
-        {NAV.map(([g, items]) => (
+        {NAV.map(([g, all]) => [g, all.filter(([p]) => !isHidden(p))]).map(([g, items]) => (
           <div className="navgroup" key={g}>
             <div className="g">{g}</div>
             {items.map(([p, ic, l]) => <a key={p} href={href(p)} className={`navitem ${activeKey === p ? "active" : ""}`} title={l}><span className="ic">{ic}</span><span className="lbl">{l}</span></a>)}
@@ -252,6 +254,7 @@ function Shell() {
           </div>
           {acct.email && <span className="small muted" title={acct.email}>{acct.email.split("@")[0]}{acct.session ? <a style={{ marginLeft: 6, cursor: "pointer" }} onClick={acct.signOut}>sign out</a> : null}</span>}
         </div>
+        <DataWindow />
         <div className="content">
           {loadErr && (
             <div className="note warn row between" role="alert" style={{ marginBottom: 8 }}>

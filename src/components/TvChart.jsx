@@ -1,6 +1,8 @@
 // lightweight-charts wrapper. One <TvChart> = one chart instance; charts that
 // belong to a ChartSync share horizontal scroll / zoom (by TIME, so a weekly
 // and a daily window stay on the same dates) and the crosshair.
+import { OhlcvLegend } from "./DataWindow.jsx";
+import { reportHover } from "../lib/dataWindow.js";
 import { useEffect, useRef, useState } from "react";
 import { createChart, CandlestickSeries, BarSeries, LineSeries, HistogramSeries, AreaSeries, createSeriesMarkers, LineStyle } from "lightweight-charts";
 
@@ -76,12 +78,14 @@ export function cleanSeriesData(data) {
  * hoverNames: line names are not printed on the price axis; the name of the line under the
  * cursor (nearest within 14 px) shows next to the pointer instead (owner: Weight Watcher).
  */
-export function TvChart({ series, height = 300, sync, onReady, logScale = false, scaleMargins, visibleRange, fit = true, rangeKey, theme, hoverNames = false, downloadName }) {
+export function TvChart({ series, height = 300, sync, onReady, logScale = false, scaleMargins, visibleRange, fit = true, rangeKey, theme, hoverNames = false, downloadName, ohlcv = null, legend = false }) {
   const el = useRef(null), chartRef = useRef(null), seriesRef = useRef([]), memberRef = useRef(null), namesRef = useRef(new Map());
   const [hover, setHover] = useState(null);
   // bumped whenever the chart instance is (re)created, e.g. when `sync` changes, so the series
   // are drawn again on the new instance (it starts empty)
   const [gen, setGen] = useState(0);
+  const ohlcvRef = useRef(ohlcv);
+  useEffect(() => { ohlcvRef.current = ohlcv; });
   const viewKey = useRef(undefined); // the view is set once per rangeKey, so toggling a line never resets the zoom
 
   useEffect(() => {
@@ -101,6 +105,8 @@ export function TvChart({ series, height = 300, sync, onReady, logScale = false,
       chart.subscribeCrosshairMove((p) => sync.cross(member, p?.time ?? null));
     }
     onReady?.(chart);
+    // report the candle under the cursor to the legend and the Data window (Ctrl+D)
+    chart.subscribeCrosshairMove((p) => { if (ohlcvRef.current) reportHover(ohlcvRef.current, p?.time ?? null); });
     if (hoverNames) {
       chart.subscribeCrosshairMove((p) => {
         if (!p?.point || p.time == null) { setHover(null); return; }
@@ -189,6 +195,7 @@ export function TvChart({ series, height = 300, sync, onReady, logScale = false,
   return (
     <div className="tvwrap" style={{ position: "relative" }}>
       <div ref={el} className="chartbox" style={{ height }} />
+      {legend && ohlcv && <OhlcvLegend src={ohlcv} />}
       <button className="chart-dl" title="Download this chart (PNG)" onClick={dl} data-html2canvas-ignore>⤓</button>
       {hover && (
         <div className="chart-hover" style={{ left: hover.x + 12, top: Math.max(0, hover.y - 22), borderColor: hover.color }}>

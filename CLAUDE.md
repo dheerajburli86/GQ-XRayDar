@@ -182,3 +182,11 @@ redeploy ENDS the job that is running. On 2026-11-19 a push at 06:26 UTC killed 
 - **Script import / export** (`importFormulas` / `exportFormulas` in `engine/formula.js`) moves OUR formula language as text. It never runs Pine or JS; unsupported lines are reported, not guessed.
 - **Events** (chart lab tab) are entered by the user; no calendar feed exists, so none is shown as fact.
 - **Derivatives paper trading** (`engine/deriv/paperBook.js`, `src/components/DerivPaper.jsx`, store `paper.deriv`, INR): fills at the stored end-of-day price, pays `INDIA_COSTS`, NO margin check, NO slippage, no live quote. Futures move cash only when closed; options pay / receive the premium at once. Expired contracts are marked at expiry value but not auto-settled yet.
+
+## Added 2026-11-19 (evening): data window, OHLCV, stock menu, hidden features
+
+- **Data window**: Ctrl+D toggles a draggable window (`src/components/DataWindow.jsx`, mounted once in App) with the candle under the cursor: date, day, OHLC, % change, volume and the 12 EMAs of the close (3-15 yellow, 30-60 red), as in the Analyst software. Position is remembered in localStorage. Charts report the hovered candle through `reportHover` (`src/lib/dataWindow.js`); every chart that has real candles passes `ohlcv={{name, tf, bars}}` to `TvChart` (or does it in the chart lab). A level series (indices, no OHLC) shows one value, never O=H=L=C.
+- **OHLCV legend** (`OhlcvLegend`) sits top-left of price charts; it follows the cursor, and shows the last candle when the cursor is away.
+- **Stock links** (`StockLink` in `ui.jsx`): the name opens the stock page as before; the small arrow or a right-click lists Chart lab, RSIMMA / RSIACC / RSCMMA / RSCACC and the peers tile.
+- **Hidden features for v1** are listed with reasons in `src/lib/features.js` (`HIDDEN`); delete a key to bring one back. Now hidden: Derivatives → Unusual activity (needs a live options feed) and the chart lab Events tab (no calendar feed).
+- Known data limit, NOT hidden: only 2,090 of 5,730 active India stocks carry a market cap (36%), so India CW indices, Weight Watcher and "top N by cap" cover only those; the heatmap hides India caps for the same reason.

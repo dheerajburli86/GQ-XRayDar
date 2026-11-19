@@ -4,6 +4,7 @@
 // or by hand. One timeframe toggle for every tile (keys D W M Q H Y), absolute price or
 // relative to a comparison series, MMA / ACC / plain. Click a tile's ⤢ to maximise it; with
 // Shift, a second one opens beside it. Charts are the Analyst panes (engine/analyst.js).
+import { rowBars } from "../lib/dataWindow.js";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useData } from "../data/store.jsx";
 import { useAsync } from "../lib/useAsync.js";
@@ -186,7 +187,8 @@ function Tile({ r, i, bench, mode, tf, v, rsiPane, full, height, sync, maximised
         : !col ? <div className="anl-empty" style={{ height: avail }}>no price history</div>
         : rowIdx.map((k, j) => (
           <Pane key={k} row={col.rows[k]} ri={k} last={j === rowIdx.length - 1} mode={mode} overlay={mode.endsWith("ACC") ? "acc" : "mma"} v={v} tf={tf} from=""
-            height={Math.max(60, hs[j])} sync={sync} rangeKey={`${tf}|${mode}|${r.id || r.key}`} />
+            height={Math.max(60, hs[j])} sync={sync} rangeKey={`${tf}|${mode}|${r.id || r.key}`}
+            dw={rowBars(col.rows.find((x) => x.kind === "price")) ? { name: sec?.symbol || r.label || r.key || "", tf, bars: rowBars(col.rows.find((x) => x.kind === "price")) } : null} />
         ))}
       {relative && col && !col.rows[1]?.time?.length && <Badge kind="r">no comparison series</Badge>}
     </div>

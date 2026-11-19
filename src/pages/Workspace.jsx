@@ -64,6 +64,7 @@ function ChartPanel({ p, onChange, onRemove, sync }) {
   // projections drawn in the chart lab are shared by instrument; shown here on the price panels (edit them in the lab)
   const [allProj] = usePersistent("projections", {});
   const projList = useMemo(() => allProj[p.inst?.id ?? p.inst?.key] || [], [allProj, p.inst?.id, p.inst?.key]);
+  const bars = useMemo(() => (data?.inst ? aggregate({ ...data.inst, volume: data.inst.volume || data.inst.close.map(() => 0) }, p.tf) : null), [data, p.tf]);
   const series = useMemo(() => {
     if (!data?.inst) return [];
     const b = aggregate({ ...data.inst, volume: data.inst.volume || data.inst.close.map(() => 0) }, p.tf);
@@ -99,7 +100,7 @@ function ChartPanel({ p, onChange, onRemove, sync }) {
           <button className="btn sm ghost" onClick={onRemove} title="Remove panel">✕</button>
         </div>
       </div>
-      {loading ? <Loading /> : <TvChart height={280} series={series} sync={sync} />}
+      {loading ? <Loading /> : <TvChart height={280} series={series} sync={sync} ohlcv={bars ? { name: data?.inst?.label || p.inst?.label || "", tf: p.tf, bars } : null} legend={!["rsi", "macd", "rsc", "volume"].includes(p.ind)} />}
     </div>
   );
 }
