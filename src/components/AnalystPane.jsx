@@ -13,10 +13,25 @@ export const ACC_BASE = { RSIACC: [GREEN, GREEN, YELLOW, MAGENTA], RSCACC: [GREE
 export const PRESETS = [["D", "W"], ["M", "Q"], ["H", "N"], ["Y", "24M"]];
 export const DEFAULT_VIEW = { avgOnly: false, log: true, short: true, long: true, acc: { 4: true, 14: true, 26: true, 39: true }, price: "line" };
 
+// Right axis labels on the stacked screens: no decimals, large values shortened (240K, 3M), so every
+// pane's axis has the same width and the panes line up (owner, 19 Nov: a 240000.00 label pushed the RSC
+// pane's plot narrower than the others). Below 10 two decimals are kept, or a low-priced stock's axis
+// would read 3, 3, 3.
+export function axisLabel(x) {
+  if (!Number.isFinite(x)) return "";
+  const a = Math.abs(x);
+  if (a >= 1e9) return `${Math.round(x / 1e9)}B`;
+  if (a >= 1e6) return `${Math.round(x / 1e6)}M`;
+  if (a >= 1e4) return `${Math.round(x / 1e3)}K`;
+  if (a >= 10) return String(Math.round(x));
+  return x.toFixed(2);
+}
+export const AXIS_WIDTH = 56;
 export const DARK = {
   layout: { background: { color: "#000000" }, textColor: "#d4d4d4", fontSize: 10 },
   grid: { vertLines: { visible: false }, horzLines: { visible: false } },
-  rightPriceScale: { borderColor: "#3f3f3f" },
+  rightPriceScale: { borderColor: "#3f3f3f", minimumWidth: AXIS_WIDTH },
+  localization: { priceFormatter: axisLabel },
   timeScale: { borderColor: "#3f3f3f" },
 };
 export const DARK_NO_AXIS = { ...DARK, timeScale: { ...DARK.timeScale, visible: false } };
