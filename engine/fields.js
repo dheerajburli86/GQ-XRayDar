@@ -122,6 +122,20 @@ add("boxBreakoutScreens", "Breakouts on weekly / monthly / quarterly screens (of
   (r) => { const t = r.snap?.tf; if (!t) return null; let k = 0; for (const tf of HIGHER) { if (t[tf]?.mmaBox?.rUp) k++; if (t[tf]?.rscBox?.rUp) k++; } return k; });
 add("boxConsolidatingScreens", "Consolidating on weekly / monthly / quarterly screens (of 6)", "Trend & MMA", "num",
   (r) => { const t = r.snap?.tf; if (!t) return null; let k = 0; for (const tf of HIGHER) { if (t[tf]?.mmaBox?.st === "consolidating") k++; if (t[tf]?.rscBox?.st === "consolidating") k++; } return k; });
+// standard studies (owner's feature list, item 1), daily and weekly candles
+for (const tf of ["D", "W"]) {
+  const T = tf === "D" ? "Daily" : "Weekly";
+  const S = (r) => r.snap?.tf?.[tf]?.studies;
+  add(`stochK${tf}`, `Stochastic %K slow (${T})`, "Momentum", "num", (r) => S(r)?.stochK);
+  add(`stochD${tf}`, `Stochastic %D slow (${T})`, "Momentum", "num", (r) => S(r)?.stochD);
+  add(`adx${tf}`, `ADX (${T})`, "Momentum", "num", (r) => S(r)?.adx);
+  add(`diBull${tf}`, `+DI above -DI (${T})`, "Momentum", "bool", (r) => S(r)?.diBull);
+  add(`supertrendUp${tf}`, `Supertrend up (${T})`, "Trend & MMA", "bool", (r) => (S(r)?.st == null ? null : S(r).st > 0));
+  add(`supertrendFlip${tf}`, `Supertrend changed direction on the last candle (${T})`, "Trend & MMA", "bool", (r) => S(r)?.stFlip);
+  add(`sarUp${tf}`, `Parabolic SAR below price (${T})`, "Trend & MMA", "bool", (r) => (S(r)?.sar == null ? null : S(r).sar > 0));
+  add(`ichimokuCloud${tf}`, `Price vs Ichimoku cloud (${T})`, "Trend & MMA", "cat", (r) => S(r)?.cloud, { values: ["above", "inside", "below"] });
+  add(`cmf${tf}`, `Chaikin Money Flow x100 (${T})`, "Volume & liquidity", "num", (r) => S(r)?.cmf);
+}
 add("above20", "Above 20-day EMA", "Trend & MMA", "bool", (r) => r.snap?.day?.above20);
 add("above50", "Above 50-day EMA", "Trend & MMA", "bool", (r) => r.snap?.day?.above50);
 add("above200", "Above 200-day EMA", "Trend & MMA", "bool", (r) => r.snap?.day?.above200);
@@ -210,7 +224,31 @@ export const OPS = {
 };
 
 /** Evaluate one condition {field, op, value, value2}. Missing data never passes. */
-export function testCondition(row, c) {
+/** Value of a drawn straight line on a date: linear in calendar days through a and b (extended). */
+export function lineValueAt(a, b, date) {
+  const d = (x) => Date.parse(`${x}T00:00:00Z`) / 86400000;
+  const ta = d(a.time), tb = d(b.time), t = d(date);
+  if (!Number.isFinite(ta) || !Number.isFinite(tb) || ta === tb || !Number.isFinite(t)) return null;
+  return a.price + ((b.price - a.price) * (t - ta)) / (tb - ta);
+}
+
+/**
+ * One condition. Besides field conditions ({field, op, value}) a rule can hold
+ *   {kind: "level", price, side: "above"|"below"}            close vs a fixed price (a horizontal
+ *                                                             line or a Fibonacci level)
+ *   {kind: "line", a: {time, price}, b: {time, price}, side}  close vs a drawn trend line / channel
+ *                                                             edge, extended to the latest date
+ * Alerts fire on the change (the server records each match once), so "above" fires on the cross.
+ * Only rules for one instrument (rule.universe.ids) should carry level / line conditions.
+ */
+export function testCondition(row, c, ctx = {}) {
+  if (c.kind === "level" || c.kind === "line") {
+    const close = row.flat ? row.flat.close : row.snap?.close;
+    if (close == null) return false;
+    const lvl = c.kind === "level" ? +c.price : lineValueAt(c.a, c.b, row.flat?.asOf || row.snap?.asOf || ctx.asOf);
+    if (lvl == null || !Number.isFinite(lvl)) return false;
+    return c.side === "below" ? close < lvl : close > lvl;
+  }
   const f = FIELD[c.field];
   if (!f) return false;
   const v = f.get(row);

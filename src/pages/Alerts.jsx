@@ -10,7 +10,7 @@
 // Telegram (and phone pop-ups) when connected; this page also previews it.
 import { useEffect, useMemo, useState } from "react";
 import { useData } from "../data/store.jsx";
-import { PageHead, Badge, Select, StockLink, Check, Tabs } from "../components/ui.jsx";
+import { PageHead, Badge, Select, StockLink, Check, Tabs, Seg } from "../components/ui.jsx";
 import { DataTable } from "../components/DataTable.jsx";
 import { InstrumentPicker } from "../components/pickers.jsx";
 import { ALERT_TEMPLATES, evaluateAlerts, templateById } from "../../engine/alerts.js";
@@ -101,6 +101,11 @@ export default function Alerts({ route }) {
                 <div className="small muted">{t?.desc || "Custom conditions"}</div>
                 {r.template === "custom" && <div className="stack" style={{ gap: 4, marginTop: 6 }}>
                   <input value={r.name} onChange={(e) => update(r.id, { name: e.target.value })} />
+                  <div className="row small">
+                    <Seg value={r.match || "all"} options={[{ value: "all", label: "ALL conditions" }, { value: "any", label: "ANY condition" }]} onChange={(m) => update(r.id, { match: m })} />
+                    <Seg value={r.once ? "once" : "every"} options={[{ value: "every", label: "Every session it starts" }, { value: "once", label: "One time only" }]} onChange={(x) => update(r.id, { once: x === "once" })} />
+                    {r.universe?.ids?.length ? <Badge kind="b">{r.universe.ids.map((id) => d.secById.get(id)?.symbol || id).join(", ")} only</Badge> : null}
+                  </div>
                   {(r.conditions || []).map((c, i) => <ConditionRow key={i} c={c} onChange={(nc) => update(r.id, { conditions: r.conditions.map((x, k) => (k === i ? nc : x)) })} onRemove={() => update(r.id, { conditions: r.conditions.filter((_, k) => k !== i) })} />)}
                   <button className="btn sm" onClick={() => update(r.id, { conditions: [...(r.conditions || []), { field: "mmaBullW", op: "is true" }] })}>+ condition</button>
                 </div>}
@@ -112,7 +117,7 @@ export default function Alerts({ route }) {
               </div>);
           })}
         </div>
-        <div className="card small muted">Combination alerts fire when ALL their conditions hold on the latest data; the first time each (rule, instrument, date) matches it enters the inbox (and, when Telegram is linked, is sent there). A rule that already matches when you create it is recorded quietly on the server, so you only hear about new matches.</div>
+        <div className="card small muted">Combination alerts fire when ALL (or, if you choose, ANY) of their conditions hold on the latest data — any screen field on any timeframe (daily / weekly / monthly variants), volume spikes (volume ratio), proprietary signals, or a level / trend line drawn on a chart; the first time each (rule, instrument, date) matches it enters the inbox (and, when Telegram is linked, is sent there). A rule that already matches when you create it is recorded quietly on the server, so you only hear about new matches.</div>
       </div>}
       {tab === "inbox" && <div className="stack">
         {acct.serverOn && acct.me && <ServerEvents />}

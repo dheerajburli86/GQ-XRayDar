@@ -20,16 +20,18 @@ export const ALERT_TEMPLATES = [
 
 export const templateById = (id) => ALERT_TEMPLATES.find((t) => t.id === id);
 
-function matchesRule(row, rule) {
+function matchesRule(row, rule, asOf) {
   const t = templateById(rule.template);
   const conds = rule.template === "custom" ? rule.conditions || [] : t?.conditions || [];
   if (!conds.length) return false;
+  // custom rules: ALL conditions (default) or ANY of them (owner: AND / OR logic)
+  if (rule.template === "custom" && rule.match === "any") return conds.some((c) => testCondition(row, c, { asOf }));
   if (t?.any2) {
     // the last condition may be satisfied by an alternative (daily OR weekly breakout)
     const base = conds.slice(0, -1).every((c) => testCondition(row, c));
     return base && (testCondition(row, conds[conds.length - 1]) || t.any2.some((c) => testCondition(row, c)));
   }
-  return conds.every((c) => testCondition(row, c)) && (rule.extra || []).every((c) => testCondition(row, c));
+  return conds.every((c) => testCondition(row, c, { asOf })) && (rule.extra || []).every((c) => testCondition(row, c, { asOf }));
 }
 
 /**
@@ -62,12 +64,14 @@ export function evaluateAlerts(rules, rows, watchlists = {}, sectorCtx = null, a
     for (const r of rows) {
       if (allowed && !allowed.has(r.sec.id)) continue;
       const u = rule.universe || {};
+      if (u.ids?.length && !u.ids.includes(r.sec.id)) continue;
       if (u.country && r.sec.country !== u.country) continue;
       if (u.region && r.sec.region !== u.region) continue;
       if (u.sector && r.sec.sector !== u.sector) continue;
-      if (!matchesRule(r, rule)) continue;
+      if (!matchesRule(r, rule, asOf)) continue;
       const d = r.flat?.asOf || asOf;
-      out.push({ ruleId: rule.id, key: `${rule.id}|${r.sec.id}|${d}`, id: r.sec.id, symbol: r.sec.symbol, name: r.sec.name, asOf: d, detail: rule.name });
+      // a one-time rule matches an instrument once ever; a recurring one once per session
+      out.push({ ruleId: rule.id, key: rule.once ? `${rule.id}|${r.sec.id}|once` : `${rule.id}|${r.sec.id}|${d}`, id: r.sec.id, symbol: r.sec.symbol, name: r.sec.name, asOf: d, once: !!rule.once, detail: rule.name });
     }
   }
   return out;

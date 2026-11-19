@@ -9,6 +9,7 @@ import { DataTable } from "../components/DataTable.jsx";
 import { InstrumentPicker } from "../components/pickers.jsx";
 import { usePersistent, uid } from "../lib/storage.js";
 import { fmtMoney } from "../lib/format.js";
+import { paperStats } from "../../engine/paperStats.js";
 
 const START = 100000;
 
@@ -35,6 +36,8 @@ export default function Paper() {
   const invested = open.reduce((s, p) => s + (p.value || 0), 0);
   const equity = book.cash + invested;
   const realised = positions.reduce((s, p) => s + p.realised, 0);
+  // performance of closed trades, the same measures as the alert report card
+  const perf = useMemo(() => paperStats(book.trades.map((t) => ({ id: t.id, side: t.side, qty: t.qty, price: t.priceUsd, date: t.date }))), [book.trades]);
 
   const trade = (side) => {
     setErr(null);
@@ -58,6 +61,13 @@ export default function Paper() {
         <Kpi label="In positions" value={fmtMoney(invested)} sub={`${open.length} holding${open.length === 1 ? "" : "s"}`} />
         <Kpi label="Realised gain" value={fmtMoney(realised)} cls={realised >= 0 ? "pos" : "neg"} />
       </div>
+      <div className="grid" style={{ gridTemplateColumns: "repeat(4, minmax(0,1fr))" }}>
+        <Kpi label="Closed trades" value={perf.n} sub={perf.n ? `${Math.round(perf.winRate * 100)}% winners` : "none yet"} />
+        <Kpi label="Average win / loss" value={perf.n ? `${fmtMoney(perf.avgWin)} / ${fmtMoney(perf.avgLoss)}` : "—"} />
+        <Kpi label="Expectancy per trade" value={perf.expectancy == null ? "—" : fmtMoney(perf.expectancy)} cls={(perf.expectancy || 0) >= 0 ? "pos" : "neg"} />
+        <Kpi label="Deepest drop (realised)" value={fmtMoney(perf.maxDrawdown)} cls={perf.maxDrawdown < 0 ? "neg" : ""} />
+      </div>
+      <div className="small muted">Trade from any chart with Practice buy / Practice sell (Chart lab), or below. Practice trades never touch a real account. Futures and options strategies are modelled in Derivatives → Strategy builder; they are not booked here.</div>
       <div className="card row" style={{ flexWrap: "wrap", gap: 8 }}>
         <InstrumentPicker secOnly value={inst} onChange={setInst} width={280} />
         <label className="lbl-ctl">Shares<input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} style={{ width: 90 }} /></label>

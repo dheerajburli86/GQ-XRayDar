@@ -8,7 +8,7 @@
 //   export         PNG, PDF; notes saved next to the chart
 // Everything shown is computed by the engine from stored prices.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createChart, CandlestickSeries, LineSeries, HistogramSeries, createSeriesMarkers, LineStyle } from "lightweight-charts";
+import { createChart, CandlestickSeries, BarSeries, LineSeries, HistogramSeries, createSeriesMarkers, LineStyle } from "lightweight-charts";
 import { useData } from "../data/store.jsx";
 import { useAsync } from "../lib/useAsync.js";
 import { navigate } from "../lib/router.js";
@@ -16,7 +16,7 @@ import { PageHead, Seg, Check, Loading, Badge, Empty } from "../components/ui.js
 import { InstrumentPicker, TfPicker } from "../components/pickers.jsx";
 import { loadInstrument } from "../lib/series.js";
 import { aggregate, emaStrict, rsi, macd } from "../../engine/indicators.js";
-import { heikinAshi, supportResistance, renko, kagi, pointFigure, volumeProfile, fibonacci } from "../../engine/chartTools.js";
+import { heikinAshi, supportResistance, renko, kagi, pointFigure, volumeProfile, fibonacci, valueArea } from "../../engine/chartTools.js";
 import { chartPatterns } from "../../engine/patterns.js";
 import { getDerivApi } from "../data/derivApi.js";
 import { NSE_INDEX_UNDERLYINGS } from "../../engine/deriv/nse.js";
@@ -31,11 +31,19 @@ import { QuickTicker } from "../components/QuickTicker.jsx";
 import { useChartKeys } from "../lib/chartKeys.js";
 import { useLastInstrument } from "../lib/instruments.js";
 import { priceSeries } from "../lib/chartStyle.js";
+import { Tabs } from "../components/ui.jsx";
+import { StudiesPanel, FormulaPanel, DrawingsPanel, ProjectionPanel, ReplayPanel, SeasonalityPanel, TpoView } from "../components/ChartLabPanels.jsx";
+import { studyOverlays, drawingOverlays, formulaOverlays, projectionOverlays } from "../lib/chartOverlays.js";
+import { DRAW_TOOLS } from "../../engine/drawings.js";
+import { evalFormula } from "../../engine/formula.js";
+import { seasonality, seasonalOverlay } from "../../engine/seasonality.js";
+import { rsc } from "../../engine/indicators.js";
+import { alignCurrency } from "../lib/series.js";
 
 const UP = "#16a34a", DOWN = "#dc2626";
-const STYLES = [["candles", "Candles"], ["ha", "Heikin-Ashi"], ["line", "Line"], ["renko", "Renko"], ["kagi", "Kagi"], ["pnf", "Point & Figure"]];
-const TIME_STYLES = new Set(["candles", "ha", "line"]);
-const DEFAULT_VIEW = { tf: "D", style: "candles", ema: true, mma: false, sr: true, vp: false, vol: true, rsi: true, macd: false, cmp: null, fib: false, pat: true, fo: true };
+const STYLES = [["candles", "Candles"], ["ha", "Heikin-Ashi"], ["line", "Line"], ["bar", "Bars"], ["renko", "Renko"], ["kagi", "Kagi"], ["pnf", "Point & Figure"], ["tpo", "Market profile"]];
+const TIME_STYLES = new Set(["candles", "ha", "line", "bar"]);
+const DEFAULT_VIEW = { tf: "D", style: "candles", ema: true, mma: false, sr: true, vp: false, vol: true, rsi: true, macd: false, cmp: null, fib: false, pat: true, fo: true, studies: {} };
 
 /** F&O underlying for a security (NSE stock symbol, or the index an NSE index contract tracks). */
 function foUnderlying(sec) {
@@ -67,7 +75,7 @@ export default function ChartLab({ route }) {
   const set = (patch) => setView({ ...v, ...patch });
   useChartKeys({ onTf: (tf) => set({ tf }), onSearch: (ch) => setPicking({ initial: ch }) });
   const [allDrawings, setAllDrawings] = usePersistent("drawings", {});
-  const drawings = allDrawings[id] || [];
+  const drawings = useMemo(() => allDrawings[id] || [], [allDrawings, id]);
   const setDrawings = (list) => setAllDrawings({ ...allDrawings, [id]: list });
   const [tool, setTool] = useState("none");
   const [explain, setExplain] = useState(null);
@@ -76,10 +84,50 @@ export default function ChartLab({ route }) {
   const { data, loading } = useAsync(async () => {
     if (!id) return null;
     const [inst, snap, cmp] = await Promise.all([loadInstrument(d.api, { kind: "sec", id }, d), d.api.snapshot(id), v.cmp ? loadInstrument(d.api, v.cmp, d) : null]);
-    return { inst, snap, cmp };
+    const aligned = inst && cmp ? await alignCurrency(d.api, inst, cmp) : null;
+    return { inst, snap, cmp, aligned };
   }, [id, v.cmp?.id, v.cmp?.key]);
 
-  const bars = useMemo(() => (data?.inst ? aggregate({ ...data.inst, volume: data.inst.volume || data.inst.close.map(() => 0) }, v.tf) : null), [data, v.tf]);
+  const fullBars0 = useMemo(() => (data?.inst ? aggregate({ ...data.inst, volume: data.inst.volume || data.inst.close.map(() => 0) }, v.tf) : null), [data, v.tf]);
+  // relative strength vs the "Compare with" series on these candles (formula name: rsc)
+  const fullBars = useMemo(() => {
+    if (!fullBars0 || !data?.aligned || !data?.cmp) return fullBars0;
+    const r = rsc(data.inst.time, data.aligned.a, data.cmp.time, data.aligned.b, v.tf, 100);
+    const m = new Map(r.time.map((t, i) => [t, r.value[i]]));
+    return { ...fullBars0, rsc: fullBars0.time.map((t) => m.get(t) ?? null) };
+  }, [fullBars0, data, v.tf]);
+  // bar replay: everything after the replay point is hidden
+  const [replay, setReplay] = useState(null);
+  useEffect(() => { setReplay(null); }, [id, v.tf]);
+  useEffect(() => {
+    if (!replay?.playing || !fullBars) return undefined;
+    const h = setInterval(() => setReplay((r) => (r && r.playing ? (r.idx >= fullBars.time.length - 1 ? { ...r, playing: false } : { ...r, idx: r.idx + 1 }) : r)), 1000 / (replay.speed || 1));
+    return () => clearInterval(h);
+  }, [replay?.playing, replay?.speed, fullBars]);
+  const bars = useMemo(() => {
+    if (!fullBars || !replay) return fullBars;
+    const k = replay.idx + 1, cut = (a) => (Array.isArray(a) ? a.slice(0, k) : a);
+    return { ...fullBars, time: cut(fullBars.time), open: cut(fullBars.open), high: cut(fullBars.high), low: cut(fullBars.low), close: cut(fullBars.close), volume: cut(fullBars.volume), rsc: cut(fullBars.rsc) };
+  }, [fullBars, replay?.idx]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [customs, setCustoms] = usePersistent("customIndicators", []);
+  const [allProj, setAllProj] = usePersistent("projections", {});
+  const projs = useMemo(() => allProj[id] || [], [allProj, id]);
+  const setProjs = (list) => setAllProj({ ...allProj, [id]: list });
+  const [seasonOn, setSeasonOn] = useState(false);
+  const [toolTab, setToolTab] = usePersistent("chartlab.toolTab", "studies");
+  const [scan, setScan] = useState(null);
+  const overlays = useMemo(() => {
+    if (!bars || !TIME_STYLES.has(v.style)) return null;
+    const so = studyOverlays(bars, v.studies, v.tf), dw = drawingOverlays(bars, drawings), fo = formulaOverlays(bars, customs), pj = projectionOverlays(bars, projs, v.tf);
+    const price = [...so.price, ...dw.price, ...fo.price, ...pj.price];
+    if (seasonOn && data?.inst) {
+      const s = seasonality(data.inst.time, data.inst.close);
+      const y = bars.time.at(-1).slice(0, 4), i0 = bars.time.findIndex((t) => t >= `${y}-01-01`);
+      if (s.path.length && i0 >= 0) price.push({ type: "line", data: seasonalOverlay(s.path, `${y}-01-01`, bars.close[Math.max(0, i0 - 1)]), options: { color: "#c084fc", lineWidth: 2, lineStyle: 2, title: `seasonal (${s.years}y avg)`, lastValueVisible: false, priceLineVisible: false } });
+    }
+    const markers = [...dw.markers, ...fo.markers, ...(replay?.trades || []).map((t) => ({ time: t.date, position: t.side === "buy" ? "belowBar" : "aboveBar", shape: t.side === "buy" ? "arrowUp" : "arrowDown", color: t.side === "buy" ? "#16a34a" : "#dc2626", text: `${t.side} ${t.price.toFixed(2)}` }))];
+    return { price, panes: [...so.panes, ...fo.panes], markers, levels: [...so.levels, ...dw.levels, ...pj.levels], notes: [...so.notes, ...dw.notes], errors: fo.errors, projections: pj.results };
+  }, [bars, v.style, v.studies, v.tf, drawings, customs, projs, seasonOn, data, replay?.trades]);
   const levels = useMemo(() => (bars && v.sr ? supportResistance(bars, { lookback: v.tf === "D" ? 250 : 150 }) : []), [bars, v.sr, v.tf]);
   const lastPatterns = useMemo(() => (bars ? candlePatternsAt(bars, bars.time.length - 1).map((p) => CANDLE_PATTERNS[p]) : []), [bars]);
   const fib = useMemo(() => (bars && v.fib ? fibonacci(bars, { lookback: v.tf === "D" ? 250 : 120 }) : null), [bars, v.fib, v.tf]);
@@ -92,6 +140,29 @@ export default function ChartLab({ route }) {
   useEffect(() => { if (sec) setAgentContext({ page: "chart", instrumentId: id, symbol: sec.symbol, name: sec.name, tf: v.tf, view: STYLES.find((s) => s[0] === v.style)?.[1] }); return () => setAgentContext(null); }, [id, sec, v.tf, v.style]);
   useEffect(() => { setExplain(null); }, [id, v.tf]);
 
+  // an alert from a drawing: a one-instrument custom rule with the drawing's level(s) / line
+  const [alertRules, setAlertRules] = usePersistent("alerts.rules", null);
+  const [alertMsg, setAlertMsg] = useState(null);
+  const alertFromDrawing = (dw, lv) => {
+    const last = bars.close.at(-1);
+    const conds = lv === "line"
+      ? [{ kind: "line", a: dw.a, b: dw.b, side: (() => { const ta = Date.parse(dw.a.time), tb = Date.parse(dw.b.time), tl = Date.parse(bars.time.at(-1)); const at = dw.a.price + ((dw.b.price - dw.a.price) * (tl - ta)) / (tb - ta || 1); return last > at ? "below" : "above"; })(), label: "trend line" }]
+      : lv.map((x) => ({ kind: "level", price: +x.price.toFixed(4), side: last > x.price ? "below" : "above", label: x.label }));
+    const rule = { id: uid(), name: `${sec.symbol}: ${dw.type === "projection" ? `projection "${dw.name}" target` : DRAW_TOOLS.find((x) => x.value === dw.type)?.label || dw.type} crossed`, template: "custom", match: "any", once: false, conditions: conds, universe: { ids: [id] }, enabled: true };
+    setAlertRules([...(alertRules || []), rule]);
+    setAlertMsg(`Alert added: ${rule.name} (${conds.length} level${conds.length > 1 ? "s" : ""}; it fires when the close crosses ${conds.length > 1 ? "any of them" : "it"}). Manage it under Alerts → Combination alerts.`);
+  };
+  // practice order at the latest stored close (the practice portfolio)
+  const [paper, setPaper] = usePersistent("paper", { cash: 100000, start: 100000, trades: [], createdAt: new Date().toISOString() });
+  const practice = (side) => {
+    const r = d.rowById.get(id), n = Math.floor(+prompt(`${side === "buy" ? "Buy" : "Sell"} how many ${sec.symbol} shares at the latest close?`, "10"));
+    if (!r?.flat?.closeUsd || !(n > 0)) return;
+    const held = paper.trades.filter((t) => t.id === id).reduce((q, t) => q + (t.side === "buy" ? t.qty : -t.qty), 0);
+    if (side === "buy" && n * r.flat.closeUsd > paper.cash) { alert("Not enough practice cash."); return; }
+    if (side === "sell" && n > held) { alert(`You hold ${held} practice shares.`); return; }
+    setPaper({ ...paper, cash: paper.cash + (side === "buy" ? -1 : 1) * n * r.flat.closeUsd, trades: [...paper.trades, { tid: uid(), id, side, qty: n, priceUsd: r.flat.closeUsd, priceLocal: r.flat.close, date: d.info.asOf, at: new Date().toISOString() }] });
+    setAlertMsg(`Practice ${side} of ${n} ${sec.symbol} recorded at ${r.flat.close}. See Practice portfolio.`);
+  };
   if (!sec) return <Empty>Pick a stock to chart.</Empty>;
   const timeStyle = TIME_STYLES.has(v.style);
 
@@ -137,7 +208,7 @@ export default function ChartLab({ route }) {
           <Check checked={v.ema} onChange={(x) => set({ ema: x })}>EMA 20/50/200</Check>
           <Check checked={v.mma} onChange={(x) => set({ mma: x })}>MMA groups</Check>
           <Check checked={v.sr} onChange={(x) => set({ sr: x })}>Key levels</Check>
-          <Check checked={v.vp} onChange={(x) => set({ vp: x })}>Busiest prices</Check>
+          <Check checked={v.vp} onChange={(x) => set({ vp: x })}>Volume profile (visible range)</Check>
           <Check checked={v.fib} onChange={(x) => set({ fib: x })}>Fibonacci</Check>
           <Check checked={v.pat} onChange={(x) => set({ pat: x })}>Chart patterns</Check>
           {und && <Check checked={v.fo} onChange={(x) => set({ fo: x })}>F&O levels</Check>}
@@ -153,22 +224,33 @@ export default function ChartLab({ route }) {
           <button className="btn sm" onClick={() => set({ cmp: { kind: "index", key: `CW|LCL|C:${sec.country}`, label: `${sec.country} CW (local)` } })}>vs its market</button>
           <span className="sep" />
           <span className="small muted">Draw</span>
-          <Seg value={tool} options={[{ value: "none", label: "Off" }, { value: "trend", label: "Trend line" }, { value: "hline", label: "Horizontal" }, { value: "channel", label: "Channel" }, { value: "note", label: "Note" }]} onChange={setTool} />
+          <select className="input sm" value={tool} onChange={(e) => setTool(e.target.value)} title="Drawing tools (saved for this instrument)">
+            <option value="none">Off</option>
+            {DRAW_TOOLS.map((x) => <option key={x.value} value={x.value}>{x.label}</option>)}
+          </select>
           {drawings.length > 0 && <button className="btn sm ghost" onClick={() => setDrawings(drawings.slice(0, -1))} title="Undo last drawing">↶</button>}
           {drawings.length > 0 && <button className="btn sm ghost" onClick={() => confirm("Remove every drawing on this chart?") && setDrawings([])}>Clear</button>}
           <span className="sep" />
           <button className="btn sm primary" onClick={doExplain}>Explain this chart</button>
           <button className="btn sm" onClick={() => openAgent(`Read the ${v.tf === "W" ? "weekly" : v.tf === "M" ? "monthly" : "daily"} chart of ${sec.symbol} and explain what it shows`, { page: "chart", instrumentId: id, symbol: sec.symbol, tf: v.tf })}>Ask GQ Agent</button>
+          <button className="btn sm" style={{ color: "#16a34a" }} onClick={() => practice("buy")} title="Practice portfolio: buy at the latest close">Practice buy</button>
+          <button className="btn sm" style={{ color: "#dc2626" }} onClick={() => practice("sell")} title="Practice portfolio: sell at the latest close">Practice sell</button>
           <button className="btn sm" onClick={png}>PNG</button>
           <button className="btn sm" onClick={pdf}>PDF</button>
         </div>
         {tool !== "none" && !timeStyle && <div className="note small" style={{ marginTop: 6 }}>Drawings work on Candles, Heikin-Ashi and Line.</div>}
-        {tool !== "none" && timeStyle && <div className="small muted" style={{ marginTop: 6 }}>{tool === "trend" ? "Click two points." : tool === "hline" ? "Click a price." : tool === "channel" ? "Click two points for the line, then a third for the parallel." : "Click where the note goes."}</div>}
+        {tool !== "none" && timeStyle && <div className="small muted" style={{ marginTop: 6 }}>{({ trend: "Click two points.", hline: "Click a price.", channel: "Click two points for the line, then a third for the parallel.", note: "Click where the note goes.",
+          fib: "Click the start and the end of the move.", fibext: "Click the start and end of the move, then the point to project from.", fibfan: "Click the start and end of the move.", fibarc: "Click the start and end of the move.", fibtime: "Click two candles: their distance is the time unit.",
+          pitchfork: "Click the handle, then the two reaction points.", schiff: "Click the handle, then the two reaction points.", modschiff: "Click the handle, then the two reaction points.",
+          gannfan: "Click the origin, then a point that sets the 1x1.", ganngrid: "Click two points: span and slope of the grid.", rr: "Click entry, then stop, then target.", measure: "Click two points.",
+          avwap: "Click the candle to anchor the VWAP on.", avp: "Click the candle the volume profile starts from." })[tool]}</div>}
       </div>
-      {loading || !bars ? <Loading what="prices" /> : (
+      {loading || !bars ? <Loading what="prices" /> : v.style === "tpo" ? <div className="card"><TpoView bars={bars} /></div> : (
         <div className="card" style={{ padding: 6, position: "relative" }}>
-          <ChartCanvas key={`${id}|${v.style}`} bars={bars} v={v} levels={levels} extraLines={extraLines} patterns={patterns} cmp={data.cmp} drawings={timeStyle ? drawings : []} tool={timeStyle ? tool : "none"}
-            onDraw={(dw) => setDrawings([...drawings, { id: uid(), ...dw }])} onChart={(c) => { chartRef.current = c; }} />
+          <ChartCanvas key={`${id}|${v.style}`} bars={bars} v={v} levels={levels} extraLines={extraLines} patterns={patterns} cmp={data.cmp} drawings={timeStyle ? drawings.filter((x) => !x.hidden) : []} tool={timeStyle ? tool : "none"}
+            onDraw={(dw) => setDrawings([...drawings, { id: uid(), ...dw }])} onChart={(c) => { chartRef.current = c; }} extra={overlays} />
+          {overlays?.errors?.length > 0 && <div className="note warn small">{overlays.errors.join(" · ")}</div>}
+          {replay && <div className="note small">Replay: candles after {bars.time.at(-1)} are hidden.</div>}
           <div className="row small" style={{ gap: 8, marginTop: 4, flexWrap: "wrap" }}>
             <span className="muted">{bars.time.length} candles · {bars.time[0]} → {bars.time.at(-1)}</span>
             {lastPatterns.filter((p) => p.dir !== 0).map((p) => <Badge key={p.label} kind={p.dir > 0 ? "g" : "r"}>{p.label}</Badge>)}
@@ -187,19 +269,36 @@ export default function ChartLab({ route }) {
           <div className="small muted">{explain.note}</div>
         </div>
       )}
+      {fullBars && v.style !== "tpo" && (
+        <div className="card">
+          <Tabs value={toolTab} onChange={setToolTab} tabs={[{ value: "studies", label: "Indicators" }, { value: "formula", label: `My formulas (${customs.length})` }, { value: "draw", label: `Drawings (${drawings.length})` },
+            { value: "proj", label: `Projections (${projs.length})` }, { value: "replay", label: replay ? "Replay ●" : "Replay & practice" }, { value: "season", label: "Seasonality" }]} />
+          <div style={{ marginTop: 8 }}>
+            {toolTab === "studies" && <StudiesPanel studies={v.studies} onChange={(studies) => set({ studies })} />}
+            {toolTab === "formula" && <FormulaPanel list={customs} setList={setCustoms} onScan={(f) => setScan({ f })} />}
+            {toolTab === "draw" && <DrawingsPanel drawings={drawings} setDrawings={setDrawings} bars={fullBars} sec={sec} notes={overlays?.notes || []} onAlert={alertFromDrawing} />}
+            {toolTab === "proj" && <ProjectionPanel list={projs} setList={setProjs} results={overlays?.projections} bars={fullBars} tf={v.tf} onAlert={alertFromDrawing} />}
+            {toolTab === "replay" && <ReplayPanel replay={replay} setReplay={setReplay} fullBars={fullBars} sec={sec} />}
+            {toolTab === "season" && <SeasonalityPanel daily={data?.inst} overlay={seasonOn} setOverlay={setSeasonOn} />}
+          </div>
+          {alertMsg && <div className="note small" style={{ marginTop: 6 }}>{alertMsg}</div>}
+        </div>
+      )}
+      {scan && <FormulaScan f={scan.f} onClose={() => setScan(null)} />}
       <div className="card"><h3>Notes on {sec.symbol}</h3><NoteBox target={`sec:${id}`} label={sec.symbol} /></div>
     </div>
   );
 }
 
 /** The chart itself. Re-created when the instrument or style changes; series are rebuilt on option changes. */
-function ChartCanvas({ bars, v, levels, extraLines = [], patterns = [], cmp, drawings, tool, onDraw, onChart }) {
+function ChartCanvas({ bars, v, levels, extraLines = [], patterns = [], cmp, drawings, tool, onDraw, onChart, extra = null }) {
   const el = useRef(null), chartRef = useRef(null), mainRef = useRef(null), seriesRef = useRef([]), pending = useRef([]);
   const toolRef = useRef(tool), onDrawRef = useRef(onDraw);
   useEffect(() => { toolRef.current = tool; onDrawRef.current = onDraw; });
   const [vpBars, setVpBars] = useState([]);
+  const [vpInfo, setVpInfo] = useState(null);
   const timeStyle = TIME_STYLES.has(v.style);
-  const panes = (v.vol && timeStyle ? 1 : 0) + (v.rsi ? 1 : 0) + (v.macd ? 1 : 0);
+  const panes = (v.vol && timeStyle ? 1 : 0) + (v.rsi ? 1 : 0) + (v.macd ? 1 : 0) + (timeStyle ? extra?.panes?.length || 0 : 0);
   const height = 430 + panes * 110;
 
   useEffect(() => {
@@ -217,9 +316,10 @@ function ChartCanvas({ bars, v, levels, extraLines = [], patterns = [], cmp, dra
       const pt = { time: p.time, price: +price.toFixed(4) };
       if (t === "hline") return onDrawRef.current({ type: "hline", a: pt });
       if (t === "note") { const text = prompt("Note text"); if (text) onDrawRef.current({ type: "note", a: pt, text: text.slice(0, 60) }); return; }
+      const need = DRAW_TOOLS.find((x) => x.value === t)?.clicks || 2;
+      if (need === 1) return onDrawRef.current({ type: t, a: pt });
       pending.current.push(pt);
-      const need = t === "channel" ? 3 : 2;
-      if (pending.current.length >= need) { const [a, b, c] = pending.current; pending.current = []; if (a.time !== b.time) onDrawRef.current({ type: t, a, b, c }); }
+      if (pending.current.length >= need) { const [a, b, c] = pending.current; pending.current = []; if (a.time !== b.time || need === 3) onDrawRef.current({ type: t, a, b, c }); }
     };
     // a quick second click arrives as a double-click, not a click
     chart.subscribeClick(onClick);
@@ -251,6 +351,7 @@ function ChartCanvas({ bars, v, levels, extraLines = [], patterns = [], cmp, dra
       const src = v.style === "ha" ? heikinAshi(bars) : bars;
       main = v.style === "line"
         ? add(LineSeries, priceSeries(t, bars, "line").data, { color: "#e5e7eb", lineWidth: 2, lastValueVisible: true })
+        : v.style === "bar" ? add(BarSeries, t.map((x, i) => ({ time: x, open: src.open[i], high: src.high[i], low: src.low[i], close: src.close[i] })), { upColor: UP, downColor: DOWN, lastValueVisible: true })
         : add(CandlestickSeries, t.map((x, i) => ({ time: x, open: src.open[i], high: src.high[i], low: src.low[i], close: src.close[i] })), { upColor: UP, downColor: DOWN, borderVisible: false, wickUpColor: UP, wickDownColor: DOWN, lastValueVisible: true });
       if (v.ema) [[20, "#22d3ee"], [50, "#14a44d"], [200, "#d97706"]].forEach(([n, c]) => add(LineSeries, L(t, emaStrict(bars.close, n)), { color: c, lineWidth: 1, title: `EMA${n}` }));
       if (v.mma) { [3, 5, 8, 10, 12, 15].forEach((n) => add(LineSeries, L(t, emaStrict(bars.close, n)), { color: "#facc15", lineWidth: 1 })); [30, 35, 40, 45, 50, 60].forEach((n) => add(LineSeries, L(t, emaStrict(bars.close, n)), { color: "#ef4444", lineWidth: 1 })); }
@@ -289,7 +390,13 @@ function ChartCanvas({ bars, v, levels, extraLines = [], patterns = [], cmp, dra
           }
         }
       }
-      if (notes.length && main) createSeriesMarkers(main, notes.sort((x, y) => (x.time < y.time ? -1 : 1)));
+      // studies, drawing tools, custom formulas, projections and the seasonal path
+      if (extra) {
+        for (const sp of extra.price || []) add(sp.type === "histogram" ? HistogramSeries : LineSeries, sp.data, sp.options);
+        for (const l of extra.levels || []) if (Number.isFinite(l.price)) main?.createPriceLine({ price: l.price, color: l.color, lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: true, title: l.title || "" });
+        notes.push(...(extra.markers || []));
+      }
+      if (notes.length && main) createSeriesMarkers(main, notes.filter((m) => m.time >= t[0] && m.time <= t[t.length - 1]).sort((x, y) => (x.time < y.time ? -1 : 1)));
       if (v.vol) { pane++; add(HistogramSeries, t.map((x, i) => ({ time: x, value: bars.volume[i] || 0, color: bars.close[i] >= bars.open[i] ? "rgba(22,163,74,.55)" : "rgba(220,38,38,.55)" })), { priceFormat: { type: "volume" }, title: "Volume" }, pane); }
     } else {
       // non-time styles: one point per brick / swing / column on a sequence axis
@@ -323,13 +430,25 @@ function ChartCanvas({ bars, v, levels, extraLines = [], patterns = [], cmp, dra
       add(LineSeries, L(t, m.line), { color: "#14a44d", lineWidth: 2, title: "MACD" }, pane);
       add(LineSeries, L(t, m.signal), { color: "#d97706", lineWidth: 1, title: "signal" }, pane);
     }
+    if (extra?.panes?.length && timeStyle) {
+      for (const pn of extra.panes) {
+        pane++;
+        let first = null;
+        for (const sp of pn.specs) {
+          const s = add(sp.type === "histogram" ? HistogramSeries : LineSeries, sp.data, sp.options, pane);
+          if (s && !first) first = s;
+          for (const pl of sp.priceLines || []) s?.createPriceLine({ lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: false, ...pl });
+        }
+        if (!first) pane--;
+      }
+    }
     const panesNow = chart.panes();
     panesNow.forEach((p, i) => { try { p.setStretchFactor(i === 0 ? 4 : 1); } catch { /* older api */ } });
     const nPts = main ? main.data().length : 0, show = timeStyle ? 400 : 250;
     const fit = () => { if (chartRef.current !== chart) return; try { if (nPts > show) chart.timeScale().setVisibleLogicalRange({ from: nPts - show, to: nPts + 5 }); else chart.timeScale().fitContent(); } catch { /* chart removed */ } };
     fit(); setTimeout(fit, 60);
     } catch (e) { console.warn(`[chart lab] drawing failed: ${e.message}`); }
-  }, [bars, v.ema, v.mma, v.vol, v.rsi, v.macd, v.style, levels, extraLines, patterns, cmp, drawings, timeStyle, v.tf]);
+  }, [bars, v.ema, v.mma, v.vol, v.rsi, v.macd, v.style, levels, extraLines, patterns, cmp, drawings, timeStyle, v.tf, extra]);
 
   // busiest price levels, drawn as bars against the price axis of the visible window
   useEffect(() => {
@@ -345,10 +464,13 @@ function ChartCanvas({ bars, v, levels, extraLines = [], patterns = [], cmp, dra
       const sub = { time: bars.time.slice(from, to + 1), open: bars.open.slice(from, to + 1), high: bars.high.slice(from, to + 1), low: bars.low.slice(from, to + 1), close: bars.close.slice(from, to + 1), volume: bars.volume.slice(from, to + 1) };
       const vp = volumeProfile(sub, { bins: 28 });
       const max = Math.max(...vp.bins.map((b) => b.volume), 1);
+      const va = valueArea(vp);
       setVpBars(vp.bins.map((b) => {
         const y1 = mainRef.current.priceToCoordinate(b.hi), y2 = mainRef.current.priceToCoordinate(b.lo);
-        return y1 == null || y2 == null ? null : { top: Math.min(y1, y2), h: Math.max(1, Math.abs(y2 - y1) - 1), w: (b.volume / max) * 100, poc: b === vp.poc };
+        return y1 == null || y2 == null ? null : { top: Math.min(y1, y2), h: Math.max(1, Math.abs(y2 - y1) - 1), w: (b.volume / max) * 100, poc: b === vp.poc,
+          inVa: va && b.lo >= va.val - 1e-9 && b.hi <= va.vah + 1e-9, hvn: va?.hvn.includes(b), lvn: va?.lvn.includes(b) };
       }).filter(Boolean));
+      setVpInfo(va ? `Visible range: POC ${va.poc.toFixed(2)} · value area ${va.val.toFixed(2)} – ${va.vah.toFixed(2)} (${Math.round(va.share * 100)}% of volume) · ${va.hvn.length} high / ${va.lvn.length} low volume nodes` : null);
     };
     draw();
     chart.timeScale().subscribeVisibleLogicalRangeChange(draw);
@@ -358,9 +480,49 @@ function ChartCanvas({ bars, v, levels, extraLines = [], patterns = [], cmp, dra
   return (
     <div style={{ position: "relative" }}>
       <div ref={el} className="chartbox" style={{ height, cursor: tool !== "none" ? "crosshair" : undefined }} />
+      {vpInfo && v.vp && <div className="small muted" style={{ position: "absolute", left: 8, bottom: 2, zIndex: 4 }}>{vpInfo}</div>}
       {vpBars.length > 0 && (
         <div className="vp-overlay" title="Busiest price levels in view: volume traded at each price band">
-          {vpBars.map((b, i) => <div key={i} style={{ top: b.top, height: b.h, width: `${b.w}%`, background: b.poc ? "rgba(245,158,11,.45)" : "rgba(96,165,250,.22)" }} />)}
+          {vpBars.map((b, i) => <div key={i} title={b.poc ? "point of control" : b.hvn ? "high volume node" : b.lvn ? "low volume node" : b.inVa ? "value area" : ""} style={{ top: b.top, height: b.h, width: `${b.w}%`, background: b.poc ? "rgba(245,158,11,.55)" : b.inVa ? "rgba(96,165,250,.32)" : "rgba(148,163,184,.16)", outline: b.hvn ? "1px solid rgba(34,197,94,.7)" : b.lvn ? "1px dashed rgba(244,63,94,.6)" : "none" }} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A formula condition run over a watchlist (or the 40 largest stocks): who meets it on the last candle. */
+function FormulaScan({ f, onClose }) {
+  const d = useData();
+  const [wls] = usePersistent("watchlists", {});
+  const [wl, setWl] = useState(Object.keys(wls)[0] || "");
+  const [tf, setTf] = useState("D");
+  const ids = useMemo(() => (wl && wls[wl]?.ids?.length ? wls[wl].ids : [...d.rows].sort((a, b) => (b.sec.capUsdNow || 0) - (a.sec.capUsdNow || 0)).slice(0, 40).map((r) => r.id)).slice(0, 80), [wl, wls, d.rows]);
+  const { data, loading } = useAsync(async () => {
+    const out = [];
+    for (const sid of ids) {
+      try {
+        const inst = await loadInstrument(d.api, { kind: "sec", id: sid }, d);
+        if (!inst) continue;
+        const b = aggregate({ ...inst, volume: inst.volume || inst.close.map(() => 0) }, tf);
+        const vals = evalFormula(f.formula, b);
+        out.push({ id: sid, sec: d.secById.get(sid), now: vals.at(-1) === 1, started: vals.at(-1) === 1 && vals.at(-2) !== 1, date: b.time.at(-1) });
+      } catch (e) { out.push({ id: sid, sec: d.secById.get(sid), err: e.message }); }
+    }
+    return out;
+  }, [ids.join(","), f.formula, tf]);
+  const hits = (data || []).filter((x) => x.now);
+  return (
+    <div className="card">
+      <div className="row between"><h3>"{f.name}" on {wl && wls[wl] ? wls[wl].name : "the 40 largest stocks"}</h3><button className="btn sm ghost" onClick={onClose}>✕</button></div>
+      <div className="row small" style={{ gap: 6 }}>
+        <select className="input sm" value={wl} onChange={(e) => setWl(e.target.value)}><option value="">40 largest stocks</option>{Object.entries(wls).map(([k, w]) => <option key={k} value={k}>{w.name}</option>)}</select>
+        <TfPicker value={tf} onChange={setTf} />
+        <span className="muted mono">{f.formula}</span>
+      </div>
+      {loading ? <Loading what={`${ids.length} charts`} /> : (
+        <div className="small" style={{ marginTop: 6 }}>
+          <b>{hits.length} of {data.length}</b> meet it on their last candle{hits.length ? ":" : "."} {hits.map((x) => <a key={x.id} href={`#/chart/${x.id}`} style={{ marginRight: 8 }}>{x.sec?.symbol}{x.started ? " (new)" : ""}</a>)}
+          {data.some((x) => x.err) && <div className="muted">Could not run on {data.filter((x) => x.err).length}: {data.find((x) => x.err).err}</div>}
         </div>
       )}
     </div>

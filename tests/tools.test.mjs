@@ -40,3 +40,34 @@ test("bullish engulfing after a decline", () => {
   b.open[i - 1] = 9.6; b.close[i - 1] = 9;
   assert.ok(candlePatternsAt(b, i).includes("bullish_engulfing"));
 });
+
+import { evaluateAlerts as evalAlerts2 } from "../engine/alerts.js";
+import { lineValueAt } from "../engine/fields.js";
+test("alerts: OR rules, price-level and drawn-line conditions, one-time keys", () => {
+  const row = { sec: { id: "x", symbol: "X", name: "X" }, flat: { close: 105, asOf: "2026-01-11", mmaBullW: false } };
+  const lvl = { id: "r1", enabled: true, template: "custom", universe: { ids: ["x"] }, conditions: [{ kind: "level", price: 100, side: "above" }] };
+  assert.equal(evalAlerts2([lvl], [row]).length, 1);
+  assert.equal(evalAlerts2([{ ...lvl, conditions: [{ kind: "level", price: 110, side: "above" }] }], [row]).length, 0);
+  // line through 100 on 1 Jan and 110 on 21 Jan: 105 on 11 Jan
+  assert.equal(lineValueAt({ time: "2026-01-01", price: 100 }, { time: "2026-01-21", price: 110 }, "2026-01-11"), 105);
+  const line = { ...lvl, conditions: [{ kind: "line", a: { time: "2026-01-01", price: 90 }, b: { time: "2026-01-21", price: 110 }, side: "above" }] };
+  assert.equal(evalAlerts2([line], [row]).length, 1); // line is at 100 on 11 Jan
+  const any = { ...lvl, match: "any", conditions: [{ field: "mmaBullW", op: "is true" }, { kind: "level", price: 100, side: "above" }] };
+  assert.equal(evalAlerts2([any], [row]).length, 1);
+  assert.equal(evalAlerts2([{ ...any, match: "all" }], [row]).length, 0);
+  assert.ok(evalAlerts2([{ ...lvl, once: true }], [row])[0].key.endsWith("|once"));
+  assert.equal(evalAlerts2([lvl], [{ ...row, sec: { ...row.sec, id: "y" } }]).length, 0); // other instrument
+});
+
+import { valueArea, tpoProfiles } from "../engine/chartTools.js";
+test("value area covers 70% of volume around the point of control; TPO from candles", () => {
+  const vp = { bins: [1, 2, 10, 20, 10, 2, 1].map((v, i) => ({ lo: i, hi: i + 1, volume: v })), poc: null };
+  vp.poc = vp.bins[3];
+  const va = valueArea(vp);
+  assert.equal(va.val, 2); assert.equal(va.vah, 5); assert.ok(va.share >= 0.7);
+  const b = { time: ["2026-01-05", "2026-01-06", "2026-01-07", "2026-02-02"], open: [10, 10, 10, 20], high: [12, 11, 11, 21], low: [10, 9, 10, 19], close: [11, 10, 10.5, 20] };
+  const t = tpoProfiles(b, { block: "M", rows: 3 });
+  assert.equal(t.length, 2); assert.equal(t[0].periods, 3);
+  assert.ok(t[0].rows.some((r) => r.letters === "ABC"));
+  assert.ok(t[0].poc >= 10 && t[0].poc <= 11);
+});

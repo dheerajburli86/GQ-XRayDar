@@ -15,6 +15,7 @@ import {
 import { HORIZONS, lowerBound } from "./calendar.js";
 import { candleSummary } from "./candles.js";
 import { mmaBreakoutSummary } from "./consolidation.js";
+import { stochastic, adx as adxStudy, supertrend, parabolicSar, ichimoku, cmf } from "./studies.js";
 
 const num = isFiniteNum;
 const r4 = (v) => (num(v) ? Math.round(v * 1e4) / 1e4 : null);
@@ -109,6 +110,21 @@ function packBox(b) {
   };
 }
 
+/** Standard studies on the last candle of one timeframe (screens / alerts), daily and weekly only. */
+function studiesAt(b) {
+  const n = b.close.length, k = n - 1;
+  if (n < 60) return null;
+  const { high: h, low: l, close: c } = b, v = b.volume || c.map(() => 0);
+  const st = stochastic(h, l, c), ax = adxStudy(h, l, c), su = supertrend(h, l, c), ps = parabolicSar(h, l), ic = ichimoku(h, l, c), cm = cmf(h, l, c, v);
+  const top = Math.max(ic.spanA[k] ?? -Infinity, ic.spanB[k] ?? -Infinity), bot = Math.min(ic.spanA[k] ?? Infinity, ic.spanB[k] ?? Infinity);
+  return {
+    stochK: r2(st.slowK[k]), stochD: r2(st.slowD[k]), adx: r2(ax.adx[k]), diBull: ax.plusDI[k] != null ? ax.plusDI[k] > ax.minusDI[k] : null,
+    st: su.dir[k], stFlip: su.dir[k] != null && su.dir[k - 1] != null && su.dir[k] !== su.dir[k - 1],
+    sar: ps.dir[k], cloud: Number.isFinite(top) && Number.isFinite(bot) ? (c[k] > top ? "above" : c[k] < bot ? "below" : "inside") : null,
+    cmf: r2(cm[k] != null ? cm[k] * 100 : null),
+  };
+}
+
 /** The same summary on the RSC line (stock / benchmark) for one timeframe; null without a benchmark. */
 function rscBoxFor(daily, own, bser, tf) {
   if (!bser || !bser.time?.length || !own) return null;
@@ -192,6 +208,7 @@ export function analyzeSecurity(daily, usdClose, ccClose, bench, ctx = {}, m = M
       // owner's multi-period consolidation -> breakout on the price pane (RSIMMA) and on the RSC
       // pane against the country index (RSCMMA); see engine/consolidation.js
       ...(tf === "Y" ? {} : { mmaBox: packBox(mmaBreakoutSummary(A.b.time, A.c, tf)), rscBox: rscBoxFor(daily, ccClose, bench?.country, tf) }),
+      ...(tf === "D" || tf === "W" ? { studies: studiesAt(A.b) } : {}),
     };
   }
 

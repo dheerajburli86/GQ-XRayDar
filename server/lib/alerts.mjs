@@ -202,7 +202,7 @@ export function createAlertEngine({ cfg, pool, data, telegram, push, channels = 
           const silent = !(await seeded(u.id, r.id));
           if (silent) await record(u.id, r.id, "__seed__", "seed", { seededAt: new Date().toISOString(), matches: matches.length }, true);
           for (const m of matches) {
-            const eventId = await record(u.id, r.id, m.id || m.symbol, m.asOf || st.info.asOf, { template: r.template, text: m.detail, name: m.name }, silent);
+            const eventId = await record(u.id, r.id, m.id || m.symbol, m.once ? "once" : m.asOf || st.info.asOf, { template: r.template, text: m.detail, name: m.name }, silent);
             if (eventId && !silent) fired.push({ eventId, symbol: m.symbol, text: r.name || m.detail, asOf: m.asOf, priority: r.priority || "normal" });
           }
         }

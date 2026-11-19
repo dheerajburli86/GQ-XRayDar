@@ -94,6 +94,19 @@ export default function Screener({ route }) {
 }
 
 export function ConditionRow({ c, onChange, onRemove }) {
+  if (c.kind === "level" || c.kind === "line") {
+    // from a drawing on the chart: price above / below a level or a trend line
+    return (
+      <div className="row">
+        <span className="small">Close</span>
+        <select value={c.side} onChange={(e) => onChange({ ...c, side: e.target.value })}><option value="above">crosses above</option><option value="below">crosses below</option></select>
+        {c.kind === "level" ? <input value={c.price} style={{ width: 110 }} onChange={(e) => onChange({ ...c, price: e.target.value })} title="Price level" />
+          : <span className="small mono">line {c.a.time} {(+c.a.price).toFixed(2)} → {c.b.time} {(+c.b.price).toFixed(2)} (extended)</span>}
+        {c.label && <span className="small muted">{c.label}</span>}
+        <button className="btn sm ghost" onClick={onRemove}>✕</button>
+      </div>
+    );
+  }
   const f = FIELD[c.field];
   const ops = OPS[f?.type || "num"];
   return (

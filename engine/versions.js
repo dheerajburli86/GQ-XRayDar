@@ -24,6 +24,12 @@ export const MODEL_VERSIONS = {
   analystScreens: "1.0 two-column RSI/RSC stacks, MMA 3-15/30-60, ACC 4/14/26/39, n-month / n-week candles",
   assistant: "1.0 deterministic parser + stored calculations (built-in)",
   foCollector: "3 (FO_VERSION)",
+  studies: "1.0 Wilder ATR / ADX / SAR, Lane stochastics, Hosoda Ichimoku, Chaikin CMF / A-D, supertrend, pivots (5 kinds), OBV, VWAP / anchored VWAP",
+  drawings: "1.0 Fibonacci retracement / extension / fan / arcs / time zones, pitchforks, Gann fan / grid, R/R, measure",
+  formula: "1.0 safe expression language (no eval)",
+  projection: "1.0 target / measured / ATR / percent / analogue / slope",
+  seasonality: "1.0 close-to-close by weekday and month, average yearly path",
+  tpo: "1.0 market profile from candles (one letter per candle), 70% value area",
   consolidationBreakout: "1.0 yellow/red fan on log price and on RSC; first fan after a gap, >= 15 candles of history (calibrated on the owner's dated examples, 43 of 53)",
 };
 

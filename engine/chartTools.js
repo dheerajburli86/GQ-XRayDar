@@ -129,3 +129,66 @@ export function fibonacci(b, { lookback = 250 } = {}) {
   const levels = FIB_RATIOS.map((r) => ({ ratio: r, price: up ? hi - r * range : lo + r * range, kind: r > 1 ? "extension" : "retracement" }));
   return { up, high: hi, low: lo, highTime: b.time[hiI], lowTime: b.time[loI], levels, note: `Measured ${up ? "down from the high after the rise" : "up from the low after the fall"} over the last ${Math.min(lookback, n)} candles.` };
 }
+
+/**
+ * Value area of a volume profile (owner's feature list, item 6): starting at the point of
+ * control, add the busier neighbouring band until `share` (70%) of the volume is covered.
+ * Also the high / low volume nodes: bands that are local maxima / minima of volume.
+ */
+export function valueArea(vp, share = 0.7) {
+  const bins = vp?.bins || [];
+  if (!bins.length) return null;
+  const total = bins.reduce((s, x) => s + x.volume, 0);
+  let k = bins.indexOf(vp.poc), lo = k, hi = k, got = bins[k].volume;
+  while (got < share * total && (lo > 0 || hi < bins.length - 1)) {
+    const up = hi < bins.length - 1 ? bins[hi + 1].volume : -1, dn = lo > 0 ? bins[lo - 1].volume : -1;
+    if (up >= dn) { hi++; got += up; } else { lo--; got += dn; }
+  }
+  const hvn = [], lvn = [];
+  for (let i = 1; i < bins.length - 1; i++) {
+    if (bins[i].volume > bins[i - 1].volume && bins[i].volume > bins[i + 1].volume && i !== k) hvn.push(bins[i]);
+    if (bins[i].volume < bins[i - 1].volume && bins[i].volume < bins[i + 1].volume) lvn.push(bins[i]);
+  }
+  return { vah: bins[hi].hi, val: bins[lo].lo, poc: (vp.poc.lo + vp.poc.hi) / 2, share: total ? got / total : 0, hvn, lvn };
+}
+
+/**
+ * Market profile (TPO) from end-of-day candles (feature list, item 7). There are no intraday
+ * prices here, so each CANDLE is one time period ("letter") and the profile covers a block of
+ * candles: a week, a month or a quarter of daily candles, or any fixed number of candles.
+ * For every block: price rows of `tick`, the letters that traded at each row, point of control
+ * (most letters), the 70% value area and single prints (rows touched by one letter only).
+ */
+export function tpoProfiles(b, { block = "M", rows = 30, from = 0, tick = null } = {}) {
+  const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+  const keyOf = (t, i) => (typeof block === "number" ? Math.floor((i - from) / block) : block === "W" ? weekKey(t) : block === "Q" ? `${t.slice(0, 4)}Q${Math.floor((+t.slice(5, 7) - 1) / 3) + 1}` : t.slice(0, 7));
+  const groups = [];
+  for (let i = from; i < b.time.length; i++) {
+    const k = keyOf(b.time[i], i);
+    if (!groups.length || groups[groups.length - 1].key !== k) groups.push({ key: k, idx: [] });
+    groups[groups.length - 1].idx.push(i);
+  }
+  return groups.map((g) => {
+    let lo = Infinity, hi = -Infinity;
+    for (const i of g.idx) { lo = Math.min(lo, b.low[i]); hi = Math.max(hi, b.high[i]); }
+    // a fixed price step (shared by every profile on one chart) or `rows` rows per profile
+    const step = tick > 0 ? tick : hi > lo ? (hi - lo) / rows : 1;
+    const base = tick > 0 ? Math.floor(lo / step) * step : lo;
+    const nRows = hi > lo ? Math.max(1, Math.ceil((hi - base) / step - 1e-9)) : 1;
+    const prof = Array.from({ length: nRows }, (_, r) => ({ lo: base + r * step, hi: base + (r + 1) * step, letters: "" }));
+    g.idx.forEach((i, j) => {
+      const L = LETTERS[j % LETTERS.length];
+      for (const row of prof) if ((b.low[i] < row.hi && b.high[i] > row.lo) || (b.low[i] === b.high[i] && b.low[i] >= row.lo && b.low[i] <= row.hi)) row.letters += L;
+    });
+    const vp = { bins: prof.map((r) => ({ lo: r.lo, hi: r.hi, volume: r.letters.length })), poc: null };
+    vp.poc = vp.bins.reduce((m, x) => (x.volume > m.volume ? x : m), vp.bins[0]);
+    const va = valueArea(vp);
+    return { key: g.key, from: b.time[g.idx[0]], to: b.time[g.idx[g.idx.length - 1]], periods: g.idx.length, rows: prof,
+      poc: va?.poc, vah: va?.vah, val: va?.val, singles: prof.filter((r) => r.letters.length === 1).map((r) => [r.lo, r.hi]),
+      open: b.open[g.idx[0]], close: b.close[g.idx[g.idx.length - 1]] };
+  });
+}
+function weekKey(t) {
+  const d = new Date(`${t}T00:00:00Z`); const day = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - day);
+  return d.toISOString().slice(0, 10);
+}
