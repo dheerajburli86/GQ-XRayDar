@@ -24,6 +24,7 @@ import { createScorecard } from "./lib/scorecard.mjs";
 import { createAgentProxy } from "./lib/agent.mjs";
 import { createFo, foConfig } from "./lib/fo.mjs";
 import { runXasset } from "../cli/xassetJob.mjs";
+import { runExtra } from "../cli/extraJob.mjs";
 import { RULES, DEFAULT_PARAMS, normalizeParams, describeRule, evaluateRule } from "../engine/rules.js";
 import { ALERT_TEMPLATES } from "../engine/alerts.js";
 import { FIELD } from "../engine/fields.js";
@@ -465,6 +466,14 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
       if (rows[0]?.t && Date.now() - new Date(rows[0].t).getTime() < 20 * 3600_000) return;
       await runXasset(pool, { log, fetchImpl });
     };
+    // chart-only extra instruments (more indices, yields, commodity futures, currency pairs)
+    const extra = async () => {
+      const { rows } = await pool.query(`select max(updated_at) t from tas_extra_series`).catch(() => ({ rows: [] }));
+      if (rows[0]?.t && Date.now() - new Date(rows[0].t).getTime() < 20 * 3600_000) return;
+      await runExtra(pool, { log, fetchImpl });
+    };
+    timers.push(setInterval(guard("extra", extra), 3 * 3600_000));
+    setTimeout(guard("extra", extra), 150_000);
     timers.push(setInterval(guard("xasset", xasset), 3 * 3600_000));
     setTimeout(guard("xasset", xasset), 90_000);
     const foCfg = fo.status().cfg;

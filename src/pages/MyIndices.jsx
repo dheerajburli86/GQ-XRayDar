@@ -94,7 +94,7 @@ function Editor({ d, idx, update, remove }) {
           <button className="btn sm ghost" onClick={remove}>Delete</button>
         </div>
         <div className="row wrap" style={{ gap: 10, marginTop: 10 }}>
-          <InstrumentPicker value={null} allowIndex={false} placeholder="Add a stock…" onChange={(r) => r?.id && add([r.id])} />
+          <InstrumentPicker value={null} secOnly placeholder="Add a stock…" onChange={(r) => r?.id && add([r.id])} />
           <span className="muted small">or add the largest</span>
           <input className="input" type="number" min={1} max={500} value={topN} onChange={(e) => setTopN(Math.max(1, Math.min(500, +e.target.value || 1)))} style={{ width: 64 }} />
           <span className="muted small">stocks from</span>

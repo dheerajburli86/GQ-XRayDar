@@ -14,6 +14,7 @@ import {
 } from "./indicators.js";
 import { HORIZONS, lowerBound } from "./calendar.js";
 import { candleSummary } from "./candles.js";
+import { mmaBreakoutSummary } from "./consolidation.js";
 
 const num = isFiniteNum;
 const r4 = (v) => (num(v) ? Math.round(v * 1e4) / 1e4 : null);
@@ -97,6 +98,24 @@ export function analyzeRsc(times, closes, bench, tf, m = METHODOLOGY) {
   };
 }
 
+/** Compact form of a consolidation summary for the stored snapshot. */
+function packBox(b) {
+  if (!b) return null;
+  return {
+    st: b.state, since: b.since,
+    upE: b.up?.end ?? null, upS: b.up?.start ?? null, upAge: b.up?.age ?? null, upTurn: b.up?.turn ?? null,
+    dnE: b.down?.end ?? null, dnS: b.down?.start ?? null, dnAge: b.down?.age ?? null,
+    rUp: b.recentUp, rDn: b.recentDown,
+  };
+}
+
+/** The same summary on the RSC line (stock / benchmark) for one timeframe; null without a benchmark. */
+function rscBoxFor(daily, own, bser, tf) {
+  if (!bser || !bser.time?.length || !own) return null;
+  const s = rsc(daily.time, own, bser.time, bser.close, tf, 100);
+  return s.value.length >= 20 ? packBox(mmaBreakoutSummary(s.time, s.value, tf)) : null;
+}
+
 /**
  * Full analysis of one security.
  *   daily: own trading bars {time[],open[],high[],low[],close[],volume[]} in trading currency
@@ -170,6 +189,9 @@ export function analyzeSecurity(daily, usdClose, ccClose, bench, ctx = {}, m = M
       trendUp: A.c[k] > A.trendE[k] && trendSlope > 0, trendDown: A.c[k] < A.trendE[k] && trendSlope < 0,
       atHighN: num(A.hiN[k]) && A.c[k] >= A.hiN[k], atLowN: num(A.loN[k]) && A.c[k] <= A.loN[k],
       volRatio: r2(A.volRatio[k]),
+      // owner's multi-period consolidation -> breakout on the price pane (RSIMMA) and on the RSC
+      // pane against the country index (RSCMMA); see engine/consolidation.js
+      ...(tf === "Y" ? {} : { mmaBox: packBox(mmaBreakoutSummary(A.b.time, A.c, tf)), rscBox: rscBoxFor(daily, ccClose, bench?.country, tf) }),
     };
   }
 

@@ -8,9 +8,11 @@ import { TvChart, ChartSync, lineData } from "../components/TvChart.jsx";
 import { InstrumentPicker, TfPicker } from "../components/pickers.jsx";
 import { loadInstrument, alignCurrency } from "../lib/series.js";
 import { aggregate, ema, emaStrict, rsi, macd, rsc } from "../../engine/indicators.js";
+import { priceSeries } from "../lib/chartStyle.js";
 import { usePersistent, uid } from "../lib/storage.js";
+import { useChartKeys } from "../lib/chartKeys.js";
 
-const INDICATORS = [{ value: "price", label: "Price + EMA 20/50/200" }, { value: "rsi", label: "RSI" }, { value: "macd", label: "MACD" }, { value: "rsc", label: "RSC vs benchmark" }, { value: "volume", label: "Volume" }, { value: "mma", label: "Price + MMA groups" }];
+const INDICATORS = [{ value: "price", label: "Price + EMA 20/50/200" }, { value: "line", label: "Price line (green up / red down)" }, { value: "rsi", label: "RSI" }, { value: "macd", label: "MACD" }, { value: "rsc", label: "RSC vs benchmark" }, { value: "volume", label: "Volume" }, { value: "mma", label: "Price + MMA groups" }];
 const newPanel = (inst) => ({ id: uid(), inst, tf: "D", ind: "price", bench: { kind: "index", key: "CW|USD|G", label: "Global CW (USD)" } });
 
 export default function Workspace() {
@@ -24,6 +26,8 @@ export default function Workspace() {
   const update = (patch) => setCur({ panels, cols, linked, ...patch });
   const [sync] = useState(() => new ChartSync());
   const [name, setName] = useState("");
+  // D W M Q H Y set every panel's period
+  useChartKeys({ onTf: (tf) => update({ panels: panels.map((p) => ({ ...p, tf })) }) });
 
   return (
     <div className="stack">
@@ -65,6 +69,7 @@ function ChartPanel({ p, onChange, onRemove, sync }) {
     const base = data.inst.kind === "sec"
       ? { type: "candles", data: b.time.map((t, i) => ({ time: t, open: b.open[i], high: b.high[i], low: b.low[i], close: b.close[i] })), options: { upColor: "#16a34a", downColor: "#dc2626", borderVisible: false, wickUpColor: "#16a34a", wickDownColor: "#dc2626" } }
       : L(b.close, "#e5e7eb", 2);
+    if (p.ind === "line") return [priceSeries(b.time, b, "line")];
     if (p.ind === "mma") return [base, ...[3, 5, 8, 10, 12, 15].map((n) => L(emaStrict(b.close, n), "#facc15")), ...[30, 35, 40, 45, 50, 60].map((n) => L(emaStrict(b.close, n), "#ef4444"))];
     return [base, L(emaStrict(b.close, 20), "#22d3ee", 1, "20"), L(emaStrict(b.close, 50), "#14a44d", 1, "50"), L(emaStrict(b.close, 200), "#d97706", 1, "200")];
   }, [data, p.tf, p.ind]);

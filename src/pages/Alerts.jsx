@@ -167,7 +167,7 @@ function IndicatorAlerts({ rules, all, setRules, wls }) {
         <RuleEditor value={draft} onChange={(v) => setDraft({ ...draft, ...v })} />
         <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
           <Select label="On" value={draft.target} options={[{ value: "stock", label: "One stock" }, { value: "wl", label: "A whole watchlist" }]} onChange={(target) => setDraft({ ...draft, target })} />
-          {draft.target === "stock" ? <InstrumentPicker allowIndex={false} value={draft.inst} onChange={(inst) => setDraft({ ...draft, inst })} width={260} />
+          {draft.target === "stock" ? <InstrumentPicker secOnly value={draft.inst} onChange={(inst) => setDraft({ ...draft, inst })} width={260} />
             : <Select value={draft.wl} options={Object.entries(wls).map(([k, v]) => ({ value: k, label: `${v.name} (${v.ids.length})` }))} onChange={(wl) => setDraft({ ...draft, wl })} allowEmpty="Pick a watchlist" />}
           <button className="btn primary sm" disabled={!canAdd} onClick={add}>Add alert</button>
           {norm.error && <span className="small neg">{norm.error}</span>}

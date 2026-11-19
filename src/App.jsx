@@ -2,12 +2,14 @@ import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import { DataProvider, useData } from "./data/store.jsx";
 import { useRoute, navigate, href } from "./lib/router.js";
 import { parseCommand } from "../engine/nl.js";
+import { isTilesCommand } from "../engine/tiles.js";
 import { Loading } from "./components/ui.jsx";
 import { usePersistent } from "./lib/storage.js";
 import { AccountProvider, useAccount } from "./components/Account.jsx";
 import { AgentPanel } from "./components/AgentPanel.jsx";
 import { resolveTheme, watchSystemTheme } from "./lib/theme.js";
 import { ErrorBoundary } from "./components/ErrorBoundary.jsx";
+import { downloadPage } from "./lib/pagePicture.js";
 
 // A page file can be missing after a new version is deployed while this tab stays open (the
 // old file names no longer exist). One retry, then one reload of the app, instead of a blank screen.
@@ -40,6 +42,7 @@ const pages = {
   ww: page("ww", () => import("./pages/WeightWatcher.jsx")),
   screens: page("screens", () => import("./pages/StackedScreens.jsx")),
   workspace: page("workspace", () => import("./pages/Workspace.jsx")),
+  tiles: page("tiles", () => import("./pages/Tiles.jsx")),
   rs: page("rs", () => import("./pages/RelativeStrength.jsx")),
   screener: page("screener", () => import("./pages/Screener.jsx")),
   early: page("early", () => import("./pages/EarlyStage.jsx")),
@@ -78,7 +81,7 @@ const pages = {
 const NAV = [
   ["Overview", [["home", "◎", "Command centre"], ["explorer", "⇣", "Top-down explorer"], ["heatmap", "▦", "Heatmap"], ["xasset", "⊕", "Cross-asset"]]],
   ["Indices", [["indices", "≋", "CW / EW indices"], ["ewcw", "⇋", "EW vs CW (EWCW)"], ["ww", "◔", "Weight Watcher"], ["myindex", "✚", "My indices"]]],
-  ["Charts", [["chart", "📈", "Chart lab"], ["screens/RSIACC", "∿", "RSIACC"], ["screens/RSCACC", "∿", "RSCACC"], ["screens/RSIMMA", "≡", "RSIMMA"], ["screens/RSCMMA", "≡", "RSCMMA"], ["workspace", "⊞", "Multi-chart workspace"]]],
+  ["Charts", [["chart", "📈", "Chart lab"], ["screens/RSIACC", "∿", "RSIACC"], ["screens/RSCACC", "∿", "RSCACC"], ["screens/RSIMMA", "≡", "RSIMMA"], ["screens/RSCMMA", "≡", "RSCMMA"], ["tiles", "▦", "Multi-tile screen"], ["workspace", "⊞", "Multi-chart workspace"]]],
   ["Discovery", [["scanners", "⌖", "Scanners"], ["rs", "↗", "Relative strength"], ["screener", "⚲", "Screener"], ["early", "◷", "Early-stage scanner"], ["imbeti", "◈", "IMB / ETI characteristics"], ["funnel", "▽", "Opportunity funnel"], ["rotation", "↻", "Sector rotation"], ["glocom", "◫", "GLOCOM / LOCOM"], ["breadth", "▥", "Market breadth"]]],
   ["Research", [["scores", "★", "AI setup scores"], ["assistant", "✦", "GQ Agent (full page)"], ["briefs", "✎", "Market briefs"], ["backtest", "⟲", "Backtest & patterns"]]],
   ["Derivatives", [["dhome", "⧉", "Derivatives dashboard"], ["dchain", "⋮", "Option chain"], ["dfut", "⇉", "Futures & rollover"], ["dvol", "≈", "Volatility lab"], ["dstrat", "⟁", "Strategy builder"], ["drisk", "⚖", "Portfolio risk"], ["dexpiry", "⏱", "Expiry & events"], ["dunusual", "⚡", "Unusual activity"], ["dscreen", "⚲", "Derivatives screener"], ["dresearch", "⟲", "Derivatives research"]]],
@@ -112,6 +115,8 @@ function CommandBar() {
   }, [q, d.secs, d.countries]);
 
   const run = (text) => {
+    // "show us the top 8 US semiconductor companies ... daily charts in MMA format" -> chart tiles
+    if (isTilesCommand(text)) { setOpen(false); return navigate("tiles", { q: text }); }
     const cmd = parseCommand(text, { securities: d.secs, countries: d.countries });
     setOpen(false);
     if (cmd.intent === "theme") { d.setSetting("theme", cmd.theme); return; }
@@ -151,6 +156,26 @@ function CommandBar() {
         </div>
       )}
     </div>
+  );
+}
+
+/** Download the current screen (charts and all) as a picture or a PDF page. */
+function PageDownload({ route, asOf }) {
+  const [busy, setBusy] = useState(false);
+  const go = async (kind) => {
+    const el = document.querySelector(".content");
+    if (!el || busy) return;
+    setBusy(true);
+    const label = NAV.flatMap(([, items]) => items).find(([p]) => p === route.page || p === `${route.page}/${route.args[0]}`)?.[2] || route.page;
+    try { await downloadPage(el, kind, { name: `${label}_${route.args.slice(1).join("_")}`, title: `GQ XRayDar · ${label}`, subtitle: `data to ${asOf || "n/a"} · ${window.location.hash}` }); }
+    catch (e) { alert(`Could not make the picture: ${e.message}`); }
+    finally { setBusy(false); }
+  };
+  return (
+    <span className="seg" title="Download this screen" data-html2canvas-ignore>
+      <button onClick={() => go("png")} disabled={busy}>{busy ? "…" : "⤓ PNG"}</button>
+      <button onClick={() => go("pdf")} disabled={busy}>PDF</button>
+    </span>
   );
 }
 
@@ -221,6 +246,7 @@ function Shell() {
           <div className="grow" />
           <span className="small muted" title="Latest session in the data">As of <b className="mono">{d.info?.asOf}</b></span>
           <button className="btn sm" onClick={() => d.reload()} title="Reload the latest calculation run without reloading the page">↻</button>
+          <PageDownload route={route} asOf={d.info?.asOf} />
           <div className="seg theme-seg" title="Appearance">
             {[["light", "☀", "Light"], ["dark", "☾", "Dark"], ["system", "Auto", "Same as device"]].map(([k, ic, l]) => <button key={k} className={d.settings.theme === k ? "on" : ""} onClick={() => d.setSetting("theme", k)} title={l}>{ic}</button>)}
           </div>

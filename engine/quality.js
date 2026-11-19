@@ -71,3 +71,71 @@ export function applyCorporateActions(daily, actions) {
   }
   return { bars, applied };
 }
+
+/**
+ * Bad prints: a run of 1-5 closes that jumps at least x1.8 (or below x0.55) away from the
+ * previous close and then comes back to within 15% of it. Seen in the heatmap's price history,
+ * e.g. Quality Houses (Thailand) closing 899,101 on 31 Dec 2021 between two days at 2.26, and
+ * LATAM Airlines' alternating x2 prints. Left in, one such bar makes a stock worth more than
+ * the whole world for a quarter (Weight Watcher, CW indices, every return through that date).
+ * The run is dropped (treated as a missing session) and reported; nothing else is changed.
+ * Returns { bars, removed: [{ date, close, prev }] }.
+ */
+export function removeBadPrints(daily, { jump = 1.8, back = 0.15, maxRun = 5 } = {}) {
+  const c = daily?.close, n = c?.length || 0;
+  if (n < 3) return { bars: daily, removed: [] };
+  const drop = new Uint8Array(n);
+  const removed = [];
+  let i = 1;
+  while (i < n) {
+    const p = c[i - 1], r = c[i] / p;
+    if (p > 0 && (r >= jump || r <= 1 / jump)) {
+      let k = -1;
+      for (let j = i + 1; j < n && j <= i + maxRun; j++) {
+        const q = c[j] / p;
+        if (q >= 1 - back && q <= 1 + back) { k = j; break; }
+        if (q < 1.5 && q > 1 / 1.5) break; // came part-way back: a real move, not a clean bad print
+      }
+      if (k > 0) {
+        for (let j = i; j < k; j++) { drop[j] = 1; removed.push({ date: daily.time[j], close: c[j], prev: p }); }
+        i = k + 1;
+        continue;
+      }
+    }
+    i++;
+  }
+  if (!removed.length) return { bars: daily, removed };
+  const keep = (a) => (a ? Array.from(a).filter((_, j) => !drop[j]) : a);
+  return { bars: { ...daily, time: keep(daily.time), open: keep(daily.open), high: keep(daily.high), low: keep(daily.low), close: keep(daily.close), volume: keep(daily.volume) }, removed };
+}
+
+/**
+ * Share-count breaks: the close moves at least x3 (or below x1/3) within 10 sessions and does
+ * not come back (the next 20 closes stay at least x2 away from the level before). That is what
+ * an unadjusted split, a reverse split or a restructuring that issues or cancels most of the
+ * shares looks like (LATAM Airlines, Nov 2021 and Sep-Oct 2022). Historical market caps are
+ * latest shares x past price, so before such a break they are not usable at all.
+ * Returns the bar index from which constant-share caps can be used (0 = all history), and the breaks.
+ */
+export function shareBreaks(daily, { factor = 3, window = 10, hold = 20, stay = 2 } = {}) {
+  const c = daily?.close, n = c?.length || 0;
+  const breaks = [];
+  let from = 0;
+  for (let i = 1; i < n; i++) {
+    for (let w = 1; w <= window && i - w >= 0; w++) {
+      // the level before the move: median of the 5 closes up to i - w (one odd close is not a level)
+      const pre = c.slice(Math.max(0, i - w - 4), i - w + 1).filter((x) => x > 0).sort((a, b) => a - b);
+      if (!pre.length) continue;
+      // conservative: a fall is measured from the lower median, a rise from the upper one
+      const lo = pre[(pre.length - 1) >> 1], hi = pre[pre.length >> 1];
+      const p = c[i] / lo <= 1 / factor ? lo : c[i] / hi >= factor ? hi : NaN, r = c[i] / p;
+      if (!(p > 0)) continue;
+      // did the step undo itself? (then it is a bad print or a squeeze, not a share event)
+      let held = true;
+      for (let j = i + 1; j < n && j <= i + hold; j++) { const q = c[j] / p; if (q < stay && q > 1 / stay) { held = false; break; } }
+      if (held && i + 1 < n) { breaks.push({ date: daily.time[i], ratio: Math.round(r * 10000) / 10000 }); from = i; i += window; }
+      break;
+    }
+  }
+  return { from, breaks };
+}

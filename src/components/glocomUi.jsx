@@ -14,3 +14,9 @@ export function Jump({ v, unit = "" }) {
   if (!v) return <span className="muted">—</span>;
   return <b style={{ color: v > 0 ? UP : DOWN, whiteSpace: "nowrap" }}>{v > 0 ? "▲" : "▼"} {Math.abs(v)}{unit}</b>;
 }
+
+/**
+ * Name of the rating (owner, Nov 2026): GLOCOM and LOCOM are the same rule sheet; it is called
+ * LOCOM when Indian industries / sectors are rated against each other, GLOCOM everywhere else.
+ */
+export const comName = (market) => (market === "C:India" ? "LOCOM" : "GLOCOM");

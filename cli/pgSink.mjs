@@ -115,8 +115,8 @@ export function pgSink(pool, { log = console.log, dryRun = false } = {}) {
       log(`memberships: ${list.length} rebalance snapshots`);
     },
     async ww(groups) {
-      await simple("tas_ww", groups.map((g) => ({ parent_key: g.parentKey, parent_type: g.parentType, child_type: g.childType, dates: g.dates, latest_flags: g.latestFlags, children: g.children, run_id: runId })),
-        ["parent_key", "child_type"], ["parent_key", "parent_type", "child_type", "dates", "latest_flags", "children", "run_id"]);
+      await simple("tas_ww", groups.map((g) => ({ parent_key: g.parentKey, parent_type: g.parentType, child_type: g.childType, dates: g.dates, latest_flags: g.latestFlags, children: g.children, gaps: g.gaps || [], run_id: runId })),
+        ["parent_key", "child_type"], ["parent_key", "parent_type", "child_type", "dates", "latest_flags", "children", "gaps", "run_id"]);
       log(`weight watcher: ${groups.length} parent/child groups`);
     },
     async countryResults(country, { snapshots, events, issues }) {

@@ -5,6 +5,8 @@ import { fmtField, signClass } from "../lib/format.js";
 import { Select, StockLink } from "./ui.jsx";
 import { CAPS } from "../../engine/indexEngine.js";
 import { ANALYST_TFS, normaliseTf, tfLabel } from "../../engine/calendar.js";
+import { CATEGORIES, CATEGORY_LABEL, searchInstruments, useExtras } from "../lib/instruments.js";
+import { usePersistent } from "../lib/storage.js";
 
 /** Table column from a field key. */
 export function fieldColumn(key, opts = {}) {
@@ -44,29 +46,30 @@ export function applyScope(rows, scope) {
     && (!scope.assetClass || (r.sec.assetClass || "Stock") === scope.assetClass));
 }
 
-/** Search box over securities and indices. value: {kind:'sec'|'index', id|key, label} */
-export function InstrumentPicker({ value, onChange, placeholder = "Search stock or index…", allowIndex = true, width = 260 }) {
+/** Search box over securities, indices and the chart-only extras, with a country / category filter.
+ *  value: {kind:'sec'|'index'|'x', id|key, label} */
+export function InstrumentPicker({ value, onChange, placeholder = "Search stock or index…", allowIndex = true, secOnly = false, width = 260, category = true }) {
   const d = useData();
+  const extras = useExtras(d.api);
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
-  const results = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (!s) return [];
-    const secs = d.secs.filter((x) => x.symbol.toLowerCase().startsWith(s) || (x.name || "").toLowerCase().includes(s)).slice(0, 12)
-      .map((x) => ({ kind: "sec", id: x.id, label: `${x.symbol} · ${x.name}`, sub: x.country }));
-    const idx = allowIndex ? d.indices.filter((x) => x.name.toLowerCase().includes(s) || x.key.toLowerCase().includes(s)).slice(0, 10)
-      .map((x) => ({ kind: "index", key: x.key, label: x.name, sub: `Index L${x.level}` })) : [];
-    return [...secs, ...idx];
-  }, [q, d.secs, d.indices, allowIndex]);
+  const [cat, setCat] = usePersistent("ticker.category", "All");
+  const results = useMemo(() => (q.trim() ? searchInstruments(d, extras, q, cat, { allowIndex: allowIndex && !secOnly, allowExtra: !secOnly, limit: 14 }) : []), [q, d, extras, cat, allowIndex, secOnly]);
   return (
-    <div className="cmd" style={{ maxWidth: width, minWidth: width }}>
-      <span className="ico">⌕</span>
-      <input value={open ? q : value?.label || ""} placeholder={placeholder} onFocus={() => { setOpen(true); setQ(""); }} onBlur={() => setTimeout(() => setOpen(false), 150)} onChange={(e) => setQ(e.target.value)} style={{ paddingRight: 10 }} />
-      {open && results.length > 0 && (
-        <div className="dropdown">
-          {results.map((r) => <div key={r.kind + (r.id || r.key)} className="it" onMouseDown={() => { onChange(r); setOpen(false); }}><span>{r.label}</span><span className="muted small">{r.sub}</span></div>)}
-        </div>
-      )}
+    <div className="row" style={{ gap: 4, flexWrap: "nowrap" }}>
+      {category && <select className="input sm" value={cat} title="Country / category first, then the name" onChange={(e) => setCat(e.target.value)} style={{ width: 92 }}>
+        {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABEL[c] || c}</option>)}
+      </select>}
+      <div className="cmd" style={{ maxWidth: width, minWidth: width }}>
+        <span className="ico">⌕</span>
+        <input value={open ? q : value?.label || ""} placeholder={placeholder} onFocus={() => { setOpen(true); setQ(""); }} onBlur={() => setTimeout(() => setOpen(false), 150)} onChange={(e) => setQ(e.target.value)} style={{ paddingRight: 10 }}
+          onKeyDown={(e) => { if (e.key === "Enter" && results[0]) { onChange(results[0]); setOpen(false); e.currentTarget.blur(); } }} />
+        {open && results.length > 0 && (
+          <div className="dropdown">
+            {results.map((r) => <div key={r.kind + (r.id || r.key)} className="it" onMouseDown={() => { onChange(r); setOpen(false); }}><span>{r.label}</span><span className="muted small">{r.sub}</span></div>)}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

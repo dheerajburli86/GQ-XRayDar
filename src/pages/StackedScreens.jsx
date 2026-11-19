@@ -4,32 +4,23 @@
 //   RSCMMA / RSCACC  Price | RSC | RSI of RSC | RSI of RSI of RSC | RSI of RSI of RSI of RSC
 // MMA = short EMA 3-15 (yellow) + long EMA 30-60 (red); ACC = EMA 4 / 14 / 26 / 39.
 // All maths is engine/analyst.js; this page only draws it.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useData } from "../data/store.jsx";
 import { useAsync } from "../lib/useAsync.js";
 import { navigate } from "../lib/router.js";
 import { Seg, Check, Badge, Loading, Empty } from "../components/ui.jsx";
-import { TvChart, ChartSync } from "../components/TvChart.jsx";
+import { ChartSync } from "../components/TvChart.jsx";
+import { Pane, YELLOW, RED, ACC_COLOR, PRESETS, DEFAULT_VIEW } from "../components/AnalystPane.jsx";
 import { InstrumentPicker, TfPicker } from "../components/pickers.jsx";
+import { QuickTicker } from "../components/QuickTicker.jsx";
+import { useChartKeys } from "../lib/chartKeys.js";
+import { decodeRef, encodeRef, useLastInstrument } from "../lib/instruments.js";
+import { PRICE_STYLES } from "../lib/chartStyle.js";
 import { loadInstrument, alignCurrency, defaultBenchmark } from "../lib/series.js";
 import { usePersistent } from "../lib/storage.js";
-import { tfLabel, tfMonths } from "../../engine/calendar.js";
+import { captureStack, savePng, savePdf } from "../lib/snapshot.js";
+import { tfLabel } from "../../engine/calendar.js";
 import { ANALYST_MODES, ACC_PERIODS, MMA_SHORT, buildAnalystColumn, analystDate } from "../../engine/analyst.js";
-
-const YELLOW = "#ffff00", RED = "#e00000", GREEN = "#00ff00", CYAN = "#00ffff", WHITE = "#ffffff", MAGENTA = "#ff00ff";
-const ACC_COLOR = { 4: CYAN, 14: RED, 26: WHITE, 39: YELLOW };
-// raw-line colour per row in the ACC screens, as in the reference screenshots
-const ACC_BASE = { RSIACC: [GREEN, GREEN, YELLOW, MAGENTA], RSCACC: [GREEN, YELLOW, GREEN, CYAN, MAGENTA] };
-const PRESETS = [["D", "W"], ["M", "Q"], ["H", "N"], ["Y", "24M"]];
-const DEFAULT_VIEW = { avgOnly: false, log: true, short: true, long: true, acc: { 4: true, 14: true, 26: true, 39: true } };
-
-const DARK = {
-  layout: { background: { color: "#000000" }, textColor: "#d4d4d4", fontSize: 10 },
-  grid: { vertLines: { visible: false }, horzLines: { visible: false } },
-  rightPriceScale: { borderColor: "#3f3f3f" },
-  timeScale: { borderColor: "#3f3f3f" },
-};
-const DARK_NO_AXIS = { ...DARK, timeScale: { ...DARK.timeScale, visible: false } };
 
 const fmt = (v) => (v == null ? "—" : v.toFixed(2));
 
@@ -37,8 +28,17 @@ export default function StackedScreens({ route }) {
   const d = useData();
   const mode = ANALYST_MODES[route.args[0]] ? route.args[0] : "RSIMMA";
   const cfg = ANALYST_MODES[mode];
-  const secId = route.args[1] || route.query.id || [...d.rows].sort((a, b) => (b.sec.capUsdNow || 0) - (a.sec.capUsdNow || 0))[0]?.id;
-  const sec = d.secById.get(secId);
+  // the instrument: from the address, else the one last opened on any chart screen (owner:
+  // changing screen keeps the ticker), else the largest stock. Stocks, indices and extras all chart.
+  const [lastInst, setLastInst] = useLastInstrument();
+  const instKey = route.args[1] || (route.query.id ? `s:${route.query.id}` : null) || lastInst || `s:${[...d.rows].sort((a, b) => (b.sec.capUsdNow || 0) - (a.sec.capUsdNow || 0))[0]?.id}`;
+  const inst = useMemo(() => decodeRef(instKey, d), [instKey, d]);
+  const secId = inst?.kind === "sec" ? inst.id : null;
+  const sec = secId ? d.secById.get(secId) : null;
+  const instLabel = sec ? `${sec.symbol} · ${sec.name}` : inst?.label || "";
+  const instShort = sec ? sec.symbol : (inst?.label || "").split(" · ")[0];
+  useEffect(() => { if (instKey && instKey !== lastInst) setLastInst(instKey); }, [instKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [picking, setPicking] = useState(null);
   const [view, setView] = usePersistent("analyst.view", DEFAULT_VIEW);
   // stable identity: the panes rebuild (and redraw ~130 lines) only when a view setting really changes
   const v = useMemo(() => ({ ...DEFAULT_VIEW, ...view, acc: { ...DEFAULT_VIEW.acc, ...(view?.acc || {}) } }), [view]);
@@ -63,22 +63,22 @@ export default function StackedScreens({ route }) {
   // benchmark: ?bench=, else BSE 500 for an Indian stock (the owner's reference), else the country CW index
   const bse500 = useMemo(() => d.secs.find((x) => x.symbol === "BSE500"), [d.secs]);
   const benchRef = route.query.bench
-    ? (route.query.bench.startsWith("idx:") ? { kind: "index", key: route.query.bench.slice(4) } : { kind: "sec", id: route.query.bench })
-    : sec?.country === "India" && bse500 && bse500.id !== secId ? { kind: "sec", id: bse500.id } : defaultBenchmark(sec);
-  const benchLabel = benchRef.kind === "index" ? d.indexByKey.get(benchRef.key)?.name || benchRef.key : d.secById.get(benchRef.id)?.symbol;
+    ? (route.query.bench.startsWith("idx:") ? { kind: "index", key: route.query.bench.slice(4) } : route.query.bench.startsWith("x:") ? { kind: "x", key: route.query.bench.slice(2) } : { kind: "sec", id: route.query.bench })
+    : sec?.country === "India" && bse500 && bse500.id !== secId ? { kind: "sec", id: bse500.id } : sec ? defaultBenchmark(sec) : { kind: "index", key: "CW|USD|G", label: "Global CW (USD)" };
+  const benchLabel = benchRef.kind === "index" ? d.indexByKey.get(benchRef.key)?.name || benchRef.key : benchRef.kind === "x" ? benchRef.key.replace(/^FX:/, "") : d.secById.get(benchRef.id)?.symbol;
 
   const { data, loading, error } = useAsync(async () => {
-    if (!secId) return null;
-    const inst = await loadInstrument(d.api, { kind: "sec", id: secId }, d);
+    if (!inst) return null;
+    const bars = await loadInstrument(d.api, inst, d);
     let bench = null, aligned = null;
-    if (inst && cfg.base === "rsc") {
+    if (bars && cfg.base === "rsc") {
       bench = await loadInstrument(d.api, benchRef, d);
-      if (bench) aligned = await alignCurrency(d.api, inst, bench);
+      if (bench) aligned = await alignCurrency(d.api, bars, bench);
     }
-    return { inst, bench, aligned };
-  }, [secId, cfg.base, benchRef.kind, benchRef.key, benchRef.id]);
+    return { inst: bars, bench, aligned };
+  }, [instKey, cfg.base, benchRef.kind, benchRef.key, benchRef.id]);
 
-  useEffect(() => { setRangeKey((k) => k + 1); }, [secId, mode, left, right, from, to, anchor]);
+  useEffect(() => { setRangeKey((k) => k + 1); }, [instKey, mode, left, right, from, to, anchor]);
 
   const m0 = d.info.methodology.indicators;
   const rsiPer = Number.isInteger(rsiN) && rsiN >= 2 && rsiN <= 200 ? rsiN : m0.rsiPeriod;
@@ -99,22 +99,46 @@ export default function StackedScreens({ route }) {
   /* eslint-enable react-hooks/exhaustive-deps */
   const columns = useMemo(() => (colL && colR ? [colL, colR] : null), [colL, colR]);
 
-  const go = (r) => navigate(`screens/${mode}/${r.id}`, route.query.bench ? { bench: route.query.bench } : undefined);
-  const setBench = (r) => navigate(`screens/${mode}/${secId}`, { bench: r.kind === "index" ? `idx:${r.key}` : r.id });
+  const shotRef = useRef(null);
+  const shotName = () => `${(instShort || "chart").replace(/[^\w.-]+/g, "_")}_${mode}_${left}-${right}_${columns?.[0]?.header?.date || ""}`;
+  const shotMeta = () => ({
+    title: `${instLabel} · ${mode}${cfg.base === "rsc" ? ` vs ${benchLabel}` : ""}`,
+    subtitle: `${tfLabel(left)} | ${tfLabel(right)} · RSI ${rsiPer} · data to ${columns?.[0]?.header?.date ? analystDate(columns[0].header.date) : "n/a"} · GQ XRayDar`,
+  });
+  const savePicture = async (kind) => {
+    if (!shotRef.current) return;
+    const c = captureStack(shotRef.current, shotMeta());
+    if (kind === "png") await savePng(c, `${shotName()}.png`);
+    else await savePdf(c, `${shotName()}.pdf`, { footer: shotMeta().title });
+  };
+
+  const go = (r) => navigate(`screens/${mode}/${encodeURIComponent(encodeRef(r))}`, route.query.bench ? { bench: route.query.bench } : undefined);
+  const setBench = (r) => navigate(`screens/${mode}/${encodeURIComponent(instKey)}`, { bench: r.kind === "index" ? `idx:${r.key}` : r.kind === "x" ? `x:${r.key}` : r.id });
+  // keyboard: D W M Q H Y set the selected column's period; C (or typing) changes the instrument
+  useChartKeys({ onTf: (tf) => setTf(active === 0 ? "left" : "right", tf), onSearch: (ch) => setPicking({ initial: ch }) });
+  // panes fill the window below the toolbars, so the bottom row is visible without scrolling
   const nRows = cfg.base === "rsc" ? 5 : 4;
-  const paneH = Math.max(90, Math.floor((vh - 200) / (nRows + 0.35)));
+  const anlRef = useRef(null);
+  const [top, setTop] = useState(170);
+  const hasCols = !!columns;
+  useLayoutEffect(() => { const el = anlRef.current; if (el) setTop(Math.max(60, el.getBoundingClientRect().top + window.scrollY)); }, [hasCols, vh, mode, v.avgOnly, rg.from, rg.to, picking]);
+  const paneH = Math.max(70, Math.floor((vh - top - 22 - 34) / (nRows + 0.35)));
 
   return (
     <div className="stack" style={{ gap: 6 }}>
+      {picking && <QuickTicker initial={picking.initial} onClose={() => setPicking(null)} onPick={go} />}
       <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-        <Seg value={mode} options={Object.keys(ANALYST_MODES)} onChange={(x) => navigate(`screens/${x}/${secId || ""}`, route.query.bench ? { bench: route.query.bench } : undefined)} />
-        <InstrumentPicker value={sec ? { label: `${sec.symbol} · ${sec.name}` } : null} onChange={(r) => r.kind === "sec" && go(r)} allowIndex={false} placeholder="Instrument…" width={230} />
-        {cfg.base === "rsc" && <><span className="small muted">vs</span><InstrumentPicker value={{ label: benchLabel }} onChange={setBench} placeholder="Comparison stock or index…" width={200} /></>}
+        <Seg value={mode} options={Object.keys(ANALYST_MODES)} onChange={(x) => navigate(`screens/${x}/${encodeURIComponent(instKey || "")}`, route.query.bench ? { bench: route.query.bench } : undefined)} />
+        <div className="seg" title="Period pairs (keys D W M Q H Y set the selected column)">{PRESETS.map(([a, b]) => <button key={a + b} className={left === a && right === b ? "on" : ""} onClick={() => setTfs({ left: a, right: b })}>{`${tfLabel(a)} | ${tfLabel(b)}`}</button>)}</div>
         <span className="small muted">Left</span><TfPicker value={left} onChange={(tf) => setTf("left", tf)} />
         <span className="small muted">Right</span><TfPicker value={right} onChange={(tf) => setTf("right", tf)} />
-        <div className="seg">{PRESETS.map(([a, b]) => <button key={a + b} className={left === a && right === b ? "on" : ""} onClick={() => setTfs({ left: a, right: b })}>{`${tfLabel(a)} | ${tfLabel(b)}`}</button>)}</div>
       </div>
-      <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+      <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+        <InstrumentPicker value={inst ? { label: instLabel } : null} onChange={go} placeholder="Instrument… (or press C)" width={230} />
+        {cfg.base === "rsc" && <><span className="small muted">vs</span><InstrumentPicker value={{ label: benchLabel }} onChange={setBench} placeholder="Comparison stock or index…" width={200} category={false} /></>}
+        <select className="input sm" value={v.price} onChange={(e) => setV({ price: e.target.value })} title="Price drawn as a line (green up / red down), OHLC bars or candles">
+          {PRICE_STYLES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
         <button className={`btn sm ${v.avgOnly ? "primary" : ""}`} onClick={() => setV({ avgOnly: !v.avgOnly })} title="Hide every price / RSI / RSC line and keep only the averages">{v.avgOnly ? "Averages only: ON" : "Averages only"}</button>
         <Check checked={v.log} onChange={(x) => setV({ log: x })}>Log scale</Check>
         <span className="small muted">RSI period</span>
@@ -134,11 +158,14 @@ export default function StackedScreens({ route }) {
         {badRange && <Badge kind="r">From is after To: dates ignored</Badge>}
         <button className="btn sm" onClick={() => setRangeKey((k) => k + 1)} title="Back to the default window">⇥ Latest</button>
         {sec && <a className="btn sm" href={`#/stock/${sec.id}`}>Stock page</a>}
+        <a className="btn sm" href={`#/tiles?inst=${encodeURIComponent(instKey)}&mode=${mode}`} title="Open this instrument's peers in the multi-tile screen">Tiles</a>
+        {columns && <><button className="btn sm" onClick={() => savePicture("png")} title="Download this whole screen as a picture">Download PNG</button>
+        <button className="btn sm" onClick={() => savePicture("pdf")} title="Download this whole screen as a PDF page">Download PDF</button></>}
         {data?.aligned && data.aligned.currency === "USD" && data.inst.currency !== "USD" && <Badge>RSC in USD (different currencies)</Badge>}
         {data?.inst?.adjustments?.length > 0 && <Badge kind="b">split-adjusted ({data.inst.adjustments.length})</Badge>}
       </div>
-      {!secId ? <Empty>Pick an instrument</Empty> : loading ? <Loading what="series" /> : error ? <div className="note warn">{String(error.message)}</div> : !columns ? <Empty>No price history</Empty> : (
-        <div className="anl">
+      {!inst ? <Empty>Pick an instrument</Empty> : loading ? <Loading what="series" /> : error ? <div className="note warn">{String(error.message)}</div> : !columns ? <Empty>No price history</Empty> : (
+        <div className="anl" ref={(el) => { shotRef.current = el; anlRef.current = el; }}>
           {columns.map((col, ci) => (
             <div key={ci} className="anl-col" onMouseDown={() => setActive(ci)}>
               <div className={`anl-head ${active === ci ? "on" : ""}`}>
@@ -152,51 +179,8 @@ export default function StackedScreens({ route }) {
           ))}
         </div>
       )}
-      <div className="small muted">RSI {m.rsiPeriod} and every EMA are counted in candles of that column. {anchor ? `Candles of 2 months and longer are counted from ${analystDate(anchor)}; data before it still warms up the RSIs and averages.` : "n-month candles run on a fixed grid from January 2000 (2M, 4M and 2Y line up with the calendar)."}{to ? ` Nothing after ${analystDate(to)} is used.` : ""} Click a column to select it.</div>
+      <div className="small muted">Keys: D W M Q H Y change the selected column's period · C (or start typing) changes the instrument. RSI {m.rsiPeriod} and every EMA are counted in candles of that column. {anchor ? `Candles of 2 months and longer are counted from ${analystDate(anchor)}; data before it still warms up the RSIs and averages.` : "n-month candles run on a fixed grid from January 2000 (2M, 4M and 2Y line up with the calendar)."}{to ? ` Nothing after ${analystDate(to)} is used.` : ""} Click a column to select it.</div>
     </div>
   );
 }
 
-function Pane({ row, ri, last, mode, overlay, v, tf, from, height, sync, rangeKey }) {
-  const built = useMemo(() => {
-    if (!row.time.length) return null;
-    const keep = (x) => x != null && Number.isFinite(x) && (!v.log || x > 0);
-    const line = (vals) => { const out = []; for (let i = 0; i < row.time.length; i++) if (keep(vals[i])) out.push({ time: row.time[i], value: vals[i] }); return out; };
-    const baseColor = overlay === "mma" ? YELLOW : (ACC_BASE[mode] || [])[ri] || GREEN;
-    const lvl = row.kind === "rsi" ? [30, 50, 70].map((p) => ({ price: p, color: "#bdbdbd", lineWidth: 1, lineStyle: 0, axisLabelVisible: false, title: "" })) : [];
-    // the base line is the crosshair anchor and carries the 30 / 50 / 70 lines, so "averages only"
-    // makes it transparent rather than removing it (the scale and the level lines stay put)
-    const series = [{ id: "base", type: "line", data: line(row.base), priceLines: lvl,
-      options: { color: v.avgOnly ? "rgba(0,0,0,0)" : baseColor, lineWidth: 1, lastValueVisible: false, crosshairMarkerVisible: !v.avgOnly } }];
-    for (const a of row.avgs) {
-      if (overlay === "mma" ? !(a.group === "short" ? v.short : v.long) : !v.acc[a.period]) continue;
-      let color = overlay === "mma" ? (MMA_SHORT.includes(a.period) ? YELLOW : RED) : ACC_COLOR[a.period];
-      if (overlay === "acc" && color === baseColor) color = GREEN;
-      series.push({ id: `e${a.period}`, type: "line", data: line(a.values), options: { color, lineWidth: 1, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false } });
-    }
-    return series;
-  }, [row, ri, mode, overlay, v]);
-
-  // default window: about 2 years of daily candles, 10 years of weekly, everything from monthly up
-  const visibleRange = useMemo(() => {
-    const t = row.time, n = t.length;
-    if (!n) return null;
-    if (from) {
-      // first candle holding a session on or after From (its stamp is its last session)
-      const i = t.findIndex((x) => x >= from);
-      return i < 0 ? null : { from: t[i], to: t[n - 1] };
-    }
-    const months = tfMonths(tf);
-    if (months >= 1) return null;
-    const show = months < 0.1 ? 500 : 520;
-    return { from: t[Math.max(0, n - show)], to: t[n - 1] };
-  }, [row.time, tf, from]);
-
-  return (
-    <div className="anl-pane">
-      <div className="anl-label">{row.label}</div>
-      {built ? <TvChart height={height} series={built} sync={sync} logScale={v.log} visibleRange={visibleRange} rangeKey={rangeKey} fit theme={last ? DARK : DARK_NO_AXIS} />
-        : <div className="anl-empty" style={{ height }}>{row.missing || "no data"}</div>}
-    </div>
-  );
-}

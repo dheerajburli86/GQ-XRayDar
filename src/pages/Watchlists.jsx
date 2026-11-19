@@ -42,7 +42,7 @@ export default function Watchlists() {
       </PageHead>
       {!wl ? <div className="note">Create a list to start. Lists feed the alerts, the custom backtest and the workspace.</div> : (
         <>
-          <div className="row"><InstrumentPicker allowIndex={false} placeholder="Add a stock…" onChange={(r) => r.kind === "sec" && save({ ids: [...new Set([...wl.ids, r.id])] })} /><button className="btn sm" onClick={addFromScreen}>Paste symbols</button></div>
+          <div className="row"><InstrumentPicker secOnly placeholder="Add a stock…" onChange={(r) => r.kind === "sec" && save({ ids: [...new Set([...wl.ids, r.id])] })} /><button className="btn sm" onClick={addFromScreen}>Paste symbols</button></div>
           <div className="grid g4">
             {[["Country", (r) => r.sec.country], ["Sector", (r) => r.sec.sector], ["Cap segment", (r) => r.sec.capSegment], ["Currency", (r) => r.sec.currencyMajor]].map(([t, f]) => (
               <div key={t} className="card"><h3>{t} exposure</h3>{expo(f).map(([k, v]) => <div key={k} className="row between small"><span>{k}</span><span className="mono">{(v * 100).toFixed(1)}%</span></div>)}</div>))}

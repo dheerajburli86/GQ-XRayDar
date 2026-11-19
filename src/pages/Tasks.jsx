@@ -81,8 +81,8 @@ export default function Tasks() {
           {f.kind === "review_list" && <Select label="Watchlist" value={f.watchlist} options={Object.entries(wls).map(([k, v]) => ({ value: k, label: `${v.name} (${v.ids.length})` }))} onChange={(watchlist) => setF({ ...f, watchlist })} allowEmpty="Pick" />}
           {f.kind === "screen" && <input style={{ minWidth: 340 }} placeholder="e.g. India stocks weekly MMA bullish and RSC rising" value={f.query} onChange={(e) => setF({ ...f, query: e.target.value })} />}
           {f.kind === "summary" && <Select label="Market" value={f.scope} options={[{ value: "G", label: "Global" }, ...d.regions.map((r) => ({ value: `R:${r}`, label: r })), ...d.countries.map((c) => ({ value: `C:${c}`, label: c }))]} onChange={(scope) => setF({ ...f, scope })} />}
-          {f.kind === "compare" && <><InstrumentPicker allowIndex={false} value={f.a} onChange={(a) => setF({ ...f, a })} width={200} /><InstrumentPicker allowIndex={false} value={f.b} onChange={(b) => setF({ ...f, b })} width={200} /></>}
-          {f.kind === "analyze" && <InstrumentPicker allowIndex={false} value={f.symbol} onChange={(symbol) => setF({ ...f, symbol })} width={240} />}
+          {f.kind === "compare" && <><InstrumentPicker secOnly value={f.a} onChange={(a) => setF({ ...f, a })} width={200} /><InstrumentPicker secOnly value={f.b} onChange={(b) => setF({ ...f, b })} width={200} /></>}
+          {f.kind === "analyze" && <InstrumentPicker secOnly value={f.symbol} onChange={(symbol) => setF({ ...f, symbol })} width={240} />}
         </div>
         <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
           <Seg value={f.when} options={[{ value: "once", label: "Once now" }, ...(remote ? [{ value: "daily", label: "Daily" }, { value: "weekdays", label: "Weekdays" }, { value: "weekly", label: "Weekly" }] : [])]} onChange={(when) => setF({ ...f, when })} />

@@ -46,6 +46,15 @@ export const SCANNERS = [
       { value: "new", label: "Just turned bullish", conds: (tf) => [C(`mmaNewBull${tf}`)], sort: () => "ret1M", cols: (tf) => [`mma${tf}`, `rsi${tf}`, "ret1M"] },
       { value: "bull", label: "Bullish alignment", conds: (tf) => [C(`mmaBull${tf}`)], sort: () => "score", cols: (tf) => [`mma${tf}`, `rsi${tf}`, "ret3M", "score"] },
     ], tf: true },
+  { id: "box", n: "2.14", label: "Consolidation breakout", desc: "The owner's multi-period pattern: the yellow averages (3-15) stop trending and run into or along the red ones (30-60), then fan out above them again. Read on the price chart (as on RSIMMA) and on relative strength against the country index (as on RSCMMA). Weekly, monthly and quarterly matter most for investing; the more of them agree, the stronger. Open a stock and use the Analyst screens to see the marked periods.",
+    modes: [
+      { value: "both", label: "Broke out: price and RSC", conds: (tf) => [C(`boxBreakout${tf}`), C(`rscBoxBreakout${tf}`)], sort: () => "boxBreakoutScreens", cols: (tf) => [`boxStartDate${tf}`, `boxBreakoutDate${tf}`, `boxTurn${tf}`, `rscBoxBreakoutDate${tf}`, "boxBreakoutScreens", "ret1M"] },
+      { value: "price", label: "Broke out: price", conds: (tf) => [C(`boxBreakout${tf}`)], sort: () => "boxBreakoutScreens", cols: (tf) => [`boxStartDate${tf}`, `boxBreakoutDate${tf}`, `boxTurn${tf}`, `rscBoxState${tf}`, "boxBreakoutScreens", "ret1M"] },
+      { value: "rsc", label: "Broke out: RSC", conds: (tf) => [C(`rscBoxBreakout${tf}`)], sort: () => "boxBreakoutScreens", cols: (tf) => [`rscBoxBreakoutDate${tf}`, `boxState${tf}`, "boxBreakoutScreens", "ret1M"] },
+      { value: "multi", label: "2+ higher-timeframe screens broke out", conds: () => [C("boxBreakoutScreens", ">=", 2)], sort: () => "boxBreakoutScreens", cols: () => ["boxBreakoutScreens", "boxBreakoutDateW", "boxBreakoutDateM", "boxBreakoutDateQ", "ret3M"] },
+      { value: "cons", label: "Consolidating now (price and RSC)", conds: (tf) => [C(`boxState${tf}`, "is", "consolidating"), C(`rscBoxState${tf}`, "is", "consolidating")], sort: () => "boxConsolidatingScreens", cols: (tf) => [`boxSince${tf}`, "boxConsolidatingScreens", "ret3M", "ret12M"] },
+      { value: "down", label: "Broke down", conds: (tf) => [C(`boxBreakdown${tf}`)], sort: () => "ret1M", asc: true, cols: (tf) => [`boxSince${tf}`, `rscBoxState${tf}`, "ret1M"] },
+    ], tf: "DWMQ" },
   { id: "hl52", n: "2.5", label: "52-week high / low", desc: "Stocks near their best or worst price of the past year.",
     modes: [
       { value: "hi", label: "At a 52-week high", conds: () => [C("atHigh52")], sort: () => "ret3M", cols: () => ["pctFromHigh52", "volRatio", "ret3M"] },
@@ -103,7 +112,7 @@ export default function Scanners({ route }) {
     return rows;
   }, [d.rows, s.scope, s.market, s.wl, wls]);
 
-  const tfs = sc.tf === "DW" ? ["D", "W"] : sc.tf ? ["D", "W", "M"] : null;
+  const tfs = sc.tf === "DW" ? ["D", "W"] : sc.tf === "DWMQ" ? ["D", "W", "M", "Q"] : sc.tf ? ["D", "W", "M"] : null;
   const tf = tfs && tfs.includes(s.tf) ? s.tf : "D";
   const mode = sc.modes ? sc.modes.find((m) => m.value === s.mode?.[sc.id]) || sc.modes[0] : null;
 
@@ -118,7 +127,7 @@ export default function Scanners({ route }) {
       <div className="card tight">
         <div className="small muted" style={{ marginBottom: 6 }}>{sc.desc}</div>
         <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-          {tfs && <Seg value={tf} options={tfs.map((t) => ({ value: t, label: { D: "Daily", W: "Weekly", M: "Monthly" }[t] }))} onChange={(t) => set({ tf: t })} />}
+          {tfs && <Seg value={tf} options={tfs.map((t) => ({ value: t, label: { D: "Daily", W: "Weekly", M: "Monthly", Q: "Quarterly" }[t] }))} onChange={(t) => set({ tf: t })} />}
           {sc.modes && sc.modes.length > 1 && <Select value={mode.value} options={sc.modes.map((m) => ({ value: m.value, label: m.label }))} onChange={(v) => set({ mode: { ...(s.mode || {}), [sc.id]: v } })} />}
           <ScopeFilter scope={s.scope || {}} onChange={(scope) => set({ scope })} show={["sector", "cap", "asset"]} />
           <Select label="Watchlist" value={s.wl} options={Object.entries(wls).map(([k, v]) => ({ value: k, label: v.name }))} onChange={(wl) => set({ wl })} allowEmpty="Any" />

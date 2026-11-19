@@ -9,6 +9,14 @@ const memo = (k, f) => { if (!cache.has(k)) cache.set(k, f().catch((e) => { cach
 /** ref: {kind:'sec', id} | {kind:'index', key} -> {time, open, high, low, close, volume, currency, label, kind} */
 export function loadInstrument(api, ref, d) {
   if (!ref) return Promise.resolve(null);
+  if (ref.kind === "x") {
+    return memo(`x:${ref.key}`, async () => {
+      const s = await api.extraSeries?.(ref.key);
+      if (!s?.dates?.length) return null;
+      const c = s.close.map(Number);
+      return { kind: "x", key: ref.key, label: s.label || ref.key, currency: s.currency && s.currency.length === 3 ? s.currency : "USD", time: s.dates, open: c, high: c, low: c, close: c, volume: null };
+    });
+  }
   if (ref.kind === "index") {
     return memo(`i:${ref.key}`, async () => {
       const s = await api.indexSeries(ref.key);

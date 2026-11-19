@@ -98,6 +98,20 @@ export function pgSource(pool, { warmupDays = 400, minCalendarCount = 50, log = 
       }
       return out;
     },
+    /** Reported share counts (weighted average, annual and quarterly) per instrument: id -> [{date, shares}]. */
+    async shareCounts() {
+      const m = new Map();
+      try {
+        const { rows } = await pool.query(`
+          select instrument_id::text id, x->>'date' d, (x->>'weightedAverageShsOut')::float8 sh
+            from fundamentals f,
+                 lateral jsonb_array_elements(coalesce(case when jsonb_typeof(f.income_statement) = 'array' then f.income_statement end, '[]'::jsonb)
+                   || coalesce(case when jsonb_typeof(f.income_statement_q) = 'array' then f.income_statement_q end, '[]'::jsonb)) x
+           where (x->>'weightedAverageShsOut') ~ '^[0-9.eE+]+$'`);
+        for (const r of rows) { if (!(r.sh > 0) || !r.d) continue; if (!m.has(r.id)) m.set(r.id, []); m.get(r.id).push({ date: r.d, shares: r.sh }); }
+      } catch (e) { log(`share counts not readable: ${e.message}`); }
+      return m;
+    },
     async corporateActions() {
       const m = new Map();
       try {

@@ -26,6 +26,11 @@ const PARENTS = [
   ["global", "country", () => "G", (m, c) => c],
   ["global", "sector", () => "G", (m) => m.sector],
   ["global", "cap", () => "G", (m) => m.seg],
+  // owner (Nov 2026): Weight Watcher by industry as well
+  ["countryIndustry", "stock", (m, c) => `C:${c}|I:${m.ig}`, (m) => m.id],
+  ["region", "industryGroup", (m, c, g) => `R:${g.region}`, (m) => m.ig],
+  ["global", "industryGroup", () => "G", (m) => m.ig],
+  ["globalIndustry", "country", (m) => `G|I:${m.ig}`, (m, c) => c],
 ];
 
 /**
@@ -33,7 +38,7 @@ const PARENTS = [
  * geo: country -> {region, classification}
  * Returns [{parentKey, parentType, childType, dates:[...], latestFlags:[...], children:[{key, weights:[...], caps:[...]}]}]
  */
-export function computeWeightWatcher(memberships, geo) {
+export function computeWeightWatcher(memberships, geo, { minCoverage = 0.25 } = {}) {
   // Observation dates = quarter ends + one latest date. Countries' latest dates
   // can differ by a session; they are pooled onto the global latest date.
   const latestDate = memberships.filter((m) => m.latest).map((m) => m.date).sort().pop() || null;
@@ -41,6 +46,19 @@ export function computeWeightWatcher(memberships, geo) {
   const obsDates = latestDate && !qDates.includes(latestDate) ? [...qDates, latestDate] : qDates;
   const di = new Map(obsDates.map((d, i) => [d, i]));
   const D = obsDates.length;
+
+  // Coverage: a country is "covered" at a date when it has at least minCoverage x its most
+  // members. Before that (thin price history) its weight, and every parent it sits in, would be
+  // wrong -- e.g. one US stock in 2015 made the US 99.7% of the world. Such dates are left empty.
+  const count = new Map();
+  for (const ms of memberships) {
+    const t = di.get(ms.latest ? latestDate : ms.date);
+    if (t == null) continue;
+    if (!count.has(ms.country)) count.set(ms.country, new Int32Array(D));
+    count.get(ms.country)[t] = Math.max(count.get(ms.country)[t], ms.members.filter((x) => x.capUsd > 0).length);
+  }
+  const covered = new Map();
+  for (const [c, n] of count) { const mx = Math.max(...n); covered.set(c, Array.from(n, (k) => mx > 0 && k >= minCoverage * mx)); }
 
   const groups = new Map(); // `${parentKey}#${childType}` -> {parentKey, parentType, childType, total: Float64Array, children: Map}
   for (const ms of memberships) {
@@ -54,7 +72,10 @@ export function computeWeightWatcher(memberships, geo) {
         const parentKey = pk(m, ms.country, g);
         const gk = `${parentKey}#${ctype}`;
         let grp = groups.get(gk);
-        if (!grp) { grp = { parentKey, parentType: ptype, childType: ctype, total: new Float64Array(D), children: new Map() }; groups.set(gk, grp); }
+        if (!grp) { grp = { parentKey, parentType: ptype, childType: ctype, total: new Float64Array(D), children: new Map(), countryCap: new Map() }; groups.set(gk, grp); }
+        let cc = grp.countryCap.get(ms.country);
+        if (!cc) { cc = new Float64Array(D); grp.countryCap.set(ms.country, cc); }
+        cc[t] += m.capUsd;
         const childKey = ck(m, ms.country, g);
         let ch = grp.children.get(childKey);
         if (!ch) { ch = new Float64Array(D); grp.children.set(childKey, ch); }
@@ -65,13 +86,20 @@ export function computeWeightWatcher(memberships, geo) {
   }
   const out = [];
   for (const grp of groups.values()) {
+    // a date counts only when every country carrying >= 1% of the parent at its latest
+    // observation is covered on that date
+    const L = D - 1;
+    const big = [...grp.countryCap].filter(([, cc]) => grp.total[L] > 0 && cc[L] >= 0.01 * grp.total[L]).map(([c]) => c);
+    const valid = Array.from({ length: D }, (_, t) => big.every((c) => covered.get(c)?.[t]));
+    const gaps = [];
+    for (let t = 0; t < D; t++) if (!valid[t] && grp.total[t] > 0) gaps.push({ date: obsDates[t], countries: big.filter((c) => !covered.get(c)?.[t]) });
     const children = [];
     for (const [key, caps] of grp.children) {
-      const weights = Array.from(caps, (c, t) => (grp.total[t] > 0 && c > 0 ? round6((c / grp.total[t]) * 100) : null));
+      const weights = Array.from(caps, (c, t) => (valid[t] && grp.total[t] > 0 && c > 0 ? round6((c / grp.total[t]) * 100) : null));
       children.push({ key, weights, caps: Array.from(caps, (c) => (c > 0 ? Math.round(c) : null)) });
     }
     children.sort((a, b) => (lastVal(b.weights) ?? -1) - (lastVal(a.weights) ?? -1));
-    out.push({ parentKey: grp.parentKey, parentType: grp.parentType, childType: grp.childType, dates: obsDates, latestFlags: obsDates.map((d) => d === latestDate && !qDates.includes(d)), children });
+    out.push({ parentKey: grp.parentKey, parentType: grp.parentType, childType: grp.childType, dates: obsDates, latestFlags: obsDates.map((d) => d === latestDate && !qDates.includes(d)), children, gaps });
   }
   return out;
 }

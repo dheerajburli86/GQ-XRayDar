@@ -119,7 +119,7 @@ export class IndexBuilder {
     this.higher = new Map();     // scopeKey -> acc (USD)
     this.series = new Map();     // indexKey -> series record
     this.memberships = [];       // {country, date, idx, latest, members:[...]}
-    this.stats = { countries: 0, stocksSeen: 0, stocksIndexed: new Set(), excluded: { noCap: 0, notListed: 0, stale: 0, micro: 0 } };
+    this.stats = { countries: 0, stocksSeen: 0, stocksIndexed: new Set(), excluded: { noCap: 0, notListed: 0, stale: 0, micro: 0, shareBreak: 0, capImplausible: 0 } };
     this.splitGuarded = []; // [{id, date, ratio}]
   }
 
@@ -172,8 +172,19 @@ export class IndexBuilder {
         let lt = start; while (lt > s.first && !s.traded[lt]) lt--;
         if (start - lt > m.eligibility.maxStaleDays) { this.stats.excluded.stale++; continue; }
         if (!(s.shares > 0)) { if (m.eligibility.requireCap) { this.stats.excluded.noCap++; continue; } }
+        // before a share-count break (split / restructuring the price history does not adjust for)
+        // latest shares x past price is not a market cap at all
+        if (s.capFromDate && dates[start] < s.capFromDate) { this.stats.excluded.shareBreak++; continue; }
         const capU = s.shares * s.close[start] * s.fxOwn[start];
         if (!(capU > 0)) continue;
+        // an estimate above the largest company there has ever been, or more than maxCapMultiple
+        // times the stock's own cap at its last bar, is a share-count change, not a market cap
+        const capLastU = s.shares * s.close[s.last] * s.fxOwn[s.last];
+        if (capU > m.eligibility.maxCapUsd || (capLastU > 0 && capU > m.eligibility.maxCapMultiple * capLastU)) {
+          this.stats.excluded.capImplausible++;
+          (this.capImplausible ||= []).push({ id: s.sec.id, date: dates[start], capUsd: Math.round(capU) });
+          continue;
+        }
         elig.push({ s, capU });
       }
       elig.sort((a, b) => b.capU - a.capU);

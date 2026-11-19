@@ -8,8 +8,8 @@ import { PageHead, Select, Seg, Loading, Empty, Pct, StockLink } from "../compon
 import { DataTable } from "../components/DataTable.jsx";
 import { glocomBand, groupMoves, groupTimeline, GLOCOM_RULES, NEUTRAL } from "../../engine/glocom.js";
 
-const BACK = [{ value: "1", label: "vs 1 session" }, { value: "5", label: "vs 1 week" }, { value: "21", label: "vs 1 month" }];
-import { GBadge, Jump, UP, DOWN } from "../components/glocomUi.jsx";
+const BACK = [{ value: "1", label: "vs 1 session" }, { value: "5", label: "vs 1 week" }, { value: "21", label: "vs 1 month" }, { value: "63", label: "vs 3 months" }];
+import { GBadge, Jump, UP, DOWN, comName } from "../components/glocomUi.jsx";
 
 const pct01 = (v) => (v == null ? "—" : Math.round(v * 100));
 
@@ -26,7 +26,14 @@ export default function Glocom({ route }) {
   const { data: hist, loading } = useAsync(() => d.api.glocomGroups(`${market}|${level}`), [market, level]);
 
   const moves = useMemo(() => (hist ? groupMoves(hist, back) : []), [hist, back]);
-  const movers = useMemo(() => moves.filter((x) => x.jump || x.bandMove).sort((a, b) => Math.abs(b.bandMove || 0) - Math.abs(a.bandMove || 0) || Math.abs(b.jump || 0) - Math.abs(a.jump || 0)), [moves]);
+  // owner: the groups that gained strength first, in rank order (the one now #1 first), then the
+  // ones that lost it, again in rank order, so the weakest sits at the bottom
+  const movers = useMemo(() => {
+    const gained = (x) => (x.bandMove || 0) > 0 || (!x.bandMove && (x.jump || 0) > 0);
+    return moves.filter((x) => x.jump || x.bandMove).sort((a, b) => (gained(b) - gained(a)) || a.rank - b.rank);
+  }, [moves]);
+  const nm = comName(market);
+  const tooShort = hist && hist.dates.length - 1 - back < 0;
   const asOf = hist?.dates?.at(-1), prevDate = hist?.dates?.[hist.dates.length - 1 - back];
   const label = (k) => (k === "G" ? "Global (all markets, USD)" : k.slice(2));
   const noun = level === "industry" ? "Industry" : "Sector";
@@ -34,7 +41,7 @@ export default function Glocom({ route }) {
 
   return (
     <div className="stack">
-      <PageHead title="GLOCOM / LOCOM" sub={`Each ${noun.toLowerCase()} is rated against the other ${nouns} of the market on its average 1-week, 6-month and 1-year return percentiles (heatmap rule sheet). Rank 1 = best: band first, then score. A stock's LOCOM is the same sheet against its own industry.`}>
+      <PageHead title={`${nm} · ${label(market)}`} sub={`Each ${noun.toLowerCase()} is rated against the other ${nouns} of the market on its average 1-week, 6-month and 1-year return percentiles (heatmap rule sheet). Rank 1 = best: band first, then score. GLOCOM and LOCOM are the same rule sheet: it is called LOCOM for Indian industries and sectors, GLOCOM everywhere else.`}>
         <Select label="Market" value={market} options={markets.map((k) => ({ value: k, label: label(k) }))} onChange={(v) => set({ m: v, g: undefined })} />
         <Seg value={level} options={[{ value: "industry", label: "Industries" }, { value: "sector", label: "Sectors" }]} onChange={(v) => set({ lv: v, g: undefined })} />
         <Seg value={String(back)} options={BACK} onChange={(v) => set({ back: v })} />
@@ -42,7 +49,8 @@ export default function Glocom({ route }) {
       {loading ? <Loading /> : !hist ? <Empty>No GLOCOM history yet for this market. It is written by the nightly engine run.</Empty> : (
         <>
           <div className="card">
-            <h3>Moves {prevDate ? `${prevDate} → ${asOf}` : `to ${asOf}`} <span className="small muted">({movers.length} of {moves.length} {nouns} moved)</span></h3>
+            <h3>Moves {prevDate ? `${prevDate} → ${asOf}` : `to ${asOf}`} <span className="small muted">({movers.length} of {moves.length} {nouns} moved · gainers first in rank order, then losers, weakest last)</span></h3>
+            {tooShort && <div className="note warn small">Not enough stored history for this comparison yet: the engine keeps {hist.dates.length} sessions; the 3-month view fills in after the next engine run.</div>}
             {!movers.length ? <div className="small muted">No {noun.toLowerCase()} changed rank or band.</div> : (
               <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
                 {movers.map((x) => {
@@ -67,7 +75,7 @@ export default function Glocom({ route }) {
                 { key: "rank", label: "Rank", num: true, value: (x) => x.rank },
                 { key: "jump", label: "Move", num: true, value: (x) => x.jump, render: (x) => <Jump v={x.jump} /> },
                 { key: "name", label: noun, value: (x) => x.name, render: (x) => <span style={{ borderLeft: `4px solid ${x.jump > 0 || x.bandMove > 0 ? UP : x.jump < 0 || x.bandMove < 0 ? DOWN : "transparent"}`, paddingLeft: 6, fontWeight: x.jump || x.bandMove ? 700 : 400 }}>{x.name}</span> },
-                { key: "label", label: "GLOCOM", value: (x) => x.code, render: (x) => <GBadge code={x.code} label={x.label} /> },
+                { key: "label", label: nm, value: (x) => x.code, render: (x) => <GBadge code={x.code} label={x.label} /> },
                 { key: "prev", label: "Before", value: (x) => x.prevCode, render: (x) => (x.bandMove ? <GBadge small code={x.prevCode} label={x.prevLabel} /> : <span className="muted">same</span>) },
                 { key: "w", label: "1W avg", num: true, value: (x) => x.w, render: (x) => <Pct v={x.w == null ? null : x.w * 100} /> },
                 { key: "m6", label: "6M", num: true, value: (x) => x.m6, render: (x) => <Pct v={x.m6 == null ? null : x.m6 * 100} /> },
@@ -123,7 +131,7 @@ function GroupDetail({ hist, name, market, level, rows, onClose }) {
           columns={[
             { key: "s", label: "Stock", value: (r) => r.sec.symbol, render: (r) => <StockLink sec={r.sec} /> },
             { key: "g", label: "GLOCOM", value: (r) => r.flat.glocomCode, render: (r) => <GBadge small code={r.flat.glocomCode} label={r.flat.glocom} /> },
-            { key: "l", label: "LOCOM", value: (r) => r.flat.locomCode, render: (r) => <GBadge small code={r.flat.locomCode} label={r.flat.locom} /> },
+            { key: "l", label: "Within industry", value: (r) => r.flat.locomCode, render: (r) => <GBadge small code={r.flat.locomCode} label={r.flat.locom} /> },
             { key: "w", label: "1W", num: true, value: (r) => r.flat.ret1W, render: (r) => <Pct v={r.flat.ret1W} /> },
           ]} />
       </div>

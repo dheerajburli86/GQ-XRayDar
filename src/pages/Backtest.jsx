@@ -48,7 +48,7 @@ function Idea() {
         <RuleEditor value={rule} onChange={setRule} />
         <div className="row">
           <Seg value={on} options={[{ value: "top", label: "Largest stocks" }, { value: "stock", label: "One stock" }, { value: "wl", label: "A watchlist" }]} onChange={setOn} />
-          {on === "stock" && <InstrumentPicker allowIndex={false} value={inst} onChange={setInst} />}
+          {on === "stock" && <InstrumentPicker secOnly value={inst} onChange={setInst} />}
           {on === "wl" && <Select value={wl} options={Object.entries(wls).map(([k, v]) => ({ value: k, label: v.name }))} onChange={setWl} allowEmpty="Pick" />}
         </div>
       </div>
@@ -138,7 +138,7 @@ function Library({ route }) {
   const latestTypes = [...new Set(own.slice(-6).map((e) => e.type))];
   return (
     <div className="stack">
-      <div className="row"><InstrumentPicker value={sec ? { label: `${sec.symbol} · ${sec.name}` } : null} onChange={(r) => r.kind === "sec" && navigate("backtest", { tab: "library", id: r.id })} allowIndex={false} /><span className="small muted">Matches the stock's latest setups against every past occurrence in its own history and in its {peers.length} country-sector peers.</span></div>
+      <div className="row"><InstrumentPicker value={sec ? { label: `${sec.symbol} · ${sec.name}` } : null} onChange={(r) => r.kind === "sec" && navigate("backtest", { tab: "library", id: r.id })} secOnly /><span className="small muted">Matches the stock's latest setups against every past occurrence in its own history and in its {peers.length} country-sector peers.</span></div>
       {loading ? <Loading /> : latestTypes.map((t) => {
         const mine = own.filter((e) => e.type === t), peer = Object.entries(data || {}).filter(([k]) => k !== id).flatMap(([k, ev]) => ev.filter((e) => e.type === t).map((e) => ({ ...e, id: k })));
         const sm = backtestEvents(mine), sp = backtestEvents(peer);
@@ -165,7 +165,7 @@ function Log({ route }) {
   const rows = (data || []).filter((e) => !type || e.type === type).map((e, i) => ({ ...e, rid: i }));
   return (
     <div className="stack">
-      <div className="row"><InstrumentPicker value={sec ? { label: `${sec.symbol} · ${sec.name}` } : null} onChange={(r) => r.kind === "sec" && navigate("backtest", { tab: "log", id: r.id })} allowIndex={false} />
+      <div className="row"><InstrumentPicker value={sec ? { label: `${sec.symbol} · ${sec.name}` } : null} onChange={(r) => r.kind === "sec" && navigate("backtest", { tab: "log", id: r.id })} secOnly />
         <Select label="Type" value={type} options={TYPES.map((t) => ({ value: t, label: EVENT_LABEL[t] }))} onChange={setType} allowEmpty /></div>
       {loading ? <Loading /> : <DataTable exportName={`inflections_${sec?.symbol}`} rows={rows} rowKey={(r) => r.rid} initialSort={{ key: "date", dir: "desc" }}
         columns={[{ key: "date", label: "Date", value: (e) => e.date }, { key: "type", label: "Inflection", value: (e) => EVENT_LABEL[e.type] || e.type, render: (e) => <Badge kind={/up|bull|high|break|golden|exit/.test(e.type) ? "g" : /down|bear/.test(e.type) ? "r" : ""}>{EVENT_LABEL[e.type] || e.type}</Badge> }, { key: "tf", label: "TF", value: (e) => e.tf },
@@ -216,7 +216,7 @@ function WalkForward() {
         </div>
         <div className="row">
           <Seg value={on} options={[{ value: "top", label: "Largest 60 stocks" }, { value: "stock", label: "One stock" }, { value: "wl", label: "A watchlist" }]} onChange={setOn} />
-          {on === "stock" && <InstrumentPicker allowIndex={false} value={inst} onChange={setInst} />}
+          {on === "stock" && <InstrumentPicker secOnly value={inst} onChange={setInst} />}
           {on === "wl" && <Select value={wl} options={Object.entries(wls).map(([k, v]) => ({ value: k, label: v.name }))} onChange={setWl} allowEmpty="Pick" />}
           <button className="btn sm primary" disabled={!!busy || !RULES[rule.rule]} onClick={run}>{busy ? "Working…" : "Run"}</button>
         </div>

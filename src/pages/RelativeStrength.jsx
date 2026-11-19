@@ -120,7 +120,7 @@ function PairMatrix({ route }) {
   return (
     <div className="stack">
       <div className="row"><span className="small muted">Stock for stock-level pairs:</span>
-        <InstrumentPicker value={sec ? { label: `${sec.symbol} · ${sec.name}` } : null} onChange={(r) => r.kind === "sec" && navigate("rs", { tab: "pair", id: r.id })} allowIndex={false} /></div>
+        <InstrumentPicker value={sec ? { label: `${sec.symbol} · ${sec.name}` } : null} onChange={(r) => r.kind === "sec" && navigate("rs", { tab: "pair", id: r.id })} secOnly /></div>
       <div className="row">{presets.map(([l, a, b]) => <button key={l} className={`btn sm ${A === a ? "primary" : ""}`} onClick={() => { setNum(a); setDen(b); }}>{l}</button>)}</div>
       <div className="row"><span className="small">Numerator</span><InstrumentPicker value={{ label: label(A) }} onChange={setNum} /><span className="small">÷ Benchmark</span><InstrumentPicker value={{ label: label(B) }} onChange={setDen} /><Seg value={tf} options={["D", "W", "M"]} onChange={setTf} /></div>
       {loading ? <Loading /> : sig ? (

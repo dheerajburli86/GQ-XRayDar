@@ -24,6 +24,7 @@ export const MODEL_VERSIONS = {
   analystScreens: "1.0 two-column RSI/RSC stacks, MMA 3-15/30-60, ACC 4/14/26/39, n-month / n-week candles",
   assistant: "1.0 deterministic parser + stored calculations (built-in)",
   foCollector: "3 (FO_VERSION)",
+  consolidationBreakout: "1.0 yellow/red fan on log price and on RSC; first fan after a gap, >= 15 candles of history (calibrated on the owner's dated examples, 43 of 53)",
 };
 
-export const ENGINE_VERSION = "2026.11.15";
+export const ENGINE_VERSION = "2026.11.19";

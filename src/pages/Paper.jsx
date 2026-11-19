@@ -59,7 +59,7 @@ export default function Paper() {
         <Kpi label="Realised gain" value={fmtMoney(realised)} cls={realised >= 0 ? "pos" : "neg"} />
       </div>
       <div className="card row" style={{ flexWrap: "wrap", gap: 8 }}>
-        <InstrumentPicker allowIndex={false} value={inst} onChange={setInst} width={280} />
+        <InstrumentPicker secOnly value={inst} onChange={setInst} width={280} />
         <label className="lbl-ctl">Shares<input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} style={{ width: 90 }} /></label>
         {inst && px(inst.id)?.usd && <span className="small muted">{px(inst.id).local} {d.secById.get(inst.id)?.currency} · ≈ {fmtMoney(px(inst.id).usd * (+qty || 0))}</span>}
         <button className="btn sm primary" onClick={() => trade("buy")}>Buy</button>

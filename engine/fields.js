@@ -96,6 +96,32 @@ for (const tf of ["D", "W", "M"]) {
   add(`reversalDown${tf}`, `Trend reversal down (${T})`, "Patterns", "bool", (r) => r.snap?.tf?.[tf]?.reversalDown);
   add(`trendUp${tf}`, `Uptrend (${T})`, "Trend & MMA", "bool", (r) => r.snap?.tf?.[tf]?.trendUp);
 }
+// owner's multi-period consolidation -> breakout (engine/consolidation.js), on the price pane
+// (as on his RSIMMA screen) and on the RSC pane against the country index (as on RSCMMA)
+const BOX_STATES = ["consolidating", "fan_up", "fan_down"];
+for (const tf of ["D", "W", "M", "Q"]) {
+  const T = { D: "Daily", W: "Weekly", M: "Monthly", Q: "Quarterly" }[tf];
+  const P = (r) => r.snap?.tf?.[tf]?.mmaBox, Q = (r) => r.snap?.tf?.[tf]?.rscBox;
+  add(`boxState${tf}`, `Yellow/red averages: state (${T})`, "Trend & MMA", "cat", (r) => P(r)?.st, { values: BOX_STATES });
+  add(`boxSince${tf}`, `Yellow/red averages: state since (${T})`, "Trend & MMA", "text", (r) => P(r)?.since);
+  add(`boxBreakout${tf}`, `Breakout from consolidation, recent (${T})`, "Trend & MMA", "bool", (r) => P(r)?.rUp);
+  add(`boxBreakdown${tf}`, `Breakdown from consolidation, recent (${T})`, "Trend & MMA", "bool", (r) => P(r)?.rDn);
+  add(`boxBreakoutDate${tf}`, `Last breakout date (${T})`, "Trend & MMA", "text", (r) => P(r)?.upE);
+  add(`boxStartDate${tf}`, `Last consolidation start (${T})`, "Trend & MMA", "text", (r) => P(r)?.upS);
+  add(`boxAge${tf}`, `Candles since last breakout (${T})`, "Trend & MMA", "num", (r) => P(r)?.upAge);
+  add(`boxTurn${tf}`, `Last breakout turned a downtrend (${T})`, "Trend & MMA", "bool", (r) => P(r)?.upTurn);
+  add(`rscBoxState${tf}`, `RSC yellow/red averages: state (${T})`, "Relative strength", "cat", (r) => Q(r)?.st, { values: BOX_STATES });
+  add(`rscBoxBreakout${tf}`, `RSC breakout from consolidation, recent (${T})`, "Relative strength", "bool", (r) => Q(r)?.rUp);
+  add(`rscBoxBreakoutDate${tf}`, `RSC last breakout date (${T})`, "Relative strength", "text", (r) => Q(r)?.upE);
+}
+// how many of the six higher-timeframe screens (price and RSC on weekly, monthly, quarterly) show
+// a recent breakout / are consolidating now. The owner: the more higher-timeframe screens confirm,
+// the stronger. A count, not a score.
+const HIGHER = ["W", "M", "Q"];
+add("boxBreakoutScreens", "Breakouts on weekly / monthly / quarterly screens (of 6)", "Trend & MMA", "num",
+  (r) => { const t = r.snap?.tf; if (!t) return null; let k = 0; for (const tf of HIGHER) { if (t[tf]?.mmaBox?.rUp) k++; if (t[tf]?.rscBox?.rUp) k++; } return k; });
+add("boxConsolidatingScreens", "Consolidating on weekly / monthly / quarterly screens (of 6)", "Trend & MMA", "num",
+  (r) => { const t = r.snap?.tf; if (!t) return null; let k = 0; for (const tf of HIGHER) { if (t[tf]?.mmaBox?.st === "consolidating") k++; if (t[tf]?.rscBox?.st === "consolidating") k++; } return k; });
 add("above20", "Above 20-day EMA", "Trend & MMA", "bool", (r) => r.snap?.day?.above20);
 add("above50", "Above 50-day EMA", "Trend & MMA", "bool", (r) => r.snap?.day?.above50);
 add("above200", "Above 200-day EMA", "Trend & MMA", "bool", (r) => r.snap?.day?.above200);
@@ -157,8 +183,8 @@ for (const k of ["technical", "relative", "participation", "fundamentals", "time
 // codes: 1 dark green (US/LTS 80), 2 light green (US/LTS 60), 3 neutral, 4 light red (UW/LTW 40), 5 dark red (UW/LTW 30)
 add("glocom", "GLOCOM label", "GLOCOM", "cat", (r) => r.glocom?.label);
 add("glocomCode", "GLOCOM code", "GLOCOM", "num", (r) => r.glocom?.code);
-add("locom", "LOCOM label (vs industry peers)", "GLOCOM", "cat", (r) => r.glocom?.locom?.label);
-add("locomCode", "LOCOM code", "GLOCOM", "num", (r) => r.glocom?.locom?.code);
+add("locom", "GLOCOM within industry (vs industry peers)", "GLOCOM", "cat", (r) => r.glocom?.locom?.label);
+add("locomCode", "GLOCOM within industry, code", "GLOCOM", "num", (r) => r.glocom?.locom?.code);
 add("industryGlocom", "Industry GLOCOM label", "GLOCOM", "cat", (r) => r.glocom?.industry?.label);
 add("industryGlocomCode", "Industry GLOCOM code", "GLOCOM", "num", (r) => r.glocom?.industry?.code);
 add("industryGlocomRank", "Industry GLOCOM rank (1 = best)", "GLOCOM", "num", (r) => r.glocom?.industry?.rank);

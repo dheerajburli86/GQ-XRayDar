@@ -2,7 +2,7 @@
 // heatmap dashboard's tables; computed analytics from this app's tas_* tables,
 // which the batch engine (cli/run.mjs) fills.
 import { createClient } from "@supabase/supabase-js";
-import { applyCorporateActions } from "../../engine/quality.js";
+import { applyCorporateActions, removeBadPrints } from "../../engine/quality.js";
 import { decodeEvents } from "../../engine/eventCodec.js";
 import { SCREEN_KEYS } from "../../engine/screenRow.js";
 import { runGet, runSet, runPurge } from "../lib/idbCache.js";
@@ -124,19 +124,26 @@ export function createSupabaseApi(url, key) {
       }
       const ca = await one(sb.from("tas_corporate_action").select("ex_date,factor,type,source").eq("instrument_id", id));
       const acts = ca.map((x) => ({ exDate: x.ex_date, factor: +x.factor, type: x.type, source: x.source }));
-      const adj = acts.length ? applyCorporateActions(b, acts).bars : b;
+      const adj0 = acts.length ? applyCorporateActions(b, acts).bars : b;
+      // the same bad-print filter the engine applies, so a chart never disagrees with the numbers
+      const { bars: adj, removed } = removeBadPrints(adj0);
       const sec = (await secMap()).get(id);
-      return { ...adj, currency: sec?.currency, adjustments: acts };
+      return { ...adj, currency: sec?.currency, adjustments: acts, badPrints: removed };
     },
     async fxSummary() {
       const rows = await one(sb.from("tas_fx").select("currency,source,estimated,stale_days,max_stale,estimated_days,latest,latest_date"));
       return rows.map((r) => ({ currency: r.currency, source: r.source, estimated: r.estimated, staleDays: r.stale_days, maxStale: r.max_stale, estimatedDays: r.estimated_days, latest: r.latest, latestDate: r.latest_date }));
     },
+    /** Chart-only instruments the heatmap does not carry (tas_extra_series, cli/extraJob.mjs). */
+    async extraList() {
+      try { return (await all("tas_extra_series", "symbol,label,category,region,country,currency,source")).map((r) => ({ ...r })); } catch { return []; }
+    },
+    async extraSeries(symbol) { const r = await one(sb.from("tas_extra_series").select("dates,close,currency,label").eq("symbol", symbol).maybeSingle()); return r; },
     async fxSeries(ccy) { const r = await one(sb.from("tas_fx").select("dates,rate,stale").eq("currency", ccy).maybeSingle()); return r; },
     async wwGroups() { return (await all("tas_ww", "parent_key,parent_type,child_type")).map((r) => ({ parentKey: r.parent_key, parentType: r.parent_type, childType: r.child_type })); },
     async ww(parentKey, childType) {
       const r = await one(sb.from("tas_ww").select("*").eq("parent_key", parentKey).eq("child_type", childType).maybeSingle());
-      return r ? { parentKey: r.parent_key, parentType: r.parent_type, childType: r.child_type, dates: r.dates, latestFlags: r.latest_flags, children: r.children } : null;
+      return r ? { parentKey: r.parent_key, parentType: r.parent_type, childType: r.child_type, dates: r.dates, latestFlags: r.latest_flags, children: r.children, gaps: r.gaps || [] } : null;
     },
     async membership(country, date) {
       let q = sb.from("tas_membership").select("*").eq("country", country).eq("is_latest", false).order("rebalance_date", { ascending: false }).limit(1);
@@ -184,7 +191,7 @@ export function createSupabaseApi(url, key) {
   // Wrap the read methods in the caches above. Answers are shared between callers, so pages
   // must treat them as read-only (they already do: every page copies before changing anything).
   const PERSIST = ["indexSeries", "breadth", "rotation", "glocomGroups", "ww", "ewcw", "backtestSummary", "wwGroups", "breadthKeys", "rotationScopes", "glocomScopes", "fxSeries"];
-  const MEMORY = ["snapshot", "bars", "events", "etiRows", "membership", "membershipDates", "fxSummary", "corporateActions", "issues"];
+  const MEMORY = ["extraList", "extraSeries", "snapshot", "bars", "events", "etiRows", "membership", "membershipDates", "fxSummary", "corporateActions", "issues"];
   for (const name of [...PERSIST, ...MEMORY]) {
     const fn = api[name], persist = PERSIST.includes(name);
     api[name] = (...args) => cached(`${name}:${JSON.stringify(args)}`, () => withRetry(() => fn(...args)), { persist });

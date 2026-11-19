@@ -72,7 +72,8 @@ export function buildAnalystColumn({ mode, tf, bars, bench = null, rscCloses = n
   const periods = m.overlay === "mma" ? [...MMA_SHORT, ...MMA_LONG] : ACC_PERIODS;
   const rows = analystRows(mode).map((row) => {
     let time, base;
-    if (row.kind === "price") { time = agg.time; base = agg.close; }
+    let ohlc = null;
+    if (row.kind === "price") { time = agg.time; base = agg.close; ohlc = { open: agg.open, high: agg.high, low: agg.low, close: agg.close }; }
     else if (row.kind === "rsc" || row.of === "rsc") {
       if (!rel) return { ...row, label: rowLabel(row, tf, rsiPeriod, benchLabel), time: [], base: [], avgs: [], missing: "no comparison series" };
       time = rel.time; base = rel.value;
@@ -82,7 +83,7 @@ export function buildAnalystColumn({ mode, tf, bars, bench = null, rscCloses = n
       for (let k = 0; k < row.depth; k++) base = rsi(base, rsiPeriod, rsiMethod);
     }
     const avgs = periods.map((p) => ({ period: p, group: m.overlay === "acc" ? "acc" : MMA_SHORT.includes(p) ? "short" : "long", values: emaStrict(base, p) }));
-    return { ...row, label: rowLabel(row, tf, rsiPeriod, benchLabel), time, base, avgs };
+    return { ...row, label: rowLabel(row, tf, rsiPeriod, benchLabel), time, base, avgs, ...(ohlc ? { ohlc } : {}) };
   });
   return { tf, header, rows };
 }

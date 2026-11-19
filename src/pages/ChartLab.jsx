@@ -27,6 +27,10 @@ import { NoteBox } from "./Notes.jsx";
 import { setAgentContext, openAgent } from "../components/AgentPanel.jsx";
 import { downloadBlob } from "../lib/exporters.js";
 import { cleanSeriesData } from "../components/TvChart.jsx";
+import { QuickTicker } from "../components/QuickTicker.jsx";
+import { useChartKeys } from "../lib/chartKeys.js";
+import { useLastInstrument } from "../lib/instruments.js";
+import { priceSeries } from "../lib/chartStyle.js";
 
 const UP = "#16a34a", DOWN = "#dc2626";
 const STYLES = [["candles", "Candles"], ["ha", "Heikin-Ashi"], ["line", "Line"], ["renko", "Renko"], ["kagi", "Kagi"], ["pnf", "Point & Figure"]];
@@ -45,18 +49,23 @@ function themeOpts() {
   const cs = getComputedStyle(document.documentElement);
   const v = (n) => cs.getPropertyValue(n).trim() || undefined;
   return { layout: { background: { color: "transparent" }, textColor: v("--chart-text"), fontFamily: v("--font"), fontSize: 11, attributionLogo: false, panes: { separatorColor: v("--line") } },
-    grid: { vertLines: { color: v("--chart-grid") }, horzLines: { color: v("--chart-grid") } }, rightPriceScale: { borderColor: v("--line") }, timeScale: { borderColor: v("--line"), rightOffset: 6, minBarSpacing: 0.05 }, crosshair: { mode: 0 } };
+    grid: { vertLines: { color: v("--chart-grid") }, horzLines: { color: v("--chart-grid") } }, rightPriceScale: { borderColor: v("--line") }, timeScale: { borderColor: v("--line"), rightOffset: 6, minBarSpacing: 0.05, rightBarStaysOnScroll: true }, crosshair: { mode: 0 } };
 }
 const L = (time, vals) => { const out = []; for (let i = 0; i < time.length; i++) if (vals[i] != null && Number.isFinite(vals[i])) out.push({ time: time[i], value: vals[i] }); return out; };
 
 export default function ChartLab({ route }) {
   const d = useData();
   const first = useMemo(() => [...d.rows].sort((a, b) => (b.sec.capUsdNow || 0) - (a.sec.capUsdNow || 0))[0]?.id, [d.rows]);
-  const id = route.args[0] || first;
+  const [lastInst, setLastInst] = useLastInstrument();
+  const lastSecId = lastInst?.startsWith("s:") ? lastInst.slice(2) : null;
+  const id = route.args[0] || (lastSecId && d.secById.has(lastSecId) ? lastSecId : null) || first;
   const sec = d.secById.get(id);
+  useEffect(() => { if (id && lastInst !== `s:${id}`) setLastInst(`s:${id}`); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [picking, setPicking] = useState(null);
   const [view, setView] = usePersistent("chartlab", DEFAULT_VIEW);
   const v = { ...DEFAULT_VIEW, ...view };
   const set = (patch) => setView({ ...v, ...patch });
+  useChartKeys({ onTf: (tf) => set({ tf }), onSearch: (ch) => setPicking({ initial: ch }) });
   const [allDrawings, setAllDrawings] = usePersistent("drawings", {});
   const drawings = allDrawings[id] || [];
   const setDrawings = (list) => setAllDrawings({ ...allDrawings, [id]: list });
@@ -115,8 +124,9 @@ export default function ChartLab({ route }) {
 
   return (
     <div className="stack">
+      {picking && <QuickTicker initial={picking.initial} secOnly onClose={() => setPicking(null)} onPick={(r) => navigate(`chart/${r.id}`)} />}
       <PageHead title={`${sec.symbol} · ${sec.name}`} sub={`${sec.country} · ${sec.sector}${sec.assetClass !== "Stock" ? ` · ${sec.assetClass}` : ""} · chart lab: styles, levels, drawings, compare and a plain-English read`}>
-        <InstrumentPicker allowIndex={false} value={{ label: `${sec.symbol} · ${sec.name}` }} onChange={(r) => r.kind === "sec" && navigate(`chart/${r.id}`)} width={240} />
+        <InstrumentPicker secOnly value={{ label: `${sec.symbol} · ${sec.name}` }} onChange={(r) => r.kind === "sec" && navigate(`chart/${r.id}`)} width={240} />
         <a className="btn sm" href={`#/stock/${id}`}>Stock page</a>
       </PageHead>
       <div className="card tight">
@@ -240,7 +250,7 @@ function ChartCanvas({ bars, v, levels, extraLines = [], patterns = [], cmp, dra
     if (timeStyle) {
       const src = v.style === "ha" ? heikinAshi(bars) : bars;
       main = v.style === "line"
-        ? add(LineSeries, L(t, bars.close), { color: "#e5e7eb", lineWidth: 2, lastValueVisible: true })
+        ? add(LineSeries, priceSeries(t, bars, "line").data, { color: "#e5e7eb", lineWidth: 2, lastValueVisible: true })
         : add(CandlestickSeries, t.map((x, i) => ({ time: x, open: src.open[i], high: src.high[i], low: src.low[i], close: src.close[i] })), { upColor: UP, downColor: DOWN, borderVisible: false, wickUpColor: UP, wickDownColor: DOWN, lastValueVisible: true });
       if (v.ema) [[20, "#22d3ee"], [50, "#14a44d"], [200, "#d97706"]].forEach(([n, c]) => add(LineSeries, L(t, emaStrict(bars.close, n)), { color: c, lineWidth: 1, title: `EMA${n}` }));
       if (v.mma) { [3, 5, 8, 10, 12, 15].forEach((n) => add(LineSeries, L(t, emaStrict(bars.close, n)), { color: "#facc15", lineWidth: 1 })); [30, 35, 40, 45, 50, 60].forEach((n) => add(LineSeries, L(t, emaStrict(bars.close, n)), { color: "#ef4444", lineWidth: 1 })); }

@@ -24,7 +24,7 @@ import { rotation, regime, ewcw } from "./analytics.js";
 import { fundamentalMetrics, fundamentalPercentiles } from "./fundamentals.js";
 import { scoreSetup } from "./scoring.js";
 import { buildFlat } from "./screenRow.js";
-import { securityIssues, applyCorporateActions } from "./quality.js";
+import { securityIssues, applyCorporateActions, removeBadPrints, shareBreaks } from "./quality.js";
 import { BacktestAccumulator } from "./backtest.js";
 import { GroupAccumulator, checkpointReturns, rateGlocom, groupMoves } from "./glocom.js";
 import { UNCLASSIFIED } from "./classification.js";
@@ -59,6 +59,7 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
   const { history: fxHist, latest: fxLatest } = await source.fxHistory();
   const fx = buildFxTable(dates, fxHist, fxLatest);
   const corp = source.corporateActions ? await source.corporateActions() : new Map();
+  const shareCounts = source.shareCounts ? await source.shareCounts() : new Map();
   const reb = quarterEndIndices(dates);
   run.stats.dates = { from: dates[0], to: dates[T - 1], sessions: T, rebalances: reb.length };
   run.stats.securities = secs.length;
@@ -77,6 +78,18 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
       if (!b || !b.time.length) continue;
       const ca = corp.get?.(sec.id);
       if (ca?.length) b = applyCorporateActions(b, ca).bars;
+      // bad prints out first (they would also look like share-count breaks), then the date from
+      // which latest-shares x past-price caps are usable at all (engine/quality.js)
+      const bad = removeBadPrints(b);
+      b = bad.bars;
+      if (!b.time.length) continue;
+      // a x3 step that holds is a share event only when the reported share count also moved x2+
+      // (a real crash keeps its shares: Upstart May 2022); a x10 step is one regardless
+      const brk = shareBreaks(b);
+      const sc = shareCounts.get(sec.id);
+      const scMoved = sc?.length >= 2 && Math.max(...sc.map((x) => x.shares)) >= 2 * Math.min(...sc.map((x) => x.shares));
+      const qual = brk.breaks.filter((x) => x.ratio >= 10 || x.ratio <= 0.1 || scMoved);
+      const capFromDate = qual.length ? qual[qual.length - 1].date : null;
       // drop bars before the calendar window minus a year of warm-up is kept by the source
       const close = new Float64Array(T).fill(NaN), traded = new Uint8Array(T), barAt = new Int32Array(T).fill(-1);
       let first = -1, last = -1, j = 0;
@@ -95,7 +108,7 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
       // local holiday on the final calendar date -- stays in, carried at that close.
       const lastBarT = indexAtOrBeforeMap(dates, b.time[b.time.length - 1]);
       if (!sec.active || T - 1 - lastBarT > m.eligibility.maxStaleDays) last = Math.min(last, lastBarT);
-      out.push({ sec, bars: b, first, last, close, traded, barAt });
+      out.push({ sec, bars: b, first, last, close, traded, barAt, capFromDate, badPrints: bad.removed, shareBreaks: qual });
     }
     return out;
   }
@@ -159,7 +172,7 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
   await sink.ww?.(ww);
   const stockWW = new Map();
   for (const grp of ww) {
-    if (grp.childType !== "stock") continue;
+    if (grp.childType !== "stock" || grp.parentType !== "countrySector") continue;
     for (const ch of grp.children) stockWW.set(ch.key, { parentKey: grp.parentKey, dates: grp.dates, weights: ch.weights, latestFlags: grp.latestFlags });
   }
   // cap segment each security holds in the CURRENT period (assigned at the last rebalance)
@@ -223,6 +236,10 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
       const bSector = toBench(retained.get(indexKey("CW", "LCL", `C:${country}|S:${sec.sector}`)));
       const an = analyzeSecurity(b, usd, cc, { country: bCountry, countrySector: bSector, region: bRegion, global: bGlobal }, { divisor: sec.currencyDivisor }, m);
       issues.push(...securityIssues(sec, b, { countryLatest, countrySessions: sessions, recentFrom, sessionsBetween }));
+      if (s.badPrints?.length) issues.push({ id: sec.id, symbol: sec.symbol, country: sec.country, severity: "warn", rule: "bad_print_removed",
+        detail: `${s.badPrints.length} bad print(s) ignored, e.g. ${s.badPrints.slice(0, 3).map((x) => `${x.date} ${x.close} (previous close ${x.prev})`).join(", ")}: the price jumped and came straight back` });
+      if (s.shareBreaks?.length && isStock(sec)) issues.push({ id: sec.id, symbol: sec.symbol, country: sec.country, severity: "warn", rule: "share_count_break",
+        detail: `Price stepped x${s.shareBreaks.map((x) => `${x.ratio} on ${x.date}`).join(", x")} and stayed there: likely a split, reverse split or restructuring. Market caps before ${s.capFromDate} cannot be estimated, so the stock joins CW / EW indices and Weight Watcher only from then.` });
       if (!an) continue;
       if (isStock(sec) && sec.industryGroup && sec.industryGroup !== UNCLASSIFIED) {
         const rc = checkpointReturns(b.time, cc, ckC), rg = checkpointReturns(b.time, usd, ckG);

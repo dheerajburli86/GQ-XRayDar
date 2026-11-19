@@ -140,7 +140,7 @@ function GlocomLine({ g }) {
   return (
     <div className="small" style={{ marginTop: 6, display: "grid", gap: 3 }}>
       {g.label && <div>GLOCOM <GBadge small code={g.code} label={g.label} /> <span className="muted">{g.source === "heatmap" ? "heatmap" : "vs market"}</span></div>}
-      {g.locom && <div>LOCOM <GBadge small code={g.locom.code} label={g.locom.label} /> <span className="muted">vs its industry</span></div>}
+      {g.locom && <div>GLOCOM within industry <GBadge small code={g.locom.code} label={g.locom.label} /> <span className="muted">vs its industry peers</span></div>}
       {g.industry && <div>Industry <a href={href("glocom", { lv: "industry", g: g.industry.name })}>{g.industry.name}</a> <GBadge small code={g.industry.code} label={g.industry.label} /> #{g.industry.rank} of {g.industry.of} <Jump v={g.industry.jump1D} /> <span className="muted">1D</span> <Jump v={g.industry.jump1W} /> <span className="muted">1W</span></div>}
     </div>
   );

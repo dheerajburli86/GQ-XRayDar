@@ -137,7 +137,7 @@ function Method() {
       <div className="card"><h3>Methodology in force ({m.version})</h3><pre className="mono small" style={{ whiteSpace: "pre-wrap", margin: 0 }}>{JSON.stringify(m, null, 2)}</pre></div>
       <div className="card"><h3>Decisions to confirm [C]</h3>
         <ul className="small" style={{ paddingLeft: 18 }}>
-          <li>GLOCOM, LOCOM, IMB: exact formulas, inputs, thresholds. GLOCOM values are read from the heatmap (glocom_latest) as computed there; LOCOM and IMB are not implemented until defined.</li>
+          <li>GLOCOM / LOCOM: the owner's rule sheet (engine/glocom.js); a stock's GLOCOM is the heatmap's glocom_latest where present. IMB / ETI characteristics come from the ETI project.</li>
           <li>Index base: {m.baseLevel} at the first quarter-end; price return (total return needs a dividend feed).</li>
           <li>CW: full market cap with constant latest share counts (estimated) — free-float and share-count history need a data source.</li>
           <li>Cap breakpoints: Large to {m.capBreakpoints.large * 100}% of cumulative country cap, Mid to {m.capBreakpoints.mid * 100}%, Small to {m.capBreakpoints.small * 100}%; the rest is micro and excluded from CW and EW alike.</li>
@@ -158,7 +158,7 @@ function Integrations() {
   const items = [
     ["Heatmap dashboard (Supabase)", d.mode === "supabase" ? "connected" : "demo mode", "Market data (instruments, price_history, fundamentals, fx_rates, glocom_latest) is read from the heatmap database; computed results live in this app's own tas_* tables. Nothing in the heatmap is written."],
     ["GLOCOM", glocomCount ? `${glocomCount} stocks carry GLOCOM` : "not available", "Read as computed by the heatmap (glocom_latest). Integrated as a heatmap colour, screen field and stock-page item. The formula is not re-implemented here by design."],
-    ["LOCOM", "awaiting definition", "Will plug into the same field registry once its formula, inputs and thresholds are supplied."],
+    ["LOCOM", "live", "Same rule sheet as GLOCOM (engine/glocom.js). Called LOCOM when Indian industries and sectors are rated against each other."],
     ["IMB framework", "awaiting definition", "Inputs/outputs to be connected to scores and screens; no formula is invented."],
     ["Finxray feed", "not connected", "Needs the endpoint, credentials, permitted use and instrument mapping. The catalyst component of the AI score is excluded (weight re-spread) until it exists."],
     ["TA server", SERVER_ON ? "connected" : "not configured", "Login check, alerts on Telegram, morning / weekly summaries, tasks, account sync and the agent panel (VITE_TA_SERVER_URL; docs/DEPLOY.md)."],

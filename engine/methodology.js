@@ -32,6 +32,8 @@ export const METHODOLOGY = Object.freeze({
     minListingDays: 60,   // trading history before a stock can join at a rebalance
     maxStaleDays: 10,     // no trade for this many sessions before rebalance -> ineligible
     requireCap: true,     // a stock without market cap joins neither CW nor EW (matched universes)
+    maxCapUsd: 6e12,      // an estimated cap above this (larger than any company has been) is a share-count change
+    maxCapMultiple: 100,  // nor more than 100x the stock's own cap at its last bar
   },
 
   // A constituent whose data ends between rebalances leaves the index on its
@@ -77,7 +79,7 @@ export const METHODOLOGY = Object.freeze({
 
   ww: { turnLookbackQuarters: 8, sidewaysRel: 0.05 },
   rotation: { smaWeeks: 26, momentumWeeks: 4, tailWeeks: 26 },
-  glocom: { historySessions: 63 },
+  glocom: { historySessions: 70 }, // 63 sessions back = 3 months (owner: track the 3-month change too),
   regime: { erWeeks: 26, trendER: 0.35, volPctHigh: 80, volLookbackDays: 756 },
   events: { horizons: { "1M": 21, "3M": 63, "6M": 126, "12M": 252 }, excursionBars: 63, storeYears: 6 },
 

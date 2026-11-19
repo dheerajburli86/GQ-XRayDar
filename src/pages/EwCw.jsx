@@ -29,13 +29,17 @@ export default function EwCw({ route }) {
   const sm = pair?.summary;
   return (
     <div className="stack">
-      <PageHead title="EW vs CW relative strength (EWCW)" sub="Participation across the hierarchy: the equal-weighted index against its cap-weighted twin with identical constituents.">
+      <PageHead title="EW vs CW relative strength (EWCW)" sub="Participation across the hierarchy: the equal-weighted index against its cap-weighted twin with identical constituents. RSCMMA / RSCACC open the Analyst screens with the EW index as the instrument and its CW twin as the comparison.">
         <Select label="Currency" value={ccy} options={[{ value: "USD", label: "USD" }, { value: "LCL", label: "Local" }]} onChange={(v) => setCcy(v || "")} allowEmpty="Both" />
         <Select label="Level" value={lvl} options={Object.entries(LEVEL_LABEL).map(([v, l]) => ({ value: v, label: l }))} onChange={(v) => setLvl(v || "")} allowEmpty />
       </PageHead>
       {pair && <div className="card tight">
         <div className="row between" style={{ padding: "2px 6px 6px" }}>
           <b>{rows?.find((r) => r.pairKey === sel)?.name || scope} — EW/CW ratio ({ccySel})</b>
+          <div className="row">
+            <a className="btn sm primary" href={`#/screens/RSCMMA/${encodeURIComponent(`i:EW|${sel}`)}?bench=${encodeURIComponent(`idx:CW|${sel}`)}`} title="EW index relative to its CW twin, with RSI of the ratio and the yellow / red averages">RSCMMA: EW vs CW</a>
+            <a className="btn sm primary" href={`#/screens/RSCACC/${encodeURIComponent(`i:EW|${sel}`)}?bench=${encodeURIComponent(`idx:CW|${sel}`)}`} title="EW index relative to its CW twin, with RSI of the ratio and EMA 4 / 14 / 26 / 39">RSCACC: EW vs CW</a>
+          </div>
           {sm && <div className="row"><Badge kind={sm.label.startsWith("Broad") ? "g" : sm.label.startsWith("Narrow") ? "r" : ""}>{sm.label}</Badge><span className="small">1M <Pct v={sm.chg["1M"]} /> · 3M <Pct v={sm.chg["3M"]} /> · 12M <Pct v={sm.chg["12M"]} /></span></div>}
         </div>
         <TvChart height={300} series={[{ id: "r", type: "line", data: lineData(pair.dates, pair.ratio), options: { color: "#14a44d", lineWidth: 2, title: "EW/CW" }, priceLines: [{ price: 100, color: "#888", title: "base" }] }]} />
@@ -44,7 +48,10 @@ export default function EwCw({ route }) {
         columns={[{ key: "name", label: "Scope", value: (r) => r.name }, { key: "lvl", label: "Level", value: (r) => LEVEL_LABEL[r.level] || r.level }, { key: "ccy", label: "Ccy", value: (r) => r.ccy },
           { key: "ratio", label: "EW/CW", num: true, value: (r) => r.ratio },
           ...["1M", "3M", "6M", "12M"].map((h) => ({ key: `c${h.replace("M", "")}`, label: `Δ ${h}`, num: true, value: (r) => r.chg?.[h], render: (r) => <Pct v={r.chg?.[h]} /> })),
-          { key: "label", label: "Reading", value: (r) => r.label, render: (r) => <Badge kind={r.label.startsWith("Broad") ? "g" : r.label.startsWith("Narrow") ? "r" : ""}>{r.label}</Badge> }]} />
+          { key: "label", label: "Reading", value: (r) => r.label, render: (r) => <Badge kind={r.label.startsWith("Broad") ? "g" : r.label.startsWith("Narrow") ? "r" : ""}>{r.label}</Badge> },
+          { key: "charts", label: "EW vs CW charts", export: false, value: () => null, render: (r) => <span className="row" style={{ gap: 4 }} onClick={(e) => e.stopPropagation()}>
+            <a href={`#/screens/RSCMMA/${encodeURIComponent(`i:EW|${r.pairKey}`)}?bench=${encodeURIComponent(`idx:CW|${r.pairKey}`)}`}>RSCMMA</a>
+            <a href={`#/screens/RSCACC/${encodeURIComponent(`i:EW|${r.pairKey}`)}?bench=${encodeURIComponent(`idx:CW|${r.pairKey}`)}`}>RSCACC</a></span> }]} />
     </div>
   );
 }
