@@ -4,7 +4,9 @@
 // Currency, Commodity, Crypto).
 import { useEffect, useState } from "react";
 import { usePersistent } from "./storage.js";
+import { secRankCmp } from "../../engine/turnover.js";
 
+export const INDIA_PROXY_LABEL = "India CW (Nifty 500, official index)";
 export const CATEGORIES = ["All", "India", "US", "Europe", "Emerging", "Japan", "Indices", "Currency", "Commodity", "Crypto"];
 export const CATEGORY_LABEL = { India: "INDIA", US: "US", Europe: "EUROPE", Japan: "JAPAN" };
 
@@ -64,8 +66,13 @@ export function searchInstruments(d, extras, q, cat = "All", { allowIndex = true
   const out = [];
   const secMatch = (x) => !s || x.symbol.toLowerCase().startsWith(s) || (s.length >= 2 && (x.name || "").toLowerCase().includes(s));
   const rank = (x) => (x.symbol.toLowerCase() === s ? 0 : x.symbol.toLowerCase().startsWith(s) ? 1 : 2);
+  // India has no cap-weighted house index (no reliable market cap): the official Nifty 500 stands in, labelled as such
+  const proxy = d.secs.find((x) => x.country === "India" && x.symbol === "NIFTY 500" && x.assetClass === "Index");
+  if (proxy && ["All", "India", "Indices"].includes(cat) && (!s || "india cw nifty 500 official index".includes(s) || s.split(/\s+/).every((w) => "india cw nifty 500 official index".includes(w)))) {
+    out.push({ kind: "sec", id: proxy.id, label: INDIA_PROXY_LABEL, sub: "Official index proxy · chart / RSC only, not a house cap-weighted index" });
+  }
   const secs = d.secs.filter((x) => secInCategory(x, cat) && secMatch(x));
-  secs.sort((a, b) => (s ? rank(a) - rank(b) : 0) || (b.capUsdNow || b.capUsd || 0) - (a.capUsdNow || a.capUsd || 0));
+  secs.sort((a, b) => (s ? rank(a) - rank(b) : 0) || secRankCmp(a, b));
   for (const x of secs.slice(0, limit)) out.push({ kind: "sec", id: x.id, label: `${x.symbol} · ${x.name}`, sub: `${x.assetClass && x.assetClass !== "Stock" ? `${x.assetClass} · ` : ""}${x.country || ""}${isMsciEtf(x) ? " · tracks an MSCI index" : ""}` });
   for (const x of allowExtra ? extras || [] : []) {
     if (!extraInCategory(x, cat)) continue;

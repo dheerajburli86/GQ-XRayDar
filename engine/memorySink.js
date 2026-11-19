@@ -44,7 +44,7 @@ export class MemorySink {
     }
   }
   setSecurities(secs, extra) {
-    this.securities = secs.map((s) => ({ ...s, capUsdNow: extra.get(s.id)?.capUsdNow ?? null, sharesEst: this.snapshots.get(s.id)?.sharesEst ?? null }));
+    this.securities = secs.map((s) => ({ ...s, capUsdNow: extra.get(s.id)?.capUsdNow ?? null, turnoverUsd: extra.get(s.id)?.turnoverUsd ?? null, sharesEst: this.snapshots.get(s.id)?.sharesEst ?? null }));
   }
   finish(run) { this.run = run; }
 

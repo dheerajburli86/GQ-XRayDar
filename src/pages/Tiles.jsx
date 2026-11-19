@@ -21,6 +21,7 @@ import { decodeRef, encodeRef } from "../lib/instruments.js";
 import { PRICE_STYLES } from "../lib/chartStyle.js";
 import { captureStack, savePng, savePdf } from "../lib/snapshot.js";
 import { parseTilesCommand, selectTiles, pickBenchmark } from "../../engine/tiles.js";
+import { rankedByTurnover } from "../../engine/turnover.js";
 import { buildAnalystColumn, analystDate } from "../../engine/analyst.js";
 import { tfLabel } from "../../engine/calendar.js";
 import { fmtMoney } from "../lib/format.js";
@@ -49,7 +50,7 @@ export default function Tiles({ route }) {
     const bm = c.relative ? pickBenchmark(d.secs, d.indices, c) : null;
     setMax([]);
     setSt({ ...s, refs: picked.map((x) => `s:${x.id}`), tf: c.tf || s.tf, format: c.format, relative: c.relative, bench: bm ? encodeRef(bm.ref) : s.bench,
-      title: `${c.group?.name || "Largest stocks"}${c.country ? ` · ${c.country}` : ""} · top ${picked.length} by market cap` });
+      title: `${c.group?.name || "Largest stocks"}${c.country ? ` · ${c.country}` : ""} · top ${picked.length} by ${rankedByTurnover(picked) ? "turnover (traded value, not market cap)" : "market cap"}` });
     setNote({ kind: "", text: `Read as: ${c.understood.join(" · ")}${bm ? ` · comparison: ${bm.ref.label} (${bm.why})` : ""}. ${picked.length < c.n ? `Only ${picked.length} found.` : ""}` });
   };
   useEffect(() => { if (route.query.q) run(route.query.q); }, [route.query.q]); // eslint-disable-line react-hooks/exhaustive-deps

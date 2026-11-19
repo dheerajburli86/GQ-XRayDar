@@ -4,7 +4,8 @@
 // becomes a set of 6-8 charts. This file reads the sentence (deterministic, every phrase it
 // used is reported back) and picks the instruments and the comparison series. Drawing is the
 // page's job (src/pages/Tiles.jsx); the chart maths is engine/analyst.js.
-import { knownCountries } from "./geography.js";
+import { knownCountries, countryFamily } from "./geography.js";
+import { secRankCmp } from "./turnover.js";
 
 const COUNTRY_ALIASES = { us: "United States", usa: "United States", "u.s.": "United States", america: "United States", american: "United States", uk: "United Kingdom", britain: "United Kingdom",
   japanese: "Japan", indian: "India", chinese: "China", german: "Germany", korea: "South Korea", korean: "South Korea", "hong kong": "Hong Kong", swiss: "Switzerland", taiwanese: "Taiwan" };
@@ -74,7 +75,7 @@ export function parseTilesCommand(text, ctx = {}) {
 /** The n largest instruments (stocks) of a country and group, by current USD market cap. */
 export function selectTiles(secs, { country, group, n = 8 }) {
   const pool = secs.filter((s) => (s.assetClass || "Stock") === "Stock" && (!country || s.country === country) && (!group || s[group.level] === group.name));
-  pool.sort((a, b) => (b.capUsdNow || b.capUsd || 0) - (a.capUsdNow || a.capUsd || 0));
+  pool.sort(secRankCmp);
   return pool.slice(0, n);
 }
 
@@ -95,8 +96,9 @@ export function pickBenchmark(secs, indices, { country, group, benchName }) {
   if (best) return { ref: { kind: "sec", id: best.s.id, label: `${best.s.symbol} · ${best.s.name}` }, why: `listed index matching "${[...want].join(" ")}"` };
   const sector = group ? (group.level === "sector" ? group.name : secs.find((s) => s[group.level] === group.name)?.sector) : null;
   const has = (k) => (indices || []).some((x) => x.key === k);
-  if (country && sector && has(`CW|LCL|C:${country}|S:${sector}`)) return { ref: { kind: "index", key: `CW|LCL|C:${country}|S:${sector}`, label: `${country} ${sector} CW` }, why: "house country-sector index (no listed index carries the group's name)" };
-  if (country && has(`CW|LCL|C:${country}`)) return { ref: { kind: "index", key: `CW|LCL|C:${country}`, label: `${country} CW` }, why: "house country index" };
+  const F = country ? countryFamily(country) : "CW";
+  if (country && sector && has(`${F}|LCL|C:${country}|S:${sector}`)) return { ref: { kind: "index", key: `${F}|LCL|C:${country}|S:${sector}`, label: `${country} ${sector} ${F}` }, why: "house country-sector index (no listed index carries the group's name)" };
+  if (country && has(`${F}|LCL|C:${country}`)) return { ref: { kind: "index", key: `${F}|LCL|C:${country}`, label: `${country} ${F}` }, why: "house country index" };
   return { ref: { kind: "index", key: "CW|USD|G", label: "Global CW (USD)" }, why: "house global index" };
 }
 

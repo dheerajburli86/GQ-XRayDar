@@ -23,6 +23,7 @@
 // never an index level divided by a spot rate.
 
 import { METHODOLOGY } from "./methodology.js";
+import { CAP_UNRELIABLE_COUNTRIES } from "./geography.js";
 
 export const CAPS = ["Large", "Mid", "Small"];
 
@@ -142,11 +143,14 @@ export class IndexBuilder {
     const region = regionOf, cls = classificationOf;
     this.stats.countries++;
     this.stats.stocksSeen += stocks.length;
+    // A country without a reliable market cap (India) gets EQUAL-WEIGHT indices only: no cap, no
+    // size segments, no CW series, no membership rows, and it never enters a regional / global roll-up.
+    const capless = CAP_UNRELIABLE_COUNTRIES.has(country);
 
     // shares (constant, estimated) from the latest cap and the latest close
     for (const s of stocks) {
       s.fxOwn = this.fx(s.sec.currency).rate;
-      s.shares = estimateShares(s, this.fx, T);
+      s.shares = capless ? 0 : estimateShares(s, this.fx, T);
     }
 
     // country-level accumulators: scope -> {L: acc, U: acc}
@@ -171,9 +175,10 @@ export class IndexBuilder {
         if (!(s.close[start] > 0)) continue;
         let lt = start; while (lt > s.first && !s.traded[lt]) lt--;
         if (start - lt > m.eligibility.maxStaleDays) { this.stats.excluded.stale++; continue; }
-        if (!(s.shares > 0)) { if (m.eligibility.requireCap) { this.stats.excluded.noCap++; continue; } }
+        if (!capless && !(s.shares > 0)) { if (m.eligibility.requireCap) { this.stats.excluded.noCap++; continue; } }
         // before a share-count break (split / restructuring the price history does not adjust for)
         // latest shares x past price is not a market cap at all
+        if (capless) { elig.push({ s, capU: 1 }); continue; }
         if (s.capFromDate && dates[start] < s.capFromDate) { this.stats.excluded.shareBreak++; continue; }
         const capU = s.shares * s.close[start] * s.fxOwn[start];
         if (!(capU > 0)) continue;
@@ -193,6 +198,7 @@ export class IndexBuilder {
       let cum = 0;
       const members = [];
       for (const e of elig) {
+        if (capless) { e.seg = "All"; members.push(e); continue; }
         const f = total > 0 ? cum / total : 1;
         cum += e.capU;
         const seg = f < bp.large ? "Large" : f < bp.mid ? "Mid" : f < bp.small ? "Small" : null;
@@ -200,7 +206,7 @@ export class IndexBuilder {
         e.seg = seg;
         members.push(e);
       }
-      this.memberships.push({
+      if (!capless) this.memberships.push({
         country, date: dates[start], idx: start, latest: false,
         members: members.map((e) => ({ id: e.s.sec.id, sector: e.s.sec.sector, ig: e.s.sec.industryGroup, seg: e.seg, capUsd: e.capU })),
       });
@@ -213,10 +219,11 @@ export class IndexBuilder {
         let c = cells.get(key);
         if (!c) {
           c = { sector: e.s.sec.sector, seg: e.seg, mem: [], GL: 1, GU: 1 };
-          const targetsL = [cS, `${cS}|K:${e.seg}`, `${cS}|S:${e.s.sec.sector}`, `${cS}|S:${e.s.sec.sector}|K:${e.seg}`];
+          const targetsL = capless ? [cS, `${cS}|S:${e.s.sec.sector}`]
+            : [cS, `${cS}|K:${e.seg}`, `${cS}|S:${e.s.sec.sector}`, `${cS}|S:${e.s.sec.sector}|K:${e.seg}`];
           c.loc = targetsL.map(loc);
           const sec = e.s.sec.sector;
-          c.hi = ["G", `G|S:${sec}`, `G|K:${e.seg}`, `R:${region}`, `R:${region}|S:${sec}`, `R:${region}|K:${e.seg}`,
+          c.hi = capless ? [] : ["G", `G|S:${sec}`, `G|K:${e.seg}`, `R:${region}`, `R:${region}|S:${sec}`, `R:${region}|K:${e.seg}`,
             `M:${cls}`, `M:${cls}|S:${sec}`, `M:${cls}|K:${e.seg}`].map((sk) => this._higher(sk));
           cells.set(key, c);
         }
@@ -288,7 +295,7 @@ export class IndexBuilder {
       }
 
       // latest (partial-quarter) observation for Weight Watcher
-      if (k === reb.length - 1 && end > start) {
+      if (!capless && k === reb.length - 1 && end > start) {
         const latestMembers = [];
         for (const c of cells.values()) for (const x of c.mem) {
           if (x.s.last < end || !(x.s.close[end] > 0)) continue;
@@ -303,9 +310,9 @@ export class IndexBuilder {
       if (!a.U.used) continue;
       const sL = accToSeries(a.L, start0, m.baseLevel), sU = accToSeries(a.U, start0, m.baseLevel);
       const meta = { scopeKey: sk, country, region, classification: cls, currencyCode: countryCurrency };
-      this._emit("CW", "LCL", sk, sL.cw, sL, meta, countryCurrency);
+      if (!capless) this._emit("CW", "LCL", sk, sL.cw, sL, meta, countryCurrency);
       this._emit("EW", "LCL", sk, sL.ew, sL, meta, countryCurrency);
-      this._emit("CW", "USD", sk, sU.cw, sU, meta, "USD");
+      if (!capless) this._emit("CW", "USD", sk, sU.cw, sU, meta, "USD");
       this._emit("EW", "USD", sk, sU.ew, sU, meta, "USD");
     }
   }

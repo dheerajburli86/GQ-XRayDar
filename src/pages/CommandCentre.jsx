@@ -10,6 +10,7 @@ import { breadthDivergence } from "../../engine/breadth.js";
 import { writeBrief } from "../../engine/briefs.js";
 import { href } from "../lib/router.js";
 import { fmtPct } from "../lib/format.js";
+import { rowRankCmp } from "../../engine/turnover.js";
 
 export default function CommandCentre() {
   const d = useData();
@@ -24,7 +25,7 @@ export default function CommandCentre() {
   }, [d.api]);
 
   const top = useMemo(() => [...d.rows].filter((r) => r.flat.score != null).sort((a, b) => b.flat.score - a.flat.score).slice(0, 12), [d.rows]);
-  const wwUp = useMemo(() => d.rows.filter((r) => r.flat.wwTrend === "turn_up_from_low").sort((a, b) => (b.sec.capUsdNow || 0) - (a.sec.capUsdNow || 0)).slice(0, 10), [d.rows]);
+  const wwUp = useMemo(() => d.rows.filter((r) => r.flat.wwTrend === "turn_up_from_low").sort(rowRankCmp).slice(0, 10), [d.rows]);
   const stages = useMemo(() => { const c = {}; for (const r of d.rows) { const k = r.flat.stage || "—"; c[k] = (c[k] || 0) + 1; } return c; }, [d.rows]);
 
   if (loading || !data) return <Loading what="market overview" />;

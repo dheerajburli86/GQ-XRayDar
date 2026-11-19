@@ -1,6 +1,7 @@
 // Loading instruments as bar series (securities or indices), with caching and
 // currency alignment for relative-strength comparisons.
 import { majorCurrency } from "../../engine/fx.js";
+import { countryFamily } from "../../engine/geography.js";
 
 const cache = new Map();
 export const clearSeriesCache = () => cache.clear();
@@ -63,4 +64,4 @@ export async function alignCurrency(api, a, b) {
 }
 
 /** Default benchmark for a security: its country CW index in local currency. */
-export const defaultBenchmark = (sec) => (sec ? { kind: "index", key: `CW|LCL|C:${sec.country}`, label: `${sec.country} CW (local)` } : { kind: "index", key: "CW|USD|G", label: "Global CW (USD)" });
+export const defaultBenchmark = (sec) => (sec ? { kind: "index", key: `${countryFamily(sec.country)}|LCL|C:${sec.country}`, label: `${sec.country} ${countryFamily(sec.country)} (local)` } : { kind: "index", key: "CW|USD|G", label: "Global CW (USD)" });

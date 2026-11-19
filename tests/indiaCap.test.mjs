@@ -12,7 +12,7 @@ test("India stocks carry no market cap, other countries keep theirs", () => {
   assert.ok(us.capLocal > 0 && us.capUsd > 0);
 });
 
-test("demo engine run: India joins no cap-based index and no Weight Watcher group, other countries still do", async () => {
+test("demo engine run: India gets equal-weight indices only and no Weight Watcher group, other countries still do", async () => {
   const { generateDemo, demoSource } = await import("../engine/demo/generator.js");
   const { runPipeline } = await import("../engine/pipeline.js");
   const { MemorySink } = await import("../engine/memorySink.js");
@@ -22,7 +22,12 @@ test("demo engine run: India joins no cap-based index and no Weight Watcher grou
   const india = keys.filter((k) => /C:India/.test(k));
   const us = keys.filter((k) => /C:United States/.test(k));
   assert.ok(us.length > 0, `expected US country indices among ${keys.length} keys`);
-  assert.equal(india.length, 0, `India index keys remain: ${india.slice(0, 3)}`);
+  assert.ok(india.length > 0, "expected India equal-weight indices");
+  assert.ok(india.every((k) => k.startsWith("EW|")), `India has a non-EW key: ${india.find((k) => !k.startsWith("EW|"))}`);
+  assert.ok(india.some((k) => k === "EW|LCL|C:India") && india.some((k) => k === "EW|USD|C:India"), "country EW missing");
+  assert.ok(!india.some((k) => /\|K:/.test(k)), "India has a size-segment index");
+  // India is never part of a regional / global roll-up: those keys exist but India's stocks are not in them
+  assert.ok(!sink.memberships?.some?.((x) => x.country === "India"), "India memberships remain");
   assert.ok(!sink.ww.some((w) => /India/.test(JSON.stringify(w.key || w.parentKey || ""))), "India Weight Watcher rows remain");
   const indiaSecs = sink.securities.filter((x) => x.country === "India");
   assert.ok(indiaSecs.length > 0 && indiaSecs.every((x) => x.capUsdNow == null), "India securities still carry a cap");

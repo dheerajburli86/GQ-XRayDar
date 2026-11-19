@@ -10,6 +10,8 @@ import { InstrumentPicker, ScopeFilter, applyScope, idColumns, fieldColumn } fro
 import { loadInstrument, alignCurrency } from "../lib/series.js";
 import { analyzeRsc as rscSignals } from "../../engine/signals.js";
 import { changeOver, HBARS } from "../lib/indexMath.js";
+import { countryFamily } from "../../engine/geography.js";
+import { rowRankCmp } from "../../engine/turnover.js";
 
 const BENCH = [{ value: "country", label: "Country" }, { value: "countrySector", label: "Sector (in country)" }, { value: "region", label: "Region" }, { value: "global", label: "Global" }];
 
@@ -82,17 +84,18 @@ function GroupRanking() {
 function presetPairs(d, sec) {
   const out = [];
   if (sec) {
-    out.push(["Stock vs its sector", { kind: "sec", id: sec.id }, { kind: "index", key: `CW|LCL|C:${sec.country}|S:${sec.sector}` }]);
-    out.push(["Stock vs its country", { kind: "sec", id: sec.id }, { kind: "index", key: `CW|LCL|C:${sec.country}` }]);
+    const F = countryFamily(sec.country), hasCap = F === "CW";
+    out.push(["Stock vs its sector", { kind: "sec", id: sec.id }, { kind: "index", key: `${F}|LCL|C:${sec.country}|S:${sec.sector}` }]);
+    out.push(["Stock vs its country", { kind: "sec", id: sec.id }, { kind: "index", key: `${F}|LCL|C:${sec.country}` }]);
     out.push(["Stock vs its region", { kind: "sec", id: sec.id }, { kind: "index", key: `CW|USD|R:${sec.region}` }]);
     out.push(["Stock vs global", { kind: "sec", id: sec.id }, { kind: "index", key: "CW|USD|G" }]);
-    out.push(["Sector vs country", { kind: "index", key: `CW|LCL|C:${sec.country}|S:${sec.sector}` }, { kind: "index", key: `CW|LCL|C:${sec.country}` }]);
-    out.push(["Sector vs global sector", { kind: "index", key: `CW|USD|C:${sec.country}|S:${sec.sector}` }, { kind: "index", key: `CW|USD|G|S:${sec.sector}` }]);
-    out.push(["Country vs region", { kind: "index", key: `CW|USD|C:${sec.country}` }, { kind: "index", key: `CW|USD|R:${sec.region}` }]);
-    out.push(["Country vs global", { kind: "index", key: `CW|USD|C:${sec.country}` }, { kind: "index", key: "CW|USD|G" }]);
-    out.push(["Country EW vs CW", { kind: "index", key: `EW|LCL|C:${sec.country}` }, { kind: "index", key: `CW|LCL|C:${sec.country}` }]);
-    out.push(["Country small vs large cap", { kind: "index", key: `CW|LCL|C:${sec.country}|K:Small` }, { kind: "index", key: `CW|LCL|C:${sec.country}|K:Large` }]);
-    out.push(["Country mid vs large cap", { kind: "index", key: `CW|LCL|C:${sec.country}|K:Mid` }, { kind: "index", key: `CW|LCL|C:${sec.country}|K:Large` }]);
+    out.push(["Sector vs country", { kind: "index", key: `${F}|LCL|C:${sec.country}|S:${sec.sector}` }, { kind: "index", key: `${F}|LCL|C:${sec.country}` }]);
+    if (hasCap) out.push(["Sector vs global sector", { kind: "index", key: `CW|USD|C:${sec.country}|S:${sec.sector}` }, { kind: "index", key: `CW|USD|G|S:${sec.sector}` }]);
+    if (hasCap) out.push(["Country vs region", { kind: "index", key: `CW|USD|C:${sec.country}` }, { kind: "index", key: `CW|USD|R:${sec.region}` }]);
+    if (hasCap) out.push(["Country vs global", { kind: "index", key: `CW|USD|C:${sec.country}` }, { kind: "index", key: "CW|USD|G" }]);
+    if (hasCap) out.push(["Country EW vs CW", { kind: "index", key: `EW|LCL|C:${sec.country}` }, { kind: "index", key: `CW|LCL|C:${sec.country}` }]);
+    if (hasCap) out.push(["Country small vs large cap", { kind: "index", key: `CW|LCL|C:${sec.country}|K:Small` }, { kind: "index", key: `CW|LCL|C:${sec.country}|K:Large` }]);
+    if (hasCap) out.push(["Country mid vs large cap", { kind: "index", key: `CW|LCL|C:${sec.country}|K:Mid` }, { kind: "index", key: `CW|LCL|C:${sec.country}|K:Large` }]);
   }
   out.push(["Global EW vs CW", { kind: "index", key: "EW|USD|G" }, { kind: "index", key: "CW|USD|G" }]);
   out.push(["Global small vs large cap", { kind: "index", key: "CW|USD|G|K:Small" }, { kind: "index", key: "CW|USD|G|K:Large" }]);
@@ -103,7 +106,7 @@ function presetPairs(d, sec) {
 
 function PairMatrix({ route }) {
   const d = useData();
-  const secId = route.query.id || [...d.rows].sort((a, b) => (b.sec.capUsdNow || 0) - (a.sec.capUsdNow || 0))[0]?.id;
+  const secId = route.query.id || [...d.rows].sort(rowRankCmp)[0]?.id;
   const sec = d.secById.get(secId);
   const presets = useMemo(() => presetPairs(d, sec), [d, sec]);
   const [num, setNum] = useState(null), [den, setDen] = useState(null), [tf, setTf] = useState("W");

@@ -15,6 +15,7 @@ import { navigate } from "../lib/router.js";
 import { RuleEditor, ReportCard } from "../components/RuleCard.jsx";
 import { walkForward, sensitivity } from "../../engine/validation.js";
 import { DEFAULT_PARAMS, RULES, describeRule } from "../../engine/rules.js";
+import { rowRankCmp } from "../../engine/turnover.js";
 
 const TYPES = Object.keys(EVENT_LABEL);
 
@@ -87,7 +88,7 @@ function Custom() {
   const [run, setRun] = useState(0);
   const universe = useMemo(() => {
     if (wl && wls[wl]) return wls[wl].ids;
-    return applyScope(d.rows, scope).sort((a, b) => (b.sec.capUsdNow || 0) - (a.sec.capUsdNow || 0)).slice(0, 400).map((r) => r.id);
+    return applyScope(d.rows, scope).sort(rowRankCmp).slice(0, 400).map((r) => r.id);
   }, [wl, wls, scope, d.rows]);
   const { data, loading } = useAsync(async () => (run ? d.api.eventsMany(universe) : null), [run]);
   const events = useMemo(() => (data ? Object.entries(data).flatMap(([id, ev]) => ev.filter((e) => e.type === type).map((e) => ({ ...e, id, sec: d.secById.get(id) }))) : []), [data, type, d.secById]);
@@ -130,7 +131,7 @@ function Histogram({ values }) {
 
 function Library({ route }) {
   const d = useData();
-  const id = route.query.id || [...d.rows].sort((a, b) => (b.sec.capUsdNow || 0) - (a.sec.capUsdNow || 0))[0]?.id;
+  const id = route.query.id || [...d.rows].sort(rowRankCmp)[0]?.id;
   const sec = d.secById.get(id);
   const peers = useMemo(() => d.rows.filter((r) => r.sec.country === sec?.country && r.sec.sector === sec?.sector).map((r) => r.id).slice(0, 200), [d.rows, sec]);
   const { data, loading } = useAsync(() => d.api.eventsMany(peers), [peers.join()]);
@@ -158,7 +159,7 @@ function Library({ route }) {
 
 function Log({ route }) {
   const d = useData();
-  const id = route.query.id || [...d.rows].sort((a, b) => (b.sec.capUsdNow || 0) - (a.sec.capUsdNow || 0))[0]?.id;
+  const id = route.query.id || [...d.rows].sort(rowRankCmp)[0]?.id;
   const sec = d.secById.get(id);
   const [type, setType] = useState(null);
   const { data, loading } = useAsync(() => d.api.events(id), [id]);
@@ -191,7 +192,7 @@ function WalkForward() {
   const [busy, setBusy] = useState(null);
   const [res, setRes] = useState(null);
   const run = async () => {
-    const ids = on === "stock" ? (inst ? [inst.id] : []) : on === "wl" ? wls[wl]?.ids || [] : [...d.rows].filter((r) => (r.sec.assetClass || "Stock") === "Stock").sort((a, b) => (b.sec.capUsdNow || 0) - (a.sec.capUsdNow || 0)).slice(0, 60).map((r) => r.id);
+    const ids = on === "stock" ? (inst ? [inst.id] : []) : on === "wl" ? wls[wl]?.ids || [] : [...d.rows].filter((r) => (r.sec.assetClass || "Stock") === "Stock").sort(rowRankCmp).slice(0, 60).map((r) => r.id);
     const bars = new Map();
     for (let i = 0; i < ids.length; i++) { setBusy(`Loading prices ${i + 1} / ${ids.length}…`); try { const b = await d.api.bars(ids[i]); if (b) bars.set(ids[i], b); } catch { /* skip */ } }
     setBusy("Testing every parameter on every fold…");

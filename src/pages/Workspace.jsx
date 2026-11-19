@@ -13,6 +13,7 @@ import { STUDIES } from "../../engine/studies.js";
 import { studyOverlays, projectionOverlays } from "../lib/chartOverlays.js";
 import { usePersistent, uid } from "../lib/storage.js";
 import { useChartKeys } from "../lib/chartKeys.js";
+import { rowRankCmp } from "../../engine/turnover.js";
 
 const INDICATORS = [{ value: "price", label: "Price + EMA 20/50/200" }, { value: "line", label: "Price line (green up / red down)" }, { value: "rsi", label: "RSI" }, { value: "macd", label: "MACD" }, { value: "rsc", label: "RSC vs benchmark" }, { value: "volume", label: "Volume" }, { value: "mma", label: "Price + MMA groups" },
   ...STUDIES.filter((x) => !["avwap", "pivots"].includes(x.key)).map((x) => ({ value: `st:${x.key}`, label: x.label }))];
@@ -20,7 +21,7 @@ const newPanel = (inst) => ({ id: uid(), inst, tf: "D", ind: "price", bench: { k
 
 export default function Workspace() {
   const d = useData();
-  const top = useMemo(() => [...d.rows].sort((a, b) => (b.sec.capUsdNow || 0) - (a.sec.capUsdNow || 0)).slice(0, 4), [d.rows]);
+  const top = useMemo(() => [...d.rows].sort(rowRankCmp).slice(0, 4), [d.rows]);
   const [layouts, setLayouts] = usePersistent("workspaces", {});
   const [cur, setCur] = usePersistent("workspace.current", null);
   const panels = cur?.panels || top.map((r) => newPanel({ kind: "sec", id: r.id, label: `${r.sec.symbol} · ${r.sec.name}` }));

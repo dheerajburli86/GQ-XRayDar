@@ -15,7 +15,7 @@ import { METHODOLOGY, methodologyHash } from "./methodology.js";
 import { quarterEndIndices, lowerBound, addDays } from "./calendar.js";
 import { buildFxTable, fxProvenance } from "./fx.js";
 import { toSecurity, isAnalysableRow } from "./classification.js";
-import { countryMeta } from "./geography.js";
+import { countryMeta, CAP_UNRELIABLE_COUNTRIES } from "./geography.js";
 import { IndexBuilder, indexKey, compactSeries } from "./indexEngine.js";
 import { computeWeightWatcher, wwTrend } from "./weightWatcher.js";
 import { analyzeSecurity, detectEvents, withForwardReturns } from "./signals.js";
@@ -28,6 +28,7 @@ import { securityIssues, applyCorporateActions, removeBadPrints, shareBreaks } f
 import { BacktestAccumulator } from "./backtest.js";
 import { GroupAccumulator, checkpointReturns, rateGlocom, groupMoves } from "./glocom.js";
 import { UNCLASSIFIED } from "./classification.js";
+import { turnoverUsd } from "./turnover.js";
 
 /**
  * source: see docs/ARCHITECTURE.md ("Source interface")
@@ -117,7 +118,8 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
   const builder = new IndexBuilder({ dates, rebalanceIdx: reb, fx, methodology: m });
   const retained = new Map(); // benchmark series kept for pass 2 / rotation: key -> {dates, level}
   const ewcwRows = [], regimeRows = {};
-  const keepKey = (k) => k.startsWith("CW|LCL|C:") || /^CW\|USD\|(G|R:|M:)/.test(k) || /^EW\|USD\|(G|R:|M:)$/.test(k) || /^EW\|LCL\|C:[^|]*$/.test(k);
+  const keepKey = (k) => k.startsWith("CW|LCL|C:") || /^CW\|USD\|(G|R:|M:)/.test(k) || /^EW\|USD\|(G|R:|M:)$/.test(k) || /^EW\|LCL\|C:[^|]*$/.test(k)
+    || (k.startsWith("EW|LCL|C:") && [...CAP_UNRELIABLE_COUNTRIES].some((c) => k.startsWith(`EW|LCL|C:${c}`)));
   async function drainSeries() {
     const recs = [...builder.series.values()];
     builder.series.clear();
@@ -135,7 +137,8 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
       const pk = `${rec.ccy}|${rec.scopeKey}`;
       if (!byScope.has(pk)) byScope.set(pk, {});
       byScope.get(pk)[rec.family] = { meta, lite };
-      if (rec.family === "CW" && (!rec.cap) && (rec.ccy === "USD" || rec.scopeType === "C")) {
+      const equalOnly = rec.family === "EW" && CAP_UNRELIABLE_COUNTRIES.has(rec.country); // no CW exists for it
+      if ((rec.family === "CW" || equalOnly) && (!rec.cap) && (rec.ccy === "USD" || rec.scopeType === "C")) {
         const rg = regime(lite, m.regime);
         if (rg) regimeRows[rec.key] = { ...rg, name: meta.name };
       }
@@ -204,7 +207,9 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
     if (!stocks.length) continue;
     const ccy = countryCcy(country, byCountry.get(country));
     const fxCC = fx(ccy).rate;
-    const bCountry = toBench(retained.get(indexKey("CW", "LCL", `C:${country}`)));
+    // a country without a reliable cap has no CW: its equal-weight index is its benchmark
+    const bFam = CAP_UNRELIABLE_COUNTRIES.has(country) ? "EW" : "CW";
+    const bCountry = toBench(retained.get(indexKey(bFam, "LCL", `C:${country}`)));
     const bRegion = toBench(retained.get(indexKey("CW", "USD", `R:${geo[country].region}`)));
     const bGlobal = toBench(retained.get(indexKey("CW", "USD", "G")));
     const funds = fundAll ? await source.fundamentals(stocks.map((s) => s.sec.id)) : new Map();
@@ -233,7 +238,7 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
         const rate = t >= 0 ? fxo[t] : fxo[0], rcc = t >= 0 ? fxCC[t] : fxCC[0];
         usd[k] = b.close[k] * rate; cc[k] = (b.close[k] * rate) / rcc;
       }
-      const bSector = toBench(retained.get(indexKey("CW", "LCL", `C:${country}|S:${sec.sector}`)));
+      const bSector = toBench(retained.get(indexKey(bFam, "LCL", `C:${country}|S:${sec.sector}`)));
       const an = analyzeSecurity(b, usd, cc, { country: bCountry, countrySector: bSector, region: bRegion, global: bGlobal }, { divisor: sec.currencyDivisor }, m);
       issues.push(...securityIssues(sec, b, { countryLatest, countrySessions: sessions, recentFrom, sessionsBetween }));
       if (s.badPrints?.length) issues.push({ id: sec.id, symbol: sec.symbol, country: sec.country, severity: "warn", rule: "bad_print_removed",
@@ -253,7 +258,8 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
       const fm = f ? fundamentalMetrics(f, b.close[b.time.length - 1] / sec.currencyDivisor, fxToReported(fx, sec, f, T)) : null;
       const wws = stockWW.get(sec.id);
       const wwT = wws ? { ...wwTrend(wws.weights), parentKey: wws.parentKey } : null;
-      snaps.push({ id: sec.id, snap: an.snapshot, f: fm, ww: wwT, glocom: glocom.get(sec.id) || null, eti: eti.get(sec.id) || null, capUsdNow: capNow ? Math.round(capNow) : null, sharesEst: shares });
+      const turn = turnoverUsd(usd.map((u) => u / (sec.currencyDivisor || 1)), b.volume);
+      snaps.push({ id: sec.id, turnoverUsd: turn, snap: an.snapshot, f: fm, ww: wwT, glocom: glocom.get(sec.id) || null, eti: eti.get(sec.id) || null, capUsdNow: capNow ? Math.round(capNow) : null, sharesEst: shares });
 
       // events (+ WW turning points) with forward returns
       let ev = detectEvents(an, b, bCountry, cc, m);
@@ -307,7 +313,7 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
       x.flat = buildFlat({ sec: { ...sec, capUsdNow: x.capUsdNow }, snap: x.snap, f: x.f, ww: x.ww, glocom: x.glocom, eti: x.eti, score: x.score, rsRank: x.rsRank });
     }
     await sink.countryResults?.(country, { snapshots: snaps, events, issues });
-    for (const x of snaps) allSnaps.push({ id: x.id, capUsdNow: x.capUsdNow });
+    for (const x of snaps) allSnaps.push({ id: x.id, capUsdNow: x.capUsdNow, turnoverUsd: x.turnoverUsd ?? null });
     issuesAll.push(...issues.filter((x) => x.severity !== "info"));
     run.stats.issues = (run.stats.issues || 0) + issues.length;
   }
@@ -319,11 +325,12 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
   const rot = {};
   const scopesForRotation = [["G", "USD"], ...[...new Set(countries.map((c) => geo[c].region))].map((r) => [`R:${r}`, "USD"]), ...countries.map((c) => [`C:${c}`, "LCL"])];
   for (const [sc, ccyK] of scopesForRotation) {
-    const base = retained.get(indexKey("CW", ccyK, sc));
+    const fam = CAP_UNRELIABLE_COUNTRIES.has(sc.slice(2)) && sc.startsWith("C:") ? "EW" : "CW";
+    const base = retained.get(indexKey(fam, ccyK, sc));
     if (!base) continue;
     const sectors = [];
     for (const [k, v] of retained) {
-      const prefix = `CW|${ccyK}|${sc}|S:`;
+      const prefix = `${fam}|${ccyK}|${sc}|S:`;
       if (k.startsWith(prefix) && !k.slice(prefix.length).includes("|")) sectors.push({ key: k, name: k.slice(prefix.length), series: v });
     }
     if (sectors.length >= 2) rot[sc] = rotation(sectors, base, m.rotation);

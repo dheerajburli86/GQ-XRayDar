@@ -114,3 +114,8 @@ export function countryMeta(country) {
 }
 
 export const knownCountries = () => Object.keys(C);
+
+/** Family of a country's house benchmark: cap-weighted, except where no reliable market cap exists (India: equal-weight). */
+export const countryFamily = (country) => (CAP_UNRELIABLE_COUNTRIES.has(country) ? "EW" : "CW");
+/** Display tag for it ("CW" / "EW"). */
+export const countryBenchLabel = (country) => `${country} ${countryFamily(country)}`;

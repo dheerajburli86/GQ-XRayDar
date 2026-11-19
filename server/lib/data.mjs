@@ -29,7 +29,7 @@ export function createData(pool, log = console.log) {
     const sec = secs.rows.map((r) => ({
       id: r.id, symbol: r.symbol, name: r.name, universe: r.universe, exchange: r.exchange, country: r.country, region: r.region, classification: r.classification,
       currency: r.currency, currencyMajor: r.currency_major, currencyDivisor: r.currency_divisor, countryCurrency: r.country_currency, sector: r.sector,
-      industryGroup: r.industry_group, industry: r.industry, capSegment: r.cap_segment, capUsdNow: r.cap_usd_now, active: r.active,
+      industryGroup: r.industry_group, industry: r.industry, capSegment: r.cap_segment, capUsdNow: r.cap_usd_now, turnoverUsd: r.turnover_usd ?? null, active: r.active,
       assetClass: r.asset_class || "Stock",
     }));
     const secById = new Map(sec.map((x) => [x.id, x]));

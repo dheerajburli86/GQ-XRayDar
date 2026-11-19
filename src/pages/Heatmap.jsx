@@ -12,6 +12,7 @@ import { changeOver, HBARS } from "../lib/indexMath.js";
 import { fmtPct, fmtMoney, fmtNum } from "../lib/format.js";
 import { CAPS } from "../../engine/indexEngine.js";
 import { glocomBand } from "../../engine/glocom.js";
+import { rowRankCmp } from "../../engine/turnover.js";
 
 const COLOR_BY = [
   { value: "ret", label: "Absolute return" }, { value: "rsc", label: "RSC vs country" }, { value: "rsi", label: "RSI (weekly)" },
@@ -57,16 +58,19 @@ export default function Heatmap({ route }) {
   const stockRows = useMemo(() => {
     if (level !== "stocks") return [];
     let rows = applyScope(d.rows.filter((r) => (r.sec.assetClass || "Stock") === "Stock"), { region: q.region, country: q.country, sector: q.sector, cap: q.cap || (s.capFilter !== "All" ? s.capFilter : null), industryGroup: q.ig });
-    if (!q.country && !q.region && !q.sector) rows = [...rows].sort((a, b) => (b.sec.capUsdNow || 0) - (a.sec.capUsdNow || 0)).slice(0, 600);
+    if (!q.country && !q.region && !q.sector) rows = [...rows].sort(rowRankCmp).slice(0, 600);
     return rows;
   }, [level, d.rows, q.region, q.country, q.sector, q.cap, q.ig, s.capFilter]);
 
   const items = useMemo(() => {
     if (level === "stocks") {
-      const tot = stockRows.reduce((a, r) => a + (r.sec.capUsdNow || 0), 0);
+      // no cap anywhere in the view (India): tile size = traded value, and the tooltip says so
+      const byTurn = stockRows.length > 0 && stockRows.every((r) => !(r.sec.capUsdNow > 0));
+      const sizeOf = (r) => (byTurn ? r.sec.turnoverUsd || 0 : r.sec.capUsdNow || 0);
+      const tot = stockRows.reduce((a, r) => a + sizeOf(r), 0);
       const parentRet = data?.parent ? changeOver(data.parent, HBARS[h]) : null;
       return stockRows.map((r) => {
-        const f = r.flat, cap = r.sec.capUsdNow || 0;
+        const f = r.flat, cap = sizeOf(r);
         const ret = (ccy === "USD" ? f[`retUsd${h}`] : f[`ret${h}`]);
         const val = s.relative && ret != null && parentRet != null ? ret - parentRet : ret;
         let color, sub;
@@ -84,7 +88,7 @@ export default function Heatmap({ route }) {
         return {
           key: r.id, label: r.sec.symbol, title: `${r.sec.symbol} · ${r.sec.name}`, size: sizeBy === "equal" ? 1 : Math.max(cap, 1), color, sub, fg: colorBy === "glocom" ? GLOCOM_FG(color) : undefined,
           onClick: () => navigate(`stock/${r.id}`),
-          tip: [["Price", `${fmtNum(f.close)} ${r.sec.currency}`], ["Market cap", cap ? fmtMoney(cap) : "not published"], ["Weight in view", tot ? `${((cap / tot) * 100).toFixed(2)}%` : "—"],
+          tip: [["Price", `${fmtNum(f.close)} ${r.sec.currency}`], byTurn ? ["Traded value / day (60-session median) · sized by turnover, not market cap", cap ? fmtMoney(cap) : "—"] : ["Market cap", cap ? fmtMoney(cap) : "not published"], [byTurn ? "Share of traded value in view" : "Weight in view", tot ? `${((cap / tot) * 100).toFixed(2)}%` : "—"],
             [`Return ${h} (${ccy === "USD" ? "USD" : "local"})`, fmtPct(ret)], [`RSC vs country ${h === "1W" ? "1M" : h}`, fmtPct(f[`rscChg_country_${h === "1W" ? "1M" : h}`])],
             ["RSI (W)", fmtNum(f.rsiW, 1)], ["MMA (W)", f.mmaW || "—"], ["Sector", r.sec.sector], ["Cap segment", r.sec.capSegment || "—"]],
         };

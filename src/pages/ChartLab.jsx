@@ -21,6 +21,7 @@ import { loadInstrument } from "../lib/series.js";
 import { aggregate, emaStrict, rsi, macd } from "../../engine/indicators.js";
 import { heikinAshi, supportResistance, renko, kagi, pointFigure, volumeProfile, fibonacci, valueArea } from "../../engine/chartTools.js";
 import { chartPatterns } from "../../engine/patterns.js";
+import { countryFamily } from "../../engine/geography.js";
 import { getDerivApi } from "../data/derivApi.js";
 import { NSE_INDEX_UNDERLYINGS } from "../../engine/deriv/nse.js";
 import { candlePatternsAt, CANDLE_PATTERNS } from "../../engine/candles.js";
@@ -42,6 +43,7 @@ import { evalFormula } from "../../engine/formula.js";
 import { seasonality, seasonalOverlay } from "../../engine/seasonality.js";
 import { rsc } from "../../engine/indicators.js";
 import { alignCurrency } from "../lib/series.js";
+import { rowRankCmp } from "../../engine/turnover.js";
 
 const UP = "#16a34a", DOWN = "#dc2626";
 const STYLES = [["candles", "Candles"], ["ha", "Heikin-Ashi"], ["line", "Line"], ["bar", "Bars"], ["renko", "Renko"], ["kagi", "Kagi"], ["pnf", "Point & Figure"], ["tpo", "Market profile"]];
@@ -66,7 +68,7 @@ const L = (time, vals) => { const out = []; for (let i = 0; i < time.length; i++
 
 export default function ChartLab({ route }) {
   const d = useData();
-  const first = useMemo(() => [...d.rows].sort((a, b) => (b.sec.capUsdNow || 0) - (a.sec.capUsdNow || 0))[0]?.id, [d.rows]);
+  const first = useMemo(() => [...d.rows].sort(rowRankCmp)[0]?.id, [d.rows]);
   const [lastInst, setLastInst] = useLastInstrument();
   const lastSecId = lastInst?.startsWith("s:") ? lastInst.slice(2) : null;
   const id = route.args[0] || (lastSecId && d.secById.has(lastSecId) ? lastSecId : null) || first;
@@ -231,7 +233,7 @@ export default function ChartLab({ route }) {
           <span className="small muted">Compare with</span>
           <InstrumentPicker value={v.cmp} onChange={(r) => set({ cmp: r })} width={220} placeholder="Index or stock…" />
           {v.cmp && <button className="btn sm ghost" onClick={() => set({ cmp: null })}>✕</button>}
-          <button className="btn sm" onClick={() => set({ cmp: { kind: "index", key: `CW|LCL|C:${sec.country}`, label: `${sec.country} CW (local)` } })}>vs its market</button>
+          <button className="btn sm" onClick={() => set({ cmp: { kind: "index", key: `${countryFamily(sec.country)}|LCL|C:${sec.country}`, label: `${sec.country} ${countryFamily(sec.country)} (local)` } })}>vs its market</button>
           <span className="sep" />
           <span className="small muted">Draw</span>
           <select className="input sm" value={tool} onChange={(e) => setTool(e.target.value)} title="Drawing tools (saved for this instrument)">
@@ -511,7 +513,7 @@ function FormulaScan({ f, onClose }) {
   const [wls] = usePersistent("watchlists", {});
   const [wl, setWl] = useState(Object.keys(wls)[0] || "");
   const [tf, setTf] = useState("D");
-  const ids = useMemo(() => (wl && wls[wl]?.ids?.length ? wls[wl].ids : [...d.rows].sort((a, b) => (b.sec.capUsdNow || 0) - (a.sec.capUsdNow || 0)).slice(0, 40).map((r) => r.id)).slice(0, 80), [wl, wls, d.rows]);
+  const ids = useMemo(() => (wl && wls[wl]?.ids?.length ? wls[wl].ids : [...d.rows].sort(rowRankCmp).slice(0, 40).map((r) => r.id)).slice(0, 80), [wl, wls, d.rows]);
   const { data, loading } = useAsync(async () => {
     const out = [];
     for (const sid of ids) {

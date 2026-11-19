@@ -24,6 +24,7 @@ import { usePersistent } from "../lib/storage.js";
 import { captureStack, savePng, savePdf } from "../lib/snapshot.js";
 import { tfLabel } from "../../engine/calendar.js";
 import { ANALYST_MODES, ACC_PERIODS, MMA_SHORT, buildAnalystColumn, analystDate } from "../../engine/analyst.js";
+import { rowRankCmp } from "../../engine/turnover.js";
 
 const fmt = (v) => (v == null ? "—" : v.toFixed(2));
 
@@ -34,7 +35,7 @@ export default function StackedScreens({ route }) {
   // the instrument: from the address, else the one last opened on any chart screen (owner:
   // changing screen keeps the ticker), else the largest stock. Stocks, indices and extras all chart.
   const [lastInst, setLastInst] = useLastInstrument();
-  const instKey = route.args[1] || (route.query.id ? `s:${route.query.id}` : null) || lastInst || `s:${[...d.rows].sort((a, b) => (b.sec.capUsdNow || 0) - (a.sec.capUsdNow || 0))[0]?.id}`;
+  const instKey = route.args[1] || (route.query.id ? `s:${route.query.id}` : null) || lastInst || `s:${[...d.rows].sort(rowRankCmp)[0]?.id}`;
   const inst = useMemo(() => decodeRef(instKey, d), [instKey, d]);
   const secId = inst?.kind === "sec" ? inst.id : null;
   const sec = secId ? d.secById.get(secId) : null;

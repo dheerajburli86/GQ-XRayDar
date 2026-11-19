@@ -7,6 +7,7 @@ import { Select, Seg, Pct, Badge, StockLink } from "./ui.jsx";
 import { DataTable } from "./DataTable.jsx";
 import { RULES, DEFAULT_PARAMS, describeRule, normalizeParams } from "../../engine/rules.js";
 import { ruleScorecard } from "../../engine/scorecard.js";
+import { rowRankCmp } from "../../engine/turnover.js";
 
 export const RULE_OPTIONS = Object.entries(RULES).map(([k, r]) => ({ value: k, label: `${r.group}: ${r.label({ ...(DEFAULT_PARAMS[k] || {}) })}` }));
 const PARAM_LABEL = { level: "RSI level", period: "Period (candles)", price: "Price", bars: "Look-back (candles)", pct: "Spread %" };
@@ -35,7 +36,7 @@ export function ReportCard({ rule, ids = null, sample = 120, title = "Report car
   const norm = normalizeParams(rule.rule, rule.params);
   const run = async () => {
     if (norm.error) return;
-    const pick = (ids?.length ? ids : [...d.rows].filter((r) => (r.sec.assetClass || "Stock") === "Stock").sort((a, b) => (b.sec.capUsdNow || 0) - (a.sec.capUsdNow || 0)).slice(0, sample).map((r) => r.id)).slice(0, 400);
+    const pick = (ids?.length ? ids : [...d.rows].filter((r) => (r.sec.assetClass || "Stock") === "Stock").sort(rowRankCmp).slice(0, sample).map((r) => r.id)).slice(0, 400);
     const bars = new Map();
     for (let i = 0; i < pick.length; i++) {
       setBusy(`Loading prices ${i + 1} / ${pick.length}…`);
