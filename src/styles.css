@@ -246,3 +246,13 @@ textarea.notes { width: 100%; min-height: 70px; }
 .navitem.pointed::after { content: "◀"; margin-left: auto; color: var(--gq); font-size: 16px; font-weight: 700; animation: navarrow .8s ease-in-out infinite; pointer-events: none; }
 @keyframes navpoint { 50% { outline-offset: 3px; } }
 @keyframes navarrow { 50% { transform: translateX(6px); } }
+
+/* Back button: big and thick on every page and drill-down */
+.backbar { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 12px; padding: 6px 0 10px; background: var(--bg, var(--panel)); }
+.backbtn { display: inline-flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 800; line-height: 1; padding: 12px 26px; min-height: 52px; border-radius: 12px; border: 3px solid var(--gq); background: var(--gq); color: #fff; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+.backbtn:hover { filter: brightness(1.12); }
+.backbtn:active { transform: translateY(1px); }
+.backarrow { font-size: 28px; line-height: 1; }
+.backhome { font-size: 15px; font-weight: 600; padding: 10px 14px; border-radius: 10px; border: 2px solid var(--line); color: var(--text); }
+.backhome:hover { background: var(--hover); text-decoration: none; }
+@media (max-width: 700px) { .backbtn { font-size: 18px; padding: 10px 20px; min-height: 48px; } }

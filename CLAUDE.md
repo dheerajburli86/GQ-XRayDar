@@ -246,3 +246,7 @@ Opening an equal-weight house index (`i:EW|...`) on RSCMMA / RSCACC defaults its
 ## Start page (added 2026-11-20)
 
 The app opens on `home` = `src/pages/Start.jsx` and never opens a page for the user (owner's rule). It lists every left-menu item, in menu order, with a sentence of what it is for (`WHAT`, keyed by page key; the menu itself is `src/lib/nav.js`, shared with the Start page). Hovering a row (or tapping "◀ Show me") adds the class `pointed` to the matching `.navitem` (outline plus a moving ◀) and scrolls it into view. A new menu item shows up here by itself; add its sentence to `WHAT`. The market summary is the `market` page, menu "Command centre".
+
+## Back button (added 2026-11-20)
+
+`BackBar` in `App.jsx` sits at the top of every page except Start: a big thick green "← Back" (browser history, so every URL-based drill-down, including heatmap, explorer and chart pages, steps back one level) plus a "⌂ Start" link. If Back does not change the address (deep link, nothing behind), it goes to Start. A drill-down that keeps its state outside the URL would not be covered, so keep drill state in the query string.

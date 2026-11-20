@@ -84,6 +84,22 @@ const pages = {
 };
 
 
+/** Big, thick Back button on every page and every drill-down (owner's request). All drills are URL-based, so the browser history is the stack. */
+function BackBar() {
+  const goBack = () => {
+    const before = window.location.hash;
+    if (window.history.length > 1) window.history.back();
+    // arrived on a deep link, or Back did not move: fall back to the Start page
+    setTimeout(() => { if (window.location.hash === before) navigate("home"); }, 350);
+  };
+  return (
+    <div className="backbar">
+      <button className="backbtn" onClick={goBack} title="Go back one step (Alt+←)"><span className="backarrow">←</span> Back</button>
+      <a className="backhome" href={href("home")} title="Start page">⌂ Start</a>
+    </div>
+  );
+}
+
 function CommandBar() {
   const d = useData();
   const [q, setQ] = useState("");
@@ -258,6 +274,7 @@ function Shell() {
         </div>
         <DataWindow />
         <div className="content">
+          {route.page !== "home" && <BackBar />}
           {loadErr && (
             <div className="note warn row between" role="alert" style={{ marginBottom: 8 }}>
               <span>Some data on this page could not be loaded ({String(loadErr).slice(0, 160)}). Check the connection and try again.</span>
