@@ -238,3 +238,7 @@ redeploy ENDS the job that is running. On 2026-11-19 a push at 06:26 UTC killed 
 ## EWCW on the stacked screens (added 2026-11-20)
 
 Opening an equal-weight house index (`i:EW|...`) on RSCMMA / RSCACC defaults its benchmark to the cap-weighted twin (`CW|...`), so the screen reads EW vs CW. All CW / EW levels (country, sector, industry group) are in ticker search under Indices; a different benchmark can still be picked.
+
+## GQ Agent panel starts clean (added 2026-11-20)
+
+`AgentPanel` history is in-memory only and is cleared whenever the panel is opened (button or `openAgent`), so nobody lands on the previous person's question. ⌫ still clears mid-visit.

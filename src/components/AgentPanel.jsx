@@ -8,7 +8,7 @@ import { useAccount } from "./Account.jsx";
 import { api } from "../lib/server.js";
 import { answer } from "../../engine/assistant.js";
 import { href } from "../lib/router.js";
-import { usePersistent, load, save, uid } from "../lib/storage.js";
+import { load, save, uid } from "../lib/storage.js";
 import { parseProjectionText, computeProjection } from "../../engine/projection.js";
 import { formulaFromText } from "../../engine/formula.js";
 import { aggregate } from "../../engine/indicators.js";
@@ -78,13 +78,13 @@ export function AgentPanel() {
   const d = useData();
   const acct = useAccount();
   const [open, setOpen] = useState(false);
-  const [hist, setHist] = usePersistent("agent.history", []);
+  const [hist, setHist] = useState([]); // clean slate every visit: never kept across opens or reloads
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const endRef = useRef(null);
   const viaAgent = acct.serverOn && acct.me;
 
-  const ask = async (text, ctx = null) => {
+  const ask = async (text, ctx = null, fresh = false) => {
     if (!text.trim() || busy) return;
     setBusy(true); setQ("");
     const entry = { q: text, at: new Date().toISOString(), ctx: ctx?.symbol || null };
@@ -92,7 +92,7 @@ export function AgentPanel() {
       const local = await chartAction(text, ctx || pageContext, d).catch((e) => [{ kind: "text", text: `Could not do that: ${e.message}` }]);
       if (local) { entry.blocks = local; entry.source = "built-in"; }
       else if (viaAgent) {
-        const history = hist.slice(-5).flatMap((h) => [{ role: "user", content: h.q }, { role: "assistant", content: h.text || (h.blocks || []).map((b) => b.text || (b.items || []).join("; ")).join("\n") }]);
+        const history = (fresh ? [] : hist).slice(-5).flatMap((h) => [{ role: "user", content: h.q }, { role: "assistant", content: h.text || (h.blocks || []).map((b) => b.text || (b.items || []).join("; ")).join("\n") }]);
         const r = await api("POST", "/api/agent/chat", { message: text, history, context: ctx });
         entry.source = r.source; entry.notice = r.notice;
         if (r.answer) entry.text = r.answer; else entry.blocks = r.blocks;
@@ -101,19 +101,19 @@ export function AgentPanel() {
         entry.blocks = r.blocks; entry.source = "built-in";
       }
     } catch (e) { entry.blocks = [{ kind: "text", text: `Could not answer: ${e.message}` }]; }
-    setHist((h) => [...h.slice(-40), entry]);
+    setHist((h) => [...(fresh ? [] : h).slice(-40), entry]);
     setBusy(false);
   };
 
   useEffect(() => {
-    const h = (e) => { setOpen(true); if (e.detail?.question) ask(e.detail.question, e.detail.context || null); };
+    const h = (e) => { const fresh = !open; if (fresh) setHist([]); setOpen(true); if (e.detail?.question) ask(e.detail.question, e.detail.context || null, fresh); };
     window.addEventListener("gqta-agent", h);
     return () => window.removeEventListener("gqta-agent", h);
   });
   useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [hist, open, busy]);
   useEffect(() => { document.body.classList.toggle("agent-open", open); }, [open]);
 
-  if (!open) return <button className="agent-fab" onClick={() => setOpen(true)} title="Ask the GQ Agent">✦ GQ Agent</button>;
+  if (!open) return <button className="agent-fab" onClick={() => { setHist([]); setQ(""); setOpen(true); }} title="Ask the GQ Agent">✦ GQ Agent</button>;
   return (
     <aside className="agent-panel card">
       <div className="row" style={{ justifyContent: "space-between" }}>
