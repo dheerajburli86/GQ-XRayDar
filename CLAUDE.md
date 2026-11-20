@@ -223,3 +223,9 @@ redeploy ENDS the job that is running. On 2026-11-19 a push at 06:26 UTC killed 
 - Weights = each constituent's cap on the START date (`tas_index_values.cap_usd`); change = index LEVEL change (not cap change, so a rebalance does not read as a move). Indices without a cap history (India's equal-weight ones) carry equal weights and the page says so.
 - "Reverse CCR for ranges": end date fixed, start steps back one trading day per row, newest start first (`reverseRange`). Periods are multi-select (1D ... 1Y, YTD). Both tables export to CSV.
 - Not the heatmap's market-breadth page (`Breadth.jsx`, advance/decline): that one is unchanged.
+
+## Improvements list items 30-31 (added 2026-11-20)
+
+- **Item 30**: the top-down explorer now lists Sub-industries (owner's US workbook + rules) under a sector or industry group; clicking one (`sub=` in the URL) shows its stocks, and the stocks tables carry a Sub-industry column.
+- **Item 31**: Market breadth has a Period selector (1M ... All, or Custom from / to). It slices the charts and KPIs; the data itself is unchanged.
+- **Item 29 (house indices as rows in scanners / relative strength / screener) is NOT done.** It needs the engine to analyse each CW / EW index series as a security (close-only bars) and write snapshots + `tas_security` rows for them (`pipeline.js`, after the country loop); until then those pages list stocks, ETFs and the heatmap's own indices only.

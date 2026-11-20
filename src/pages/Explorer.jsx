@@ -17,7 +17,7 @@ const H = ["1W", "1M", "3M", "6M", "12M"];
 export default function Explorer({ route }) {
   const d = useData();
   const q = route.query;
-  const level = q.ig ? "ig" : q.sector ? "sector" : q.cap ? "cap" : q.country ? "country" : q.region ? "region" : "global";
+  const level = q.ig || q.sub ? "ig" : q.sector ? "sector" : q.cap ? "cap" : q.country ? "country" : q.region ? "region" : "global";
   const fam = d.settings.family, rel = d.settings.relative;
   const ccy = q.country && d.settings.ccy === "LCL" ? "LCL" : "USD";
   const groupBy = q.group || (level === "global" ? "region" : level === "region" ? "country" : level === "country" ? "cap" : "sector");
@@ -55,7 +55,22 @@ export default function Explorer({ route }) {
     return { parent, ser, ww, pairs };
   }, [parentKey, children.map((c) => c.scope).join(",")]);
 
-  const rowsAtLevel = useMemo(() => applyScope(d.rows, { region: q.region, country: q.country, cap: q.cap, sector: q.sector, industryGroup: q.ig }), [d.rows, q.region, q.country, q.cap, q.sector, q.ig]);
+  const rowsAtLevel = useMemo(() => {
+    const rs = applyScope(d.rows, { region: q.region, country: q.country, cap: q.cap, sector: q.sector, industryGroup: q.ig });
+    return q.sub ? rs.filter((r) => r.sec.subIndustry === q.sub) : rs;
+  }, [d.rows, q.region, q.country, q.cap, q.sector, q.ig, q.sub]);
+  // sub-industries inside the current sector / industry group (stocks without one, outside the owner's US workbook and rules, are not listed)
+  const subs = useMemo(() => {
+    if (level !== "sector" && level !== "ig") return [];
+    const m = new Map();
+    for (const r of rowsAtLevel) {
+      const k = r.sec.subIndustry; if (!k) continue;
+      if (!m.has(k)) m.set(k, { name: k, n: 0, cap: 0, w: {} });
+      const g = m.get(k); g.n++; const c = r.sec.capUsdNow || 0; g.cap += c;
+      for (const h of H) { const v = r.flat[`retUsd${h}`]; if (v != null && c) { g.w[h] = (g.w[h] || 0) + v * c; g[`c${h}`] = (g[`c${h}`] || 0) + c; } }
+    }
+    return [...m.values()].map((g) => ({ ...g, ret: Object.fromEntries(H.map((h) => [h, g[`c${h}`] ? g.w[h] / g[`c${h}`] : null])) }));
+  }, [rowsAtLevel, level]);
   const igs = useMemo(() => {
     if (level !== "sector") return [];
     const m = new Map();
@@ -72,7 +87,8 @@ export default function Explorer({ route }) {
   if (q.country) crumbs.push([q.country, { region: q.region, country: q.country }]);
   if (q.cap) crumbs.push([`${q.cap} Cap`, { region: q.region, country: q.country, cap: q.cap }]);
   if (q.sector) crumbs.push([q.sector, { region: q.region, country: q.country, cap: q.cap, sector: q.sector }]);
-  if (q.ig) crumbs.push([q.ig, { ...q }]);
+  if (q.ig) crumbs.push([q.ig, { ...q, sub: undefined }]);
+  if (q.sub) crumbs.push([q.sub, { ...q }]);
 
   const pRet = (h) => changeOver(data?.parent, HBARS[h]);
   const childRows = children.map((c, i) => {
@@ -118,9 +134,14 @@ export default function Explorer({ route }) {
               <DataTable columns={[{ key: "name", label: "Industry group", value: (g) => g.name, render: (g) => <a href={href("explorer", { ...q, ig: g.name })}>{g.name}</a> }, { key: "n", label: "Stocks", num: true, value: (g) => g.n },
                 ...H.map((h) => ({ key: h, label: h, num: true, value: (g) => g.ret[h], render: (g) => <Pct v={g.ret[h]} /> }))]} rows={igs.map((g) => ({ ...g, id: g.name }))} exportName="industry_groups" pageSize={30} />
             </div>)}
+          {subs.length > 0 && !q.sub && (
+            <div className="card"><h3>Sub-industries ({subs.length})</h3>
+              <DataTable columns={[{ key: "name", label: "Sub-industry", value: (g) => g.name, render: (g) => <a href={href("explorer", { ...q, sub: g.name })}>{g.name}</a> }, { key: "n", label: "Stocks", num: true, value: (g) => g.n },
+                ...H.map((h) => ({ key: h, label: h, num: true, value: (g) => g.ret[h], render: (g) => <Pct v={g.ret[h]} /> }))]} rows={subs.map((g) => ({ ...g, id: g.name }))} exportName="sub_industries" pageSize={30} />
+            </div>)}
           {(level === "sector" || level === "ig" || level === "cap" || level === "country") && (
             <div className="card"><h3>Stocks at this level ({rowsAtLevel.length})</h3>
-              <DataTable columns={[...idColumns(["country", "sector", "industryGroup", "cap", "capUsd"]), fieldColumn(`ret${d.settings.horizon}`), fieldColumn(`rscChg_country_${d.settings.horizon === "1W" ? "1M" : d.settings.horizon === "YTD" ? "3M" : d.settings.horizon}`), fieldColumn("mmaW"), fieldColumn("wwTrend"), fieldColumn("score")]}
+              <DataTable columns={[...idColumns(["country", "sector", "industryGroup", "subIndustry", "cap", "capUsd"]), fieldColumn(`ret${d.settings.horizon}`), fieldColumn(`rscChg_country_${d.settings.horizon === "1W" ? "1M" : d.settings.horizon === "YTD" ? "3M" : d.settings.horizon}`), fieldColumn("mmaW"), fieldColumn("wwTrend"), fieldColumn("score")]}
                 rows={rowsAtLevel} initialSort={{ key: "capUsd", dir: "desc" }} exportName="stocks" pageSize={40} />
             </div>)}
         </>

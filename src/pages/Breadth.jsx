@@ -16,12 +16,32 @@ export default function Breadth({ route }) {
   const [scope, setScope] = useState(route.query.scope || "G");
   const ccy = scope.startsWith("C:") ? "LCL" : "USD";
   const [sync] = useState(() => new ChartSync());
-  const { data, loading } = useAsync(async () => {
+  const { data: raw, loading } = useAsync(async () => {
     const [b, cw, ew] = await Promise.all([d.api.breadth(scope), d.api.indexSeries(`CW|${ccy}|${scope}`), d.api.indexSeries(`EW|${ccy}|${scope}`)]);
     const sectorKeys = (keys || []).filter((k) => k.light && k.key.startsWith(`${scope}|S:`));
     const sectors = await Promise.all(sectorKeys.map(async (k) => ({ name: k.key.split("|S:")[1], rec: await d.api.breadth(k.key) })));
     return { b, cw, ew, sectors };
   }, [scope, keys?.length]);
+  // period: a standard look-back or the user's own from / to dates
+  const [per, setPer] = useState("All");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const data = useMemo(() => {
+    if (!raw?.b) return raw;
+    const dates = raw.b.dates, last = dates.at(-1);
+    let a = "0000-00-00", z = to || last;
+    if (per === "Custom") a = from || a;
+    else if (per !== "All") {
+      const e = new Date(`${(to || last)}T00:00:00Z`);
+      if (per === "YTD") a = `${(to || last).slice(0, 4)}-01-01`;
+      else { const k = +per.slice(0, -1); if (per.endsWith("M")) e.setUTCMonth(e.getUTCMonth() - k); else e.setUTCFullYear(e.getUTCFullYear() - k); a = e.toISOString().slice(0, 10); }
+    }
+    const idx = []; dates.forEach((x, i) => { if (x >= a && x <= z) idx.push(i); });
+    if (idx.length < 2) return raw;
+    const cut = (o) => { if (!o) return o; const out = {}; for (const [k, v] of Object.entries(o)) out[k] = Array.isArray(v) && v.length === dates.length ? idx.map((i) => v[i]) : v; return out; };
+    const cutSeries = (s) => { if (!s) return s; const ok = idx.length ? s.dates : []; const set = new Set(idx.map((i) => dates[i])); const keep = []; ok.forEach((x, i) => { if (set.has(x)) keep.push(i); }); const out = {}; for (const [k, v] of Object.entries(s)) out[k] = Array.isArray(v) && v.length === s.dates.length ? keep.map((i) => v[i]) : v; return out; };
+    return { ...raw, b: cut(raw.b), cw: cutSeries(raw.cw), ew: cutSeries(raw.ew), sectors: raw.sectors };
+  }, [raw, per, from, to]);
   const scopes = (keys || []).filter((k) => !k.light).map((k) => k.key).sort((a, b) => (a === "G" ? -1 : b === "G" ? 1 : a.localeCompare(b)));
   const label = (k) => (k === "G" ? "Global" : `${k.slice(2)} (${{ R: "region", M: "classification", C: "country" }[k[0]]})`);
   const charts = useMemo(() => {
@@ -43,6 +63,8 @@ export default function Breadth({ route }) {
     <div className="stack">
       <PageHead title="Market breadth" sub="Participation behind the index. A rising index with deteriorating breadth is flagged automatically.">
         <Select label="Market" value={scope} options={scopes.map((k) => ({ value: k, label: label(k) }))} onChange={setScope} />
+        <Select label="Period" value={per} options={["1M", "3M", "6M", "YTD", "1Y", "3Y", "5Y", "All", "Custom"]} onChange={(v) => setPer(v || "All")} />
+        {per === "Custom" && <><label className="lbl-ctl">From<input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label><label className="lbl-ctl">To<input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label></>}
       </PageHead>
       {loading || !charts ? <Loading /> : (
         <>
