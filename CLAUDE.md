@@ -210,3 +210,9 @@ redeploy ENDS the job that is running. On 2026-11-19 a push at 06:26 UTC killed 
 - Tables (`.tbl`) wrap headers and cap text columns; numeric columns are never truncated.
 - **Z** zooms the chart under the cursor out (`zoomOutAt` in TvChart). **Callout** drawing = text box with chosen background and text colour (chart lab overlay).
 - US default RSC benchmark in the stacked screens is the S&P 500 (`^GSPC`), as BSE 500 is for India.
+
+## Added 2026-11-20 (evening): rule-based US classification, crypto hidden, pair bar on Workspace
+
+- **US stocks outside the workbook** are placed by their FMP profile industry (`engine/reference/usIndustryRules.js`, `classSource: us_rule`). Rules are the dominant workbook placement per FMP industry plus hand rows (Shell Companies -> Financials, Marine Shipping, Coal, Uranium, Education ...); Biotechnology splits on cap (>= USD 2B commercial-stage, else clinical-stage). The sub-industry on a rule row is the commonest one for that FMP industry, NOT a per-company judgement: extend `US_CLASS` for names where it matters. `cli/pgSource.mjs` reads `fundamentals.profile->>'industry'` as `fmp_industry` (us_stocks only). Workbook rows always win.
+- **Crypto is hidden in XRayDar only**: `HIDE_CRYPTO` in `src/lib/features.js`; filtered in `supabaseApi.securities()`, `server/lib/data.mjs` and the ticker categories. Flip to false to bring it back.
+- **Period-pair bar** (Daily | Weekly, Monthly | Quarterly, Half-yearly | 9-month, Yearly | 2-year) on the stacked screens and Workspace. Single-window screens (Chart lab, Tiles, stock page) have one period by design.

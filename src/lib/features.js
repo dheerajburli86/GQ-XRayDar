@@ -6,3 +6,6 @@ export const HIDDEN = {
   chartEvents: "Chart events tab: there is no corporate-event / economic-calendar feed, so it would be an empty calendar.",
 };
 export const isHidden = (key) => Object.prototype.hasOwnProperty.call(HIDDEN, key);
+
+/** Owner, 2026-11-20: hide crypto everywhere in XRayDar for now. Set to false to bring it back (also restore the Crypto ticker category). */
+export const HIDE_CRYPTO = true;

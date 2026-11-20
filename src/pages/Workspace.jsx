@@ -6,6 +6,8 @@ import { useAsync } from "../lib/useAsync.js";
 import { PageHead, Seg, Select, Loading } from "../components/ui.jsx";
 import { TvChart, ChartSync, lineData } from "../components/TvChart.jsx";
 import { InstrumentPicker, TfPicker } from "../components/pickers.jsx";
+import { PRESETS } from "../components/AnalystPane.jsx";
+import { tfLabel } from "../../engine/calendar.js";
 import { loadInstrument, alignCurrency } from "../lib/series.js";
 import { aggregate, ema, emaStrict, rsi, macd, rsc } from "../../engine/indicators.js";
 import { priceSeries } from "../lib/chartStyle.js";
@@ -36,6 +38,7 @@ export default function Workspace() {
   return (
     <div className="stack">
       <PageHead title="Multi-chart workspace" sub="Several instruments, benchmarks and indicator panels at once. Layouts are saved in this browser.">
+        <div className="seg" title="Period pairs: the panels take the left and right period in turn">{PRESETS.map(([a, b]) => <button key={a + b} className={panels.length > 0 && panels.every((x, k) => x.tf === (k % 2 ? b : a)) ? "on" : ""} onClick={() => update({ panels: panels.map((x, k) => ({ ...x, tf: k % 2 ? b : a })) })}>{`${tfLabel(a)} | ${tfLabel(b)}`}</button>)}</div>
         <Seg value={cols} options={[1, 2, 3].map((c) => ({ value: c, label: `${c} col` }))} onChange={(c) => update({ cols: c })} />
         <Seg value={linked ? "on" : "off"} options={[{ value: "on", label: "Linked scroll" }, { value: "off", label: "Independent" }]} onChange={(v) => update({ linked: v === "on" })} />
         <button className="btn sm" onClick={() => update({ panels: [...panels, newPanel(panels[0]?.inst || { kind: "index", key: "CW|USD|G", label: "Global CW (USD)" })] })}>+ Panel</button>

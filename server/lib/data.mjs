@@ -26,7 +26,7 @@ export function createData(pool, log = console.log) {
       pool.query(`select * from tas_security`), pool.query(`select id, flat, rs_rank from tas_snapshot`), pool.query(`select index_key, data from tas_regime`),
     ]);
     const keys = run.stats?.screenKeys || SCREEN_KEYS;
-    const sec = secs.rows.map((r) => ({
+    const sec = secs.rows.filter((r) => r.asset_class !== "Crypto").map((r) => ({
       id: r.id, symbol: r.symbol, name: r.name, universe: r.universe, exchange: r.exchange, country: r.country, region: r.region, classification: r.classification,
       currency: r.currency, currencyMajor: r.currency_major, currencyDivisor: r.currency_divisor, countryCurrency: r.country_currency, sector: r.sector,
       industryGroup: r.industry_group, industry: r.industry, subIndustry: r.sub_industry ?? null, capSegment: r.cap_segment, capUsdNow: r.cap_usd_now, turnoverUsd: r.turnover_usd ?? null, active: r.active,

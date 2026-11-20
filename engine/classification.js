@@ -8,6 +8,7 @@
 import { classifyGics, OTHERS } from "./reference/gics.js";
 import { INDUSTRY_MAP } from "./reference/industryMap.js";
 import { US_CLASS } from "./reference/usClassification.js";
+import { usRuleFor } from "./reference/usIndustryRules.js";
 import { canonicalCountry, countryMeta, CAP_UNRELIABLE_COUNTRIES } from "./geography.js";
 import { majorCurrency } from "./fx.js";
 
@@ -67,7 +68,13 @@ export function toSecurity(row, indiaMap = null) {
   const fund = universe === "us_etfs" && row.etf_category === "currency" ? "Currency" : FUND_UNIVERSES[universe] || null;
   const g = fund ? { sector: fund, industryGroup: row.etf_category || fund, source: "asset_class" } : classifyGics({ symbol: row.symbol, industry, sector: row.sector, universe });
   // owner's US workbook: sector / industry / sub-industry for US stocks and US-listed ADRs (replaces the GICS-derived labels where listed)
-  const us = universe === "us_stocks" ? US_CLASS[row.symbol] : null;
+  let us = universe === "us_stocks" ? US_CLASS[row.symbol] || null : null;
+  let usSource = us ? "us_workbook" : null;
+  if (universe === "us_stocks" && !us) {
+    // not in the workbook: place by the FMP profile industry (best fit), else keep the GICS-derived sector with no sub-industry
+    us = usRuleFor(row.fmp_industry, row.market_cap_usd != null ? Number(row.market_cap_usd) : null);
+    if (us) usSource = "us_rule";
+  }
   const country = canonicalCountry(row.country) || UNIVERSE_COUNTRY[universe] || (universe === "india_stocks" ? "India" : universe === "us_stocks" ? "United States" : null);
   const meta = countryMeta(country);
   const currency = row.currency || meta.currency || "USD";
@@ -96,7 +103,7 @@ export function toSecurity(row, indiaMap = null) {
     industryGroup: us ? us[1] : g.industryGroup,
     industry: us ? us[1] : industry || null,
     subIndustry: us ? us[2] : null,
-    classSource: us ? "us_workbook" : g.source,
+    classSource: us ? usSource : g.source,
     capLocal: !noCap && capLocal && capLocal > 0 ? capLocal : null, // in capCurrency (major units)
     capCurrency: !noCap && capCurrency ? majorCurrency(capCurrency).major : null,
     capUsd: !noCap && row.market_cap_usd != null ? Number(row.market_cap_usd) : null,
