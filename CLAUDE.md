@@ -255,3 +255,5 @@ The app opens on `home` = `src/pages/Start.jsx` and never opens a page for the u
 
 - **What-if price** (`engine/whatif.js`, panel in `StackedScreens.jsx`): a typed close for the last stored session replaces that close; a later date appends a candle (open = previous close). Earlier dates are ignored. Everything on both windows (RSIs, averages, RSC) is rebuilt from the changed daily bars; the panel shows before / with-price closes and RSI. NOTHING is saved or sent anywhere, it clears when the instrument changes, and it is always badged HYPOTHETICAL. RSC carries the price with the last stored FX ratio. Exchange holidays are not known, so a holiday weekday is accepted. Tests: `tests/whatif.test.mjs`.
 - **⤢ Full screen** button (toolbar) puts both windows on the whole screen; the bar there changes the instrument, comparison, periods, and switches Both / Left only / Right only. The per-column ⤢ and double-click are kept.
+
+- **Voice input (mic buttons in the command bar and Assistant) is hidden** via `HIDE_VOICE` in `src/lib/features.js` (owner, 2026-11-20); set it to false to bring it back.

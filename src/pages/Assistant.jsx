@@ -1,3 +1,4 @@
+import { HIDE_VOICE } from "../lib/features.js";
 import { useEffect, useRef, useState } from "react";
 import { useData } from "../data/store.jsx";
 import { PageHead, Badge } from "../components/ui.jsx";
@@ -54,7 +55,7 @@ export default function Assistant({ route }) {
       </div>
       <div className="row">
         <input style={{ flex: 1 }} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ask(q)} placeholder="Ask about a stock, a screen, rotation, breadth or regime…" disabled={busy} />
-        <button className={`btn ${listening ? "primary" : ""}`} onClick={voice}>🎙</button>
+        {!HIDE_VOICE && <button className={`btn ${listening ? "primary" : ""}`} onClick={voice}>🎙</button>}
         <button className="btn primary" onClick={() => ask(q)} disabled={busy}>{busy ? "…" : "Ask"}</button>
       </div>
     </div>

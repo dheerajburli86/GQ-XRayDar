@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
-import { isHidden } from "./lib/features.js";
+import { isHidden, HIDE_VOICE } from "./lib/features.js";
 import { DataWindow } from "./components/DataWindow.jsx";
 import { DataProvider, useData } from "./data/store.jsx";
 import { useRoute, navigate, href } from "./lib/router.js";
@@ -157,7 +157,7 @@ function CommandBar() {
         onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={(e) => { if (e.key === "Enter" && q.trim()) run(q.trim()); if (e.key === "Escape") setOpen(false); }} />
       <div className="btns">
-        <button className={`btn sm ${listening ? "primary" : "ghost"}`} title="Voice command" onClick={voice}>{listening ? "● rec" : "🎙"}</button>
+        {!HIDE_VOICE && <button className={`btn sm ${listening ? "primary" : "ghost"}`} title="Voice command" onClick={voice}>{listening ? "● rec" : "🎙"}</button>}
       </div>
       {open && q.trim() && (
         <div className="dropdown">

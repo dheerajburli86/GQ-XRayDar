@@ -9,3 +9,6 @@ export const isHidden = (key) => Object.prototype.hasOwnProperty.call(HIDDEN, ke
 
 /** Owner, 2026-11-20: hide crypto everywhere in XRayDar for now. Set to false to bring it back (also restore the Crypto ticker category). */
 export const HIDE_CRYPTO = true;
+
+/** Owner, 2026-11-20: voice input (the mic buttons) is hidden for now. Set to false to bring it back. */
+export const HIDE_VOICE = true;
