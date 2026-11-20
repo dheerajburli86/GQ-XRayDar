@@ -57,6 +57,11 @@ for (const symbol of await symbols()) {
   const c = await pool.connect();
   try {
     await c.query("begin");
+    // the bars we remove belong to the previous holder of the ticker, but keep them (tas_ table, RLS on, nothing reads it)
+    await c.query(`create table if not exists tas_price_backfill_backup (like price_history)`);
+    await c.query(`alter table tas_price_backfill_backup add column if not exists backed_up_at timestamptz default now()`);
+    await c.query(`alter table tas_price_backfill_backup enable row level security`);
+    await c.query(`insert into tas_price_backfill_backup (instrument_id, date, open, high, low, close, volume, last_price) select instrument_id, date, open, high, low, close, volume, last_price from price_history where instrument_id = $1 and date < $2`, [id, plan.deleteBefore]);
     await c.query(`delete from price_history where instrument_id = $1 and date < $2`, [id, plan.deleteBefore]);
     for (let i = 0; i < plan.insert.length; i += 500) {
       const part = plan.insert.slice(i, i + 500);
