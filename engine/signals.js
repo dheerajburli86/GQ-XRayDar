@@ -132,6 +132,14 @@ function rscBoxFor(daily, own, bser, tf) {
   return s.value.length >= 20 ? packBox(mmaBreakoutSummary(s.time, s.value, tf)) : null;
 }
 
+/** Owner's RSAACC pane: the RSI of the RSC line (RSI period from the methodology), same yellow / red summary. */
+function rsiRscBoxFor(daily, own, bser, tf, period) {
+  if (!bser || !bser.time?.length || !own) return null;
+  const s = rsc(daily.time, own, bser.time, bser.close, tf, 100);
+  if (s.value.length < 40) return null;
+  return packBox(mmaBreakoutSummary(s.time, rsi(s.value, period), tf));
+}
+
 /**
  * Full analysis of one security.
  *   daily: own trading bars {time[],open[],high[],low[],close[],volume[]} in trading currency
@@ -207,7 +215,11 @@ export function analyzeSecurity(daily, usdClose, ccClose, bench, ctx = {}, m = M
       volRatio: r2(A.volRatio[k]),
       // owner's multi-period consolidation -> breakout on the price pane (RSIMMA) and on the RSC
       // pane against the country index (RSCMMA); see engine/consolidation.js
-      ...(tf === "Y" ? {} : { mmaBox: packBox(mmaBreakoutSummary(A.b.time, A.c, tf)), rscBox: rscBoxFor(daily, ccClose, bench?.country, tf) }),
+      ...(tf === "Y" ? {} : {
+        mmaBox: packBox(mmaBreakoutSummary(A.b.time, A.c, tf)), rscBox: rscBoxFor(daily, ccClose, bench?.country, tf),
+        // RSIMMA pane (RSI of price) and RSAACC pane (RSI of the RSC line): the owner ranks these above RSC
+        rsiBox: packBox(mmaBreakoutSummary(A.b.time, A.r1, tf)), rsiRscBox: rsiRscBoxFor(daily, ccClose, bench?.country, tf, m.indicators.rsiPeriod),
+      }),
       ...(tf === "D" || tf === "W" ? { studies: studiesAt(A.b) } : {}),
     };
   }

@@ -105,6 +105,13 @@ for (const tf of ["D", "W", "M", "Q", "N"]) {
   add(`boxTurn${tf}`, `Last breakout turned a downtrend (${T})`, "Trend & MMA", "bool", (r) => P(r)?.upTurn);
   add(`rscBoxState${tf}`, `RSC yellow/red averages: state (${T})`, "Relative strength", "cat", (r) => Q(r)?.st, { values: BOX_STATES });
   add(`rscBoxBreakout${tf}`, `RSC breakout from consolidation, recent (${T})`, "Relative strength", "bool", (r) => Q(r)?.rUp);
+  const RI = (r) => r.snap?.tf?.[tf]?.rsiBox, RR = (r) => r.snap?.tf?.[tf]?.rsiRscBox;
+  add(`rsiBoxState${tf}`, `RSI yellow/red averages: state (${T})`, "Momentum", "cat", (r) => RI(r)?.st, { values: BOX_STATES });
+  add(`rsiBoxBreakout${tf}`, `RSI breakout from consolidation, recent (${T})`, "Momentum", "bool", (r) => RI(r)?.rUp);
+  add(`rsiBoxBreakoutDate${tf}`, `RSI last breakout date (${T})`, "Momentum", "text", (r) => RI(r)?.upE);
+  add(`rsiRscBoxState${tf}`, `RSI of RSC yellow/red averages: state (${T})`, "Relative strength", "cat", (r) => RR(r)?.st, { values: BOX_STATES });
+  add(`rsiRscBoxBreakout${tf}`, `RSI of RSC breakout from consolidation, recent (${T})`, "Relative strength", "bool", (r) => RR(r)?.rUp);
+  add(`rsiRscBoxBreakoutDate${tf}`, `RSI of RSC last breakout date (${T})`, "Relative strength", "text", (r) => RR(r)?.upE);
   add(`rscBoxBreakoutDate${tf}`, `RSC last breakout date (${T})`, "Relative strength", "text", (r) => Q(r)?.upE);
 }
 // how many of the six higher-timeframe screens (price and RSC on weekly, monthly, quarterly) show
@@ -115,6 +122,11 @@ add("boxBreakoutScreens", "Breakouts on weekly / monthly / quarterly screens (of
   (r) => { const t = r.snap?.tf; if (!t) return null; let k = 0; for (const tf of HIGHER) { if (t[tf]?.mmaBox?.rUp) k++; if (t[tf]?.rscBox?.rUp) k++; } return k; });
 add("boxConsolidatingScreens", "Consolidating on weekly / monthly / quarterly screens (of 6)", "Trend & MMA", "num",
   (r) => { const t = r.snap?.tf; if (!t) return null; let k = 0; for (const tf of HIGHER) { if (t[tf]?.mmaBox?.st === "consolidating") k++; if (t[tf]?.rscBox?.st === "consolidating") k++; } return k; });
+// Owner's hierarchy: RSIMMA and RSAACC (RSI of RSC) matter most, RSC confirms later. Counts per tier, still counts not scores.
+add("boxPrimaryBreakoutScreens", "Breakouts on RSIMMA / RSAACC, weekly / monthly / quarterly (of 6)", "Trend & MMA", "num",
+  (r) => { const t = r.snap?.tf; if (!t) return null; let k = 0; for (const tf of HIGHER) { if (t[tf]?.rsiBox?.rUp) k++; if (t[tf]?.rsiRscBox?.rUp) k++; } return k; });
+add("boxPrimaryConsolidatingScreens", "Consolidating on RSIMMA / RSAACC, weekly / monthly / quarterly (of 6)", "Trend & MMA", "num",
+  (r) => { const t = r.snap?.tf; if (!t) return null; let k = 0; for (const tf of HIGHER) { if (t[tf]?.rsiBox?.st === "consolidating") k++; if (t[tf]?.rsiRscBox?.st === "consolidating") k++; } return k; });
 // standard studies (owner's feature list, item 1), daily and weekly candles
 for (const tf of ["D", "W"]) {
   const T = tf === "D" ? "Daily" : "Weekly";

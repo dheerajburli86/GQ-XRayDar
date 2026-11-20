@@ -30,7 +30,7 @@ export const MODEL_VERSIONS = {
   projection: "1.0 target / measured / ATR / percent / analogue / slope",
   seasonality: "1.0 close-to-close by weekday and month, average yearly path",
   tpo: "1.0 market profile from candles (one letter per candle), 70% value area",
-  consolidationBreakout: "1.0 yellow/red fan on log price and on RSC; first fan after a gap, >= 15 candles of history (calibrated on the owner's dated examples, 43 of 53)",
+  consolidationBreakout: "1.1 yellow/red fan on log price, on RSC, on RSI (RSIMMA) and on RSI of RSC (RSAACC); first fan after a gap, >= 15 candles of history (calibrated on the owner's dated examples, 43 of 53)",
 };
 
 export const ENGINE_VERSION = "2026.11.19";

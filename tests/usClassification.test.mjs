@@ -34,3 +34,8 @@ test("biotech splits on size; every rule has three non-empty levels", () => {
   for (const [k, v] of Object.entries(US_INDUSTRY_RULES)) assert.ok(v.length === 3 && v.every(Boolean), k);
   assert.equal(usRuleFor("Shell Companies")[0], "Financials");
 });
+
+test("consolidation boxes exist for the RSIMMA and RSAACC panes and the hierarchy counts", () => {
+  const keys = (Array.isArray(FIELDS) ? FIELDS : Object.values(FIELDS)).map((f) => f.key);
+  for (const k of ["rsiBoxBreakoutW", "rsiRscBoxBreakoutM", "rsiRscBoxStateQ", "boxPrimaryBreakoutScreens", "boxPrimaryConsolidatingScreens"]) assert.ok(keys.includes(k), k);
+});
