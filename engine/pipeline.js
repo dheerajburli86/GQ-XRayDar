@@ -118,6 +118,9 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
   const builder = new IndexBuilder({ dates, rebalanceIdx: reb, fx, methodology: m });
   const retained = new Map(); // benchmark series kept for pass 2 / rotation: key -> {dates, level}
   const ewcwRows = [], regimeRows = {};
+  const house = new Map(); // house indices to analyse as rows: key -> {meta, lite}
+  const houseKey = (r) => ((r.family === "CW" && r.ccy === "USD") || (r.family === "EW" && r.country && CAP_UNRELIABLE_COUNTRIES.has(r.country) && r.ccy === "LCL"))
+    && /^(G|R:[^|]+|M:[^|]+|C:[^|]+(\|S:[^|]+)?)$/.test(r.scopeKey || "");
   const keepKey = (k) => k.startsWith("CW|LCL|C:") || /^CW\|USD\|(G|R:|M:)/.test(k) || /^EW\|USD\|(G|R:|M:)$/.test(k) || /^EW\|LCL\|C:[^|]*$/.test(k)
     || (k.startsWith("EW|LCL|C:") && [...CAP_UNRELIABLE_COUNTRIES].some((c) => k.startsWith(`EW|LCL|C:${c}`)));
   async function drainSeries() {
@@ -134,6 +137,7 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
       await sink.indexSeries?.(meta, c);
       const lite = { dates: c.dates, level: c.level };
       if (keepKey(rec.key)) retained.set(rec.key, lite);
+      if (houseKey(rec) && lite.dates.length >= 60) house.set(rec.key, { meta, lite });
       const pk = `${rec.ccy}|${rec.scopeKey}`;
       if (!byScope.has(pk)) byScope.set(pk, {});
       byScope.get(pk)[rec.family] = { meta, lite };
@@ -318,6 +322,34 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
     run.stats.issues = (run.stats.issues || 0) + issues.length;
   }
 
+  // ---- house indices as rows (close-only bars; never inside CW / EW) -----------
+  const houseSecs = [];
+  {
+    const snaps = [], events = new Map();
+    const bG = toBench(retained.get(indexKey("CW", "USD", "G")));
+    for (const [key, { meta, lite }] of house) {
+      const b = { time: lite.dates, open: lite.level, high: lite.level, low: lite.level, close: lite.level, volume: null };
+      const an = analyzeSecurity(b, lite.level, lite.level, { country: bG, countrySector: null, region: bG, global: bG }, { divisor: 1 }, m);
+      if (!an) continue;
+      const scope = meta.scopeKey || "G";
+      const country = scope.startsWith("C:") ? scope.slice(2).split("|")[0] : null;
+      const sec = { id: `h:${key}`, symbol: key.replace(/\|/g, " "), name: meta.name, universe: "house_indices", exchange: "GQ", isin: null, country: country || "Global",
+        region: scope.startsWith("R:") ? scope.slice(2).split("|")[0] : country ? geo[country]?.region ?? null : null, classification: scope.startsWith("M:") ? scope.slice(2) : country ? geo[country]?.classification ?? null : null,
+        geoAssigned: true, currency: meta.ccy === "LCL" ? "LCL" : "USD", currencyMajor: meta.ccy === "LCL" ? "LCL" : "USD", currencyDivisor: 1, countryCurrency: null,
+        sector: scope.includes("|S:") ? scope.split("|S:")[1] : null, industryGroup: null, industry: null, classSource: "house_index", capLocal: null, capCurrency: null, capUsd: null, capSegment: null,
+        assetClass: "Index", active: true };
+      const x = { id: sec.id, snap: an.snapshot, f: null, ww: null, glocom: null, eti: null, capUsdNow: null, sharesEst: null, turnoverUsd: null };
+      x.score = scoreSetup({ snap: x.snap, f: null }, { rsRank: null, sectorPct50: null, fundPct: null }, m.scoring.weights);
+      x.flat = buildFlat({ sec, snap: x.snap, f: null, ww: null, glocom: null, eti: null, score: x.score, rsRank: null });
+      snaps.push(x); houseSecs.push(sec); events.set(sec.id, []);
+    }
+    if (snaps.length) {
+      await sink.countryResults?.("House indices", { snapshots: snaps, events, issues: [] });
+      for (const x of snaps) allSnaps.push({ id: x.id, capUsdNow: null, turnoverUsd: null });
+    }
+    run.stats.houseIndexRows = snaps.length;
+  }
+
   // ---- post: breadth, rotation, regimes, EWCW, backtest, FX --------------------
   progress("analytics", 0, 1);
   const breadthOut = breadth.output(dates, reb[0] ?? 0);
@@ -349,7 +381,7 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
   const symOf = new Map(secs.map((x) => [x.id, x]));
   for (const g of guardIssues) { const x = symOf.get(g.id); g.symbol = x?.symbol || null; g.country = x?.country || null; }
   await sink.globalIssues?.([...geoIssues, ...fxIssues, ...guardIssues]);
-  await sink.securities?.(secs, new Map(allSnaps.map((x) => [x.id, x])));
+  await sink.securities?.(secs.concat(houseSecs), new Map(allSnaps.map((x) => [x.id, x])));
 
   run.finished = new Date().toISOString();
   run.status = "ok";
