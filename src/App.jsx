@@ -36,7 +36,8 @@ function prefetchPages() {
 }
 
 const pages = {
-  home: page("home", () => import("./pages/CommandCentre.jsx")),
+  home: page("home", () => import("./pages/Start.jsx")),
+  market: page("market", () => import("./pages/CommandCentre.jsx")),
   explorer: page("explorer", () => import("./pages/Explorer.jsx")),
   heatmap: page("heatmap", () => import("./pages/Heatmap.jsx")),
   indices: page("indices", () => import("./pages/Indices.jsx")),
@@ -82,7 +83,7 @@ const pages = {
 };
 
 const NAV = [
-  ["Overview", [["home", "◎", "Command centre"], ["explorer", "⇣", "Top-down explorer"], ["heatmap", "▦", "Heatmap"], ["xasset", "⊕", "Cross-asset"]]],
+  ["Overview", [["home", "★", "Start here"], ["market", "◎", "Command centre"], ["explorer", "⇣", "Top-down explorer"], ["heatmap", "▦", "Heatmap"], ["xasset", "⊕", "Cross-asset"]]],
   ["Indices", [["indices", "≋", "CW / EW indices"], ["ewcw", "⇋", "EW vs CW (EWCW)"], ["ww", "◔", "Weight Watcher"], ["myindex", "✚", "My indices"]]],
   ["Charts", [["chart", "📈", "Chart lab"], ["screens/RSIACC", "∿", "RSIACC"], ["screens/RSCACC", "∿", "RSCACC"], ["screens/RSIMMA", "≡", "RSIMMA"], ["screens/RSCMMA", "≡", "RSCMMA"], ["tiles", "▦", "Multi-tile screen"], ["workspace", "⊞", "Multi-chart workspace"]]],
   ["Discovery", [["scanners", "⌖", "Scanners"], ["rs", "↗", "Relative strength"], ["screener", "⚲", "Screener"], ["early", "◷", "Early-stage scanner"], ["imbeti", "◈", "IMB / ETI characteristics"], ["funnel", "▽", "Opportunity funnel"], ["rotation", "↻", "Sector rotation"], ["glocom", "◫", "GLOCOM / LOCOM"], ["breadth", "▥", "Market breadth"], ["breadthan", "▤", "Breadth analyser (CCR)"]]],
@@ -246,7 +247,7 @@ function Shell() {
         {NAV.map(([g, all]) => [g, all.filter(([p]) => !isHidden(p))]).map(([g, items]) => (
           <div className="navgroup" key={g}>
             <div className="g">{g}</div>
-            {items.map(([p, ic, l]) => <a key={p} href={href(p)} className={`navitem ${activeKey === p ? "active" : ""}`} title={l}><span className="ic">{ic}</span><span className="lbl">{l}</span></a>)}
+            {items.map(([p, ic, l]) => <a key={p} href={href(p)} data-nav={p} className={`navitem ${activeKey === p ? "active" : ""}`} title={l}><span className="ic">{ic}</span><span className="lbl">{l}</span></a>)}
           </div>
         ))}
       </nav>

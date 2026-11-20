@@ -242,3 +242,7 @@ Opening an equal-weight house index (`i:EW|...`) on RSCMMA / RSCACC defaults its
 ## GQ Agent panel starts clean (added 2026-11-20)
 
 `AgentPanel` history is in-memory only and is cleared whenever the panel is opened (button or `openAgent`), so nobody lands on the previous person's question. ⌫ still clears mid-visit.
+
+## Start page (added 2026-11-20)
+
+The app now opens on `home` = `src/pages/Start.jsx`, a "what do you want to do" guide (owner's request). The old market summary is the `market` page, menu "Command centre". Hovering a guide row (or tapping "◀ Show me" on touch screens) sets `document.body.dataset.point`, and CSS in `styles.css` outlines the matching `.navitem[data-nav=…]` in the left menu and shows a moving ◀. To add a pointer for another page, add it to `GUIDE` and to the two selector lists in `styles.css`.
