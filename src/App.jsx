@@ -196,6 +196,8 @@ function Shell() {
   const [collapsed, setCollapsed] = usePersistent("navCollapsed", typeof window !== "undefined" && window.innerWidth < 760);
   const acct = useAccount();
   const [sideW, setSideW] = usePersistent("navWidth", 228);
+  const [drawer, setDrawer] = useState(false); // phone: the menu is a slide-in drawer
+  useEffect(() => { setDrawer(false); }, [route.path]);
   const [drag, setDrag] = useState(false);
   const startDrag = (e) => {
     e.preventDefault(); setDrag(true);
@@ -244,7 +246,7 @@ function Shell() {
   }
 
   return (
-    <div className={`shell ${collapsed ? "collapsed" : ""}`} style={collapsed ? undefined : { "--side-w": `${sideW}px` }}>
+    <div className={`shell ${collapsed ? "collapsed" : ""} ${drawer ? "drawer-open" : ""}`} style={collapsed ? undefined : { "--side-w": `${sideW}px` }}>
       <nav className="side">
         {!collapsed && <div className={`side-grip ${drag ? "on" : ""}`} onPointerDown={startDrag} onDoubleClick={() => setSideW(228)} title="Drag to resize · double-click to reset" />}
         <div className="brand" onClick={() => setCollapsed(!collapsed)} style={{ cursor: "pointer" }} title="Collapse / expand">
@@ -258,19 +260,21 @@ function Shell() {
           </div>
         ))}
       </nav>
+      <div className="drawer-back" onClick={() => setDrawer(false)} />
       <div className="main">
         {d.mode === "demo" && <div className="banner demo"><b>DEMO DATA</b> Synthetic universe generated in your browser and run through the real calculation engine. Connect the heatmap Supabase database to see live markets (README).</div>}
         {offline && <div className="banner demo" role="status"><b>OFFLINE</b> No internet connection. What is already on screen still works; new data loads when the connection is back.</div>}
         <div className="topbar">
+          <button className="btn sm hamb" onClick={() => setDrawer(true)} title="Menu" aria-label="Menu">☰</button>
           <CommandBar />
           <div className="grow" />
-          <span className="small muted" title="Latest session in the data">As of <b className="mono">{d.info?.asOf}</b></span>
+          <span className="small muted m-hide" title="Latest session in the data">As of <b className="mono">{d.info?.asOf}</b></span>
           <button className="btn sm" onClick={() => d.reload()} title="Reload the latest calculation run without reloading the page">↻</button>
-          <PageDownload route={route} asOf={d.info?.asOf} />
+          <span className="m-hide"><PageDownload route={route} asOf={d.info?.asOf} /></span>
           <div className="seg theme-seg" title="Appearance">
             {[["light", "☀", "Light"], ["dark", "☾", "Dark"], ["system", "Auto", "Same as device"]].map(([k, ic, l]) => <button key={k} className={d.settings.theme === k ? "on" : ""} onClick={() => d.setSetting("theme", k)} title={l}>{ic}</button>)}
           </div>
-          {acct.email && <span className="small muted" title={acct.email}>{acct.email.split("@")[0]}{acct.session ? <a style={{ marginLeft: 6, cursor: "pointer" }} onClick={acct.signOut}>sign out</a> : null}</span>}
+          {acct.email && <span className="small muted m-hide" title={acct.email}>{acct.email.split("@")[0]}{acct.session ? <a style={{ marginLeft: 6, cursor: "pointer" }} onClick={acct.signOut}>sign out</a> : null}</span>}
         </div>
         <DataWindow />
         <div className="content">

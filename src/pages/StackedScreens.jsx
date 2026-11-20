@@ -60,6 +60,7 @@ export default function StackedScreens({ route }) {
   const [rsiN, setRsiN] = usePersistent("analyst.rsiPeriod", null); // null = the methodology default (14)
   const [active, setActive] = useState(1);
   const [focus, setFocus] = useState(null);
+  const [toolsOpen, setToolsOpen] = useState(false); // phone: the second toolbar row folds away
   // what-if price: hypothetical closes added to the daily candles (never stored); cleared when the instrument changes
   const [wiState, setWiState] = useState({ key: "", list: [], open: false });
   const wiList = useMemo(() => (wiState.key === instKey ? wiState.list : []), [wiState, instKey]);
@@ -196,9 +197,10 @@ export default function StackedScreens({ route }) {
         <div className="seg" title="Period pairs (keys D W M Q H Y set the selected column)">{PRESETS.map(([a, b]) => <button key={a + b} className={left === a && right === b ? "on" : ""} onClick={() => setTfs({ left: a, right: b })}>{`${tfLabel(a)} | ${tfLabel(b)}`}</button>)}</div>
         <span className="small muted">Left</span><TfPicker value={left} onChange={(tf) => setTf("left", tf)} />
         <span className="small muted">Right</span><TfPicker value={right} onChange={(tf) => setTf("right", tf)} />
+        <button className={`btn sm m-only ${toolsOpen ? "primary" : ""}`} onClick={() => setToolsOpen(!toolsOpen)}>{toolsOpen ? "Hide controls ▴" : "More controls ▾"}</button>
         {columns && <button className="btn sm primary" onClick={() => setFocus("both")} title="Both windows on the whole screen (Esc or ✕ to come back)">⤢ Full screen</button>}
       </div>
-      <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+      <div className={`row anl-tools ${toolsOpen ? "" : "closed"}`} style={{ gap: 8, flexWrap: "wrap" }}>
         <InstrumentPicker value={inst ? { label: instLabel } : null} onChange={go} placeholder="Instrument… (or press C)" width={230} />
         {cfg.base === "rsc" && <><span className="small muted">vs</span><InstrumentPicker value={{ label: benchLabel }} onChange={setBench} placeholder="Comparison stock or index…" width={200} category={false} /></>}
         <select className="input sm" value={v.price} onChange={(e) => setV({ price: e.target.value })} title="Price drawn as a line (green up / red down), OHLC bars or candles">

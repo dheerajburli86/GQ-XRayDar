@@ -257,3 +257,7 @@ The app opens on `home` = `src/pages/Start.jsx` and never opens a page for the u
 - **⤢ Full screen** button (toolbar) puts both windows on the whole screen; the bar there changes the instrument, comparison, periods, and switches Both / Left only / Right only. The per-column ⤢ and double-click are kept.
 
 - **Voice input (mic buttons in the command bar and Assistant) is hidden** via `HIDE_VOICE` in `src/lib/features.js` (owner, 2026-11-20); set it to false to bring it back.
+
+## Phone layout (added 2026-11-20)
+
+At <= 760px the left menu is a slide-in drawer (☰ in the top bar, closes on navigation), the top bar keeps only search, reload and the theme toggle (`.m-hide` hides the rest), tables and cards scroll sideways inside themselves, inputs are 16px (no iOS zoom), and the stacked screens fold their second toolbar row behind "More controls". The floating Data window is off on phones. Tested at 390 px: no page scrolls sideways.
