@@ -83,6 +83,7 @@ export default function StackedScreens({ route }) {
   const spx = useMemo(() => d.secs.find((x) => x.symbol === "^GSPC" && x.assetClass === "Index"), [d.secs]); // US default: S&P 500 (owner, item 22)
   const benchRef = route.query.bench
     ? (route.query.bench.startsWith("idx:") ? { kind: "index", key: route.query.bench.slice(4) } : route.query.bench.startsWith("x:") ? { kind: "x", key: route.query.bench.slice(2) } : { kind: "sec", id: route.query.bench })
+    : instKey.startsWith("i:EW|") && d.indexByKey.has("CW|" + instKey.slice(5)) ? { kind: "index", key: "CW|" + instKey.slice(5) } // EWCW: an equal-weight house index is read against its own cap-weighted twin
     : sec?.country === "India" && bse500 && bse500.id !== secId ? { kind: "sec", id: bse500.id }
     : sec?.country === "United States" && spx && spx.id !== secId ? { kind: "sec", id: spx.id } : sec ? defaultBenchmark(sec) : { kind: "index", key: "CW|USD|G", label: "Global CW (USD)" };
   const benchLabel = benchRef.kind === "index" ? d.indexByKey.get(benchRef.key)?.name || benchRef.key : benchRef.kind === "x" ? benchRef.key.replace(/^FX:/, "") : d.secById.get(benchRef.id)?.symbol;

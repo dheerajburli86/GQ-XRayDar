@@ -234,3 +234,7 @@ redeploy ENDS the job that is running. On 2026-11-19 a push at 06:26 UTC killed 
 
 - The left menu has a drag handle on its right edge (160-520 px, saved as `navWidth`, double-click resets to 228). Collapsed mode is unchanged.
 - Stacked screens (RSIMMA / RSIACC / RSCMMA / RSCACC): ⤢ on a column header (or double-click it) opens that column full screen with taller panes; ✕ or Esc returns. Workspace panels have the same ⤢. The Multi-tile screen already had its own maximise.
+
+## EWCW on the stacked screens (added 2026-11-20)
+
+Opening an equal-weight house index (`i:EW|...`) on RSCMMA / RSCACC defaults its benchmark to the cap-weighted twin (`CW|...`), so the screen reads EW vs CW. All CW / EW levels (country, sector, industry group) are in ticker search under Indices; a different benchmark can still be picked.
