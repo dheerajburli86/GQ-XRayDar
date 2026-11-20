@@ -161,7 +161,7 @@ export default function StackedScreens({ route }) {
     const rowsH = col.rows.map((_, ri) => (ri === 0 ? Math.round(paneH * 1.35) : paneH));
     const exH = (extras[ci]?.panes || []).map(() => Math.round(paneH * 0.8));
     const total = rowsH.reduce((x, y) => x + y, 0) + exH.reduce((x, y) => x + y, 0);
-    const k = full ? Math.max(1, (window.innerHeight - 10 - 13 * (rowsH.length + exH.length)) / Math.max(1, total)) : 1;
+    const k = full ? Math.max(1, (vh - 54 - 13 * (rowsH.length + exH.length)) / Math.max(1, total)) : 1;
     return (
       <div key={ci} className="anl-col" onMouseDown={() => setActive(ci)}>
         <div className={`anl-head ${active === ci ? "on" : ""}`} onDoubleClick={() => !full && setFocus(ci)}>
@@ -187,6 +187,7 @@ export default function StackedScreens({ route }) {
         <div className="seg" title="Period pairs (keys D W M Q H Y set the selected column)">{PRESETS.map(([a, b]) => <button key={a + b} className={left === a && right === b ? "on" : ""} onClick={() => setTfs({ left: a, right: b })}>{`${tfLabel(a)} | ${tfLabel(b)}`}</button>)}</div>
         <span className="small muted">Left</span><TfPicker value={left} onChange={(tf) => setTf("left", tf)} />
         <span className="small muted">Right</span><TfPicker value={right} onChange={(tf) => setTf("right", tf)} />
+        {columns && <button className="btn sm primary" onClick={() => setFocus("both")} title="Both windows on the whole screen (Esc or ✕ to come back)">⤢ Full screen</button>}
       </div>
       <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
         <InstrumentPicker value={inst ? { label: instLabel } : null} onChange={go} placeholder="Instrument… (or press C)" width={230} />
@@ -236,10 +237,17 @@ export default function StackedScreens({ route }) {
           <div className="anl" ref={(el) => { shotRef.current = el; anlRef.current = el; }}>
             {columns.map((col, ci) => renderCol(col, ci, false))}
           </div>
-          {focus != null && columns[focus] && (
+          {focus != null && (focus === "both" || columns[focus]) && (
             <div className="anl-full">
-              <button className="anl-x" title="Back to all charts (Esc)" onClick={() => setFocus(null)}>✕</button>
-              <div className="anl anl-one">{renderCol(columns[focus], focus, true)}</div>
+              <div className="anl-fbar">
+                <InstrumentPicker value={inst ? { label: instLabel } : null} onChange={go} placeholder="Change instrument… (or press C)" width={260} />
+                {cfg.base === "rsc" && <><span className="small muted">vs</span><InstrumentPicker value={{ label: benchLabel }} onChange={setBench} placeholder="Comparison…" width={200} category={false} /></>}
+                <span className="small muted">Left</span><TfPicker value={left} onChange={(tf) => setTf("left", tf)} />
+                <span className="small muted">Right</span><TfPicker value={right} onChange={(tf) => setTf("right", tf)} />
+                <div className="seg">{[["both", "Both"], [0, "Left only"], [1, "Right only"]].map(([k, l]) => <button key={l} className={focus === k ? "on" : ""} onClick={() => setFocus(k)}>{l}</button>)}</div>
+              </div>
+              <button className="anl-x" title="Back (Esc)" onClick={() => setFocus(null)}>✕</button>
+              <div className={`anl ${focus === "both" ? "" : "anl-one"}`}>{focus === "both" ? columns.map((col, ci) => renderCol(col, ci, true)) : renderCol(columns[focus], focus, true)}</div>
             </div>
           )}
         </>
