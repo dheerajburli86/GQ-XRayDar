@@ -1,47 +1,66 @@
-// Landing page: "if you want to do X, go here". Hovering (or tapping "Show me") a row points an arrow at the
-// matching item in the left menu. The market summary lives on its own page (Command centre).
+// Landing page. Nothing is opened for you: this lists every item of the left menu, in the same order, with what it is for.
+// Hovering a row (or tapping "◀ Show me") points an arrow at that item in the menu. Rows come from the shared NAV,
+// so a new menu item shows up here by itself (add its sentence to WHAT).
 import { useEffect, useState } from "react";
 import { PageHead } from "../components/ui.jsx";
 import { href } from "../lib/router.js";
+import { NAV } from "../lib/nav.js";
+import { isHidden } from "../lib/features.js";
 
-const GUIDE = [
-  ["See the whole market today", [
-    ["market", "Command centre", "Global strength, breadth, sector rotation and the best setups on one screen."],
-    ["heatmap", "Heatmap", "Every market as coloured tiles: green up, red down."],
-    ["explorer", "Top-down explorer", "Start at a country, drill to sector, industry, then single stocks."],
-  ]],
-  ["Look at one stock or index", [
-    ["screens/RSIMMA", "RSIMMA", "The Analyst-style ribbon charts: price plus RSI, two timeframes side by side."],
-    ["screens/RSCMMA", "RSCMMA", "The same, but relative to a benchmark (how it does against its market)."],
-    ["chart", "Chart lab", "One big chart with drawing tools, studies and your own formulas."],
-    ["workspace", "Multi-chart workspace", "Several charts on one screen, linked together."],
-  ]],
-  ["Find stocks to look at", [
-    ["scanners", "Scanners", "Ready-made lists: breakouts, new highs, turning trends."],
-    ["screener", "Screener", "Type what you want in plain English, e.g. strongest weekly IT stocks."],
-    ["rs", "Relative strength", "Who is beating its market, sector or the world."],
-    ["early", "Early-stage scanner", "Stocks just starting a move."],
-  ]],
-  ["Understand the indices and sectors", [
-    ["indices", "CW / EW indices", "Our own cap-weighted and equal-weighted indices."],
-    ["ewcw", "EW vs CW (EWCW)", "Is the average stock beating the big stocks?"],
-    ["rotation", "Sector rotation", "Which sectors are leading, improving, weakening, lagging."],
-    ["breadth", "Market breadth", "How many stocks are above their averages, new highs and lows."],
-  ]],
-  ["Get told when something happens", [
-    ["alerts", "Alerts", "Telegram and phone alerts on price moves and technical signals."],
-    ["watchlists", "Watchlists & portfolio", "Your own lists. Alerts and views can follow them."],
-  ]],
-  ["Ask a question", [
-    ["assistant", "GQ Agent (full page)", "Ask in plain English; it explains what the stored data shows."],
-  ]],
-  ["Futures and options (India, end of day)", [
-    ["dhome", "Derivatives dashboard", "Open interest, participants, rollover and the F&O market."],
-    ["dchain", "Option chain", "Strikes, open interest and implied volatility."],
-  ]],
-];
+const WHAT = {
+  home: "This page. Nothing opens until you choose.",
+  market: "One-screen summary of the world today: strength, breadth, sector rotation and the best setups.",
+  explorer: "Start at a country, drill to sector, industry, sub-industry, then single stocks.",
+  heatmap: "Every market as coloured tiles: green up, red down, size shows how big.",
+  xasset: "Currencies, commodities, bonds and equities side by side.",
+  indices: "Our own cap-weighted (CW) and equal-weighted (EW) indices for every country, sector and region.",
+  ewcw: "Is the average stock (EW) beating the biggest stocks (CW)? Shows the gap over time.",
+  ww: "Which stocks are gaining or losing weight inside their country-sector index.",
+  myindex: "Build your own index from stocks you pick.",
+  chart: "One big chart with drawing tools, indicators, your own formulas and replay.",
+  "screens/RSIACC": "Analyst-style charts with plain averages: price and RSI rows, two timeframes side by side.",
+  "screens/RSCACC": "The same with relative strength: how a stock does against a benchmark.",
+  "screens/RSIMMA": "Analyst-style charts with the moving-average ribbon: price and RSI rows.",
+  "screens/RSCMMA": "The ribbon charts on relative strength against a benchmark.",
+  tiles: "Type a command such as top 8 US semiconductor companies and get a wall of charts.",
+  workspace: "Several charts on one screen, linked together.",
+  scanners: "Ready-made lists: breakouts, new highs, turning trends.",
+  rs: "Who is beating its market, sector or the world.",
+  screener: "Type what you want in plain English, e.g. strongest weekly IT stocks.",
+  early: "Stocks that are just starting a move.",
+  imbeti: "The ten yes / no / unknown characteristics from the ETI project. Shown and filtered, never scored.",
+  funnel: "Narrows the whole universe step by step down to a short list.",
+  rotation: "Which sectors are leading, improving, weakening or lagging.",
+  glocom: "Colour bands comparing a stock, industry or sector with its peers over 1 week, 6 months and 1 year.",
+  breadth: "How many stocks sit above their averages; new highs and lows over time.",
+  breadthan: "CCR, OUP, RR, RRM, RRMK, TR and TRMK for an index and its parts over chosen periods.",
+  scores: "AI setup scores: a 0-100 summary of the stored signals, not advice.",
+  assistant: "Ask in plain English; it explains what the stored data shows.",
+  briefs: "Daily and weekly written market summaries.",
+  backtest: "How past signals and chart patterns actually played out.",
+  dhome: "India futures and options at end of day: open interest, participants, rollover.",
+  dchain: "Strikes, open interest and implied volatility for an expiry.",
+  dfut: "Futures prices, rollover and open interest.",
+  dvol: "Implied volatility, skew and term structure.",
+  dstrat: "Build an options strategy and see its payoff.",
+  drisk: "Risk of a derivatives portfolio: exposure, stress tests, value at risk.",
+  dexpiry: "Expiry dates and events that matter for contracts.",
+  dscreen: "Filter futures and options by your own rules.",
+  dresearch: "Studies of how derivatives signals behaved in the past.",
+  alerts: "Telegram and phone alerts on price moves and technical signals.",
+  tasks: "Your to-do list inside the dashboard.",
+  watchlists: "Your own stock lists and portfolio. Alerts and views can follow them.",
+  paper: "Practice trading with no real money.",
+  notes: "Your private research notes.",
+  data: "Run history, data health and issues: is the data fresh and complete?",
+};
 
-const setBodyPoint = (p) => { document.body.dataset.point = p || ""; };
+const setBodyPoint = (p) => {
+  document.querySelectorAll(".navitem.pointed").forEach((e) => e.classList.remove("pointed"));
+  if (!p) return;
+  const el = document.querySelector(`.navitem[data-nav="${CSS.escape(p)}"]`);
+  if (el) { el.classList.add("pointed"); el.scrollIntoView({ block: "nearest" }); }
+};
 
 export default function Start() {
   const [pointed, setPointed] = useState(null);
@@ -49,16 +68,17 @@ export default function Start() {
   useEffect(() => () => setBodyPoint(null), []);
   return (
     <div className="stack">
-      <PageHead title="Welcome to GQ XRayDar" sub="Pick what you want to do. Hover a row (or tap ◀ Show me) and an arrow points at it in the menu on the left." />
+      <PageHead title="Welcome to GQ XRayDar" sub="Nothing opens by itself. This is every item of the menu on the left, in order. Hover a row (or tap ◀ Show me) and an arrow points at it in the menu; click Open to go there." />
       <div className="start-grid">
-        {GUIDE.map(([title, rows]) => (
-          <div className="card" key={title}>
-            <h3 style={{ marginTop: 0 }}>{title}</h3>
-            {rows.map(([p, label, text]) => (
+        {NAV.map(([group, items]) => (
+          <div className="card" key={group}>
+            <h3 style={{ marginTop: 0 }}>{group}</h3>
+            {items.filter(([p]) => !isHidden(p)).map(([p, ic, label]) => (
               <div key={p} className={`start-row ${pointed === p ? "on" : ""}`} onMouseEnter={() => point(p)} onMouseLeave={() => point(null)} onFocus={() => point(p)} onBlur={() => point(null)}>
+                <span className="ic" style={{ width: 20, textAlign: "center" }}>{ic}</span>
                 <div className="grow">
                   <a href={href(p)}><b>{label}</b></a>
-                  <div className="small muted">{text}</div>
+                  <div className="small muted">{WHAT[p] || ""}</div>
                 </div>
                 <button className="btn sm ghost start-show" onClick={() => { point(p); setTimeout(() => point(null), 5000); }} title="Point at it in the menu">◀ Show me</button>
                 <a className="btn sm" href={href(p)}>Open →</a>
@@ -67,7 +87,7 @@ export default function Start() {
           </div>
         ))}
       </div>
-      <div className="small muted">Tip: press Ctrl/Cmd+K (or /) anywhere to search a stock, index or page. The market summary is under Command centre.</div>
+      <div className="small muted">Tip: press Ctrl/Cmd+K (or /) anywhere to search a stock, index or page.</div>
     </div>
   );
 }

@@ -242,52 +242,7 @@ textarea.notes { width: 100%; min-height: 70px; }
 .start-row:first-of-type { border-top: 0; }
 .start-row.on, .start-row:hover { background: var(--gq-soft); }
 @media (hover: hover) { .start-show { display: none; } }
-body[data-point="home"] .navitem[data-nav="home"],
-body[data-point="market"] .navitem[data-nav="market"],
-body[data-point="heatmap"] .navitem[data-nav="heatmap"],
-body[data-point="explorer"] .navitem[data-nav="explorer"],
-body[data-point="screens/RSIMMA"] .navitem[data-nav="screens/RSIMMA"],
-body[data-point="screens/RSCMMA"] .navitem[data-nav="screens/RSCMMA"],
-body[data-point="chart"] .navitem[data-nav="chart"],
-body[data-point="workspace"] .navitem[data-nav="workspace"],
-body[data-point="scanners"] .navitem[data-nav="scanners"],
-body[data-point="screener"] .navitem[data-nav="screener"],
-body[data-point="rs"] .navitem[data-nav="rs"],
-body[data-point="early"] .navitem[data-nav="early"],
-body[data-point="indices"] .navitem[data-nav="indices"],
-body[data-point="ewcw"] .navitem[data-nav="ewcw"],
-body[data-point="rotation"] .navitem[data-nav="rotation"],
-body[data-point="breadth"] .navitem[data-nav="breadth"],
-body[data-point="alerts"] .navitem[data-nav="alerts"],
-body[data-point="watchlists"] .navitem[data-nav="watchlists"],
-body[data-point="assistant"] .navitem[data-nav="assistant"],
-body[data-point="dhome"] .navitem[data-nav="dhome"],
-body[data-point="dchain"] .navitem[data-nav="dchain"] {
-  background: var(--gq-soft); outline: 2px solid var(--gq); position: relative; animation: navpoint 1s ease-in-out infinite;
-}
-body[data-point="home"] .navitem[data-nav="home"]::after,
-body[data-point="market"] .navitem[data-nav="market"]::after,
-body[data-point="heatmap"] .navitem[data-nav="heatmap"]::after,
-body[data-point="explorer"] .navitem[data-nav="explorer"]::after,
-body[data-point="screens/RSIMMA"] .navitem[data-nav="screens/RSIMMA"]::after,
-body[data-point="screens/RSCMMA"] .navitem[data-nav="screens/RSCMMA"]::after,
-body[data-point="chart"] .navitem[data-nav="chart"]::after,
-body[data-point="workspace"] .navitem[data-nav="workspace"]::after,
-body[data-point="scanners"] .navitem[data-nav="scanners"]::after,
-body[data-point="screener"] .navitem[data-nav="screener"]::after,
-body[data-point="rs"] .navitem[data-nav="rs"]::after,
-body[data-point="early"] .navitem[data-nav="early"]::after,
-body[data-point="indices"] .navitem[data-nav="indices"]::after,
-body[data-point="ewcw"] .navitem[data-nav="ewcw"]::after,
-body[data-point="rotation"] .navitem[data-nav="rotation"]::after,
-body[data-point="breadth"] .navitem[data-nav="breadth"]::after,
-body[data-point="alerts"] .navitem[data-nav="alerts"]::after,
-body[data-point="watchlists"] .navitem[data-nav="watchlists"]::after,
-body[data-point="assistant"] .navitem[data-nav="assistant"]::after,
-body[data-point="dhome"] .navitem[data-nav="dhome"]::after,
-body[data-point="dchain"] .navitem[data-nav="dchain"]::after {
-  content: "◀"; margin-left: auto;
-  color: var(--gq); font-size: 16px; font-weight: 700; animation: navarrow .8s ease-in-out infinite; pointer-events: none;
-}
+.navitem.pointed { background: var(--gq-soft); outline: 2px solid var(--gq); animation: navpoint 1s ease-in-out infinite; }
+.navitem.pointed::after { content: "◀"; margin-left: auto; color: var(--gq); font-size: 16px; font-weight: 700; animation: navarrow .8s ease-in-out infinite; pointer-events: none; }
 @keyframes navpoint { 50% { outline-offset: 3px; } }
 @keyframes navarrow { 50% { transform: translateX(6px); } }

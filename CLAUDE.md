@@ -245,4 +245,4 @@ Opening an equal-weight house index (`i:EW|...`) on RSCMMA / RSCACC defaults its
 
 ## Start page (added 2026-11-20)
 
-The app now opens on `home` = `src/pages/Start.jsx`, a "what do you want to do" guide (owner's request). The old market summary is the `market` page, menu "Command centre". Hovering a guide row (or tapping "◀ Show me" on touch screens) sets `document.body.dataset.point`, and CSS in `styles.css` outlines the matching `.navitem[data-nav=…]` in the left menu and shows a moving ◀. To add a pointer for another page, add it to `GUIDE` and to the two selector lists in `styles.css`.
+The app opens on `home` = `src/pages/Start.jsx` and never opens a page for the user (owner's rule). It lists every left-menu item, in menu order, with a sentence of what it is for (`WHAT`, keyed by page key; the menu itself is `src/lib/nav.js`, shared with the Start page). Hovering a row (or tapping "◀ Show me") adds the class `pointed` to the matching `.navitem` (outline plus a moving ◀) and scrolls it into view. A new menu item shows up here by itself; add its sentence to `WHAT`. The market summary is the `market` page, menu "Command centre".
