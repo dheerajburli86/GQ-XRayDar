@@ -300,4 +300,5 @@ textarea.notes { width: 100%; min-height: 70px; }
   .topbar .cmd { flex: 1 1 0; width: 0; }
   .topbar .cmd input { min-width: 0; }
   .topbar .theme-seg { flex: none; }
+  .start-show { display: none !important; }
 }

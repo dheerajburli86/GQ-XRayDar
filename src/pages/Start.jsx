@@ -68,7 +68,7 @@ export default function Start() {
   useEffect(() => () => setBodyPoint(null), []);
   return (
     <div className="stack">
-      <PageHead title="Welcome to GQ XRayDar" sub="Nothing opens by itself. This is every item of the menu on the left, in order. Hover a row (or tap ◀ Show me) and an arrow points at it in the menu; click Open to go there." />
+      <PageHead title="Welcome to GQ XRayDar" sub={typeof window !== "undefined" && window.innerWidth <= 760 ? "Nothing opens by itself. This is every item of the menu, in order. Tap Open to go there, or use ☰ at the top left." : "Nothing opens by itself. This is every item of the menu on the left, in order. Hover a row (or tap ◀ Show me) and an arrow points at it in the menu; click Open to go there."} />
       <div className="start-grid">
         {NAV.map(([group, items]) => (
           <div className="card" key={group}>
