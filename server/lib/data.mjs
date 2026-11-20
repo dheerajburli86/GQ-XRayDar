@@ -3,7 +3,7 @@
 // is picked up within REFRESH_MS and the caches start over.
 import { decodeFlat, SCREEN_KEYS } from "../../engine/screenRow.js";
 import { decodeEvents } from "../../engine/eventCodec.js";
-import { applyCorporateActions, removeBadPrints } from "../../engine/quality.js";
+import { applyCorporateActions, removeBadPrints, cutAtTickerReuse } from "../../engine/quality.js";
 
 const REFRESH_MS = 5 * 60_000;
 
@@ -109,7 +109,10 @@ export function createData(pool, log = console.log) {
       const acts = new Map();
       for (const r of ca) { if (!acts.has(r.instrument_id)) acts.set(r.instrument_id, []); acts.get(r.instrument_id).push({ exDate: r.ex, factor: +r.factor }); }
       for (const [id, a] of acts) if (out.has(id)) out.set(id, applyCorporateActions(out.get(id), a).bars);
-      for (const [id, b] of out) { const r = removeBadPrints(b); if (r.removed.length) out.set(id, { ...r.bars, badPrints: r.removed }); }
+      for (const [id, b] of out) {
+        const r = removeBadPrints(b), u = cutAtTickerReuse(r.bars);
+        if (r.removed.length || u.cut) out.set(id, { ...u.bars, badPrints: r.removed, tickerReuse: u.cut });
+      }
       return out;
     },
   };

@@ -24,7 +24,7 @@ import { rotation, regime, ewcw } from "./analytics.js";
 import { fundamentalMetrics, fundamentalPercentiles } from "./fundamentals.js";
 import { scoreSetup } from "./scoring.js";
 import { buildFlat } from "./screenRow.js";
-import { securityIssues, applyCorporateActions, removeBadPrints, shareBreaks } from "./quality.js";
+import { securityIssues, applyCorporateActions, removeBadPrints, shareBreaks, cutAtTickerReuse } from "./quality.js";
 import { BacktestAccumulator } from "./backtest.js";
 import { GroupAccumulator, checkpointReturns, rateGlocom, groupMoves } from "./glocom.js";
 import { UNCLASSIFIED } from "./classification.js";
@@ -83,6 +83,8 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
       // which latest-shares x past-price caps are usable at all (engine/quality.js)
       const bad = removeBadPrints(b);
       b = bad.bars;
+      const reuse = cutAtTickerReuse(b);
+      b = reuse.bars;
       if (!b.time.length) continue;
       // a x3 step that holds is a share event only when the reported share count also moved x2+
       // (a real crash keeps its shares: Upstart May 2022); a x10 step is one regardless
@@ -109,7 +111,7 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
       // local holiday on the final calendar date -- stays in, carried at that close.
       const lastBarT = indexAtOrBeforeMap(dates, b.time[b.time.length - 1]);
       if (!sec.active || T - 1 - lastBarT > m.eligibility.maxStaleDays) last = Math.min(last, lastBarT);
-      out.push({ sec, bars: b, first, last, close, traded, barAt, capFromDate, badPrints: bad.removed, shareBreaks: qual });
+      out.push({ sec, bars: b, first, last, close, traded, barAt, capFromDate, badPrints: bad.removed, tickerReuse: reuse.cut, shareBreaks: qual });
     }
     return out;
   }
@@ -247,6 +249,8 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
       issues.push(...securityIssues(sec, b, { countryLatest, countrySessions: sessions, recentFrom, sessionsBetween }));
       if (s.badPrints?.length) issues.push({ id: sec.id, symbol: sec.symbol, country: sec.country, severity: "warn", rule: "bad_print_removed",
         detail: `${s.badPrints.length} bad print(s) ignored, e.g. ${s.badPrints.slice(0, 3).map((x) => `${x.date} ${x.close} (previous close ${x.prev})`).join(", ")}: the price jumped and came straight back` });
+      if (s.tickerReuse) issues.push({ id: sec.id, symbol: sec.symbol, country: sec.country, severity: "warn", rule: "ticker_reuse_cut",
+        detail: `${s.tickerReuse.bars} bar(s) before ${s.tickerReuse.date} dropped: after a gap the price moved from ${s.tickerReuse.prev} to ${s.tickerReuse.next}, which is a different company that used this ticker earlier. The older history of THIS company is not in the price store (it sits under its former ticker) and has to be loaded in the heatmap pipeline.` });
       if (s.shareBreaks?.length && isStock(sec)) issues.push({ id: sec.id, symbol: sec.symbol, country: sec.country, severity: "warn", rule: "share_count_break",
         detail: `Price stepped x${s.shareBreaks.map((x) => `${x.ratio} on ${x.date}`).join(", x")} and stayed there: likely a split, reverse split or restructuring. Market caps before ${s.capFromDate} cannot be estimated, so the stock joins CW / EW indices and Weight Watcher only from then.` });
       if (!an) continue;

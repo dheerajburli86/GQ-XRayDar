@@ -114,6 +114,32 @@ export function removeBadPrints(daily, { jump = 1.8, back = 0.15, maxRun = 5 } =
 }
 
 /**
+ * Ticker reuse: a ticker that changed hands (Facebook took "META" in June 2022; before that it belonged to a
+ * ~$14 company) carries the OLD company's bars in front of the new one. The tell is a calendar gap of a week or
+ * more AND a permanent level change of x5 or more across it. Everything before the break is another company, so
+ * the series starts at the break. A split or a bad print never trips this: those have no gap, or come back.
+ * The newer side must hold at least `minAfter` bars, otherwise the series is left alone.
+ */
+export function cutAtTickerReuse(daily, { gapDays = 7, factor = 5, minAfter = 20 } = {}) {
+  const c = daily?.close, t = daily?.time, n = c?.length || 0;
+  if (n < minAfter + 2) return { bars: daily, cut: null };
+  const ms = (d) => Date.parse(`${String(d).slice(0, 10)}T00:00:00Z`);
+  let at = -1;
+  for (let i = 1; i <= n - minAfter; i++) {
+    const p = c[i - 1], q = c[i];
+    if (!(p > 0) || !(q > 0)) continue;
+    const r = q / p;
+    if ((r >= factor || r <= 1 / factor) && (ms(t[i]) - ms(t[i - 1])) / 86400000 >= gapDays) at = i;
+  }
+  if (at < 0) return { bars: daily, cut: null };
+  const from = (a) => (a ? Array.from(a).slice(at) : a);
+  return {
+    bars: { ...daily, time: from(t), open: from(daily.open), high: from(daily.high), low: from(daily.low), close: from(c), volume: from(daily.volume) },
+    cut: { date: t[at], bars: at, prev: c[at - 1], next: c[at] },
+  };
+}
+
+/**
  * Share-count breaks: the close moves at least x3 (or below x1/3) within 10 sessions and does
  * not come back (the next 20 closes stay at least x2 away from the level before). That is what
  * an unadjusted split, a reverse split or a restructuring that issues or cancels most of the

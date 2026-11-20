@@ -28,6 +28,8 @@ import { ANALYST_MODES, ACC_PERIODS, MMA_SHORT, buildAnalystColumn, analystDate 
 
 const fmt = (v) => (v == null ? "—" : v.toFixed(2));
 
+let carryFocus = null;
+
 export default function StackedScreens({ route }) {
   const d = useData();
   const mode = ANALYST_MODES[route.args[0]] ? route.args[0] : "RSIMMA";
@@ -59,7 +61,8 @@ export default function StackedScreens({ route }) {
   const anchor = from && rg.anchor ? from : null;
   const [rsiN, setRsiN] = usePersistent("analyst.rsiPeriod", null); // null = the methodology default (14)
   const [active, setActive] = useState(1);
-  const [focus, setFocus] = useState(null);
+  // switching screen inside full screen remounts the page; carry the full-screen choice over so it stays open
+  const [focus, setFocus] = useState(() => { const f = carryFocus; carryFocus = null; return f; });
   const [toolsOpen, setToolsOpen] = useState(false); // phone: the second toolbar row folds away
   // what-if price: hypothetical closes added to the daily candles (never stored); cleared when the instrument changes
   const [wiState, setWiState] = useState({ key: "", list: [], open: false });
@@ -80,7 +83,10 @@ export default function StackedScreens({ route }) {
   const setProjs = (list) => setAllProj({ ...allProj, [projKey]: list });
   const [tray, setTray] = usePersistent("analyst.tray", { open: false, tab: "studies" });
   const [rangeKey, setRangeKey] = useState(0);
-  const [syncs] = useState(() => [new ChartSync(), new ChartSync()]);
+  // logical sync: every pane of a window draws the same bar slots (see `timelines`), so wheel zoom / drag on the price,
+  // the RSI or the RSI of RSI moves them all together. Full screen has its own pair so it never drives the small charts.
+  const [syncs] = useState(() => [new ChartSync({ logical: true }), new ChartSync({ logical: true })]);
+  const [fullSyncs] = useState(() => [new ChartSync({ logical: true }), new ChartSync({ logical: true })]);
   const [vh, setVh] = useState(window.innerHeight);
   useEffect(() => { const h = () => setVh(window.innerHeight); window.addEventListener("resize", h); return () => window.removeEventListener("resize", h); }, []);
 
@@ -138,6 +144,12 @@ export default function StackedScreens({ route }) {
     const so = studyOverlays(b, studies, col.tf), fo = formulaOverlays(b, customs), pj = projectionOverlays(b, projs, col.tf);
     return { bars: b, price: [...so.price, ...fo.price, ...pj.price], levels: [...so.levels, ...pj.levels], markers: fo.markers, panes: [...so.panes, ...fo.panes], notes: so.notes, errors: fo.errors, projections: pj.results };
   }), [columns, studies, customs, projs]);
+  // one timeline per window: the union of every row's candle dates (RSC rows only hold dates both markets traded)
+  const timelines = useMemo(() => (columns || []).map((col) => {
+    const set = new Set();
+    for (const r of col.rows) for (const t of r.time || []) set.add(t);
+    return [...set].sort();
+  }), [columns]);
   const dwOf = (col) => { const b = rowBars(col.rows[0]); return b ? { name: instShort, tf: tfLabel(col.tf), bars: b } : null; };
   const nExtra = Math.max(0, ...extras.map((e) => e?.panes.length || 0));
   const nStudies = Object.values(studies).filter((x) => x?.on).length;
@@ -176,14 +188,14 @@ export default function StackedScreens({ route }) {
       <div key={ci} className="anl-col" onMouseDown={() => setActive(ci)}>
         <div className={`anl-head ${active === ci ? "on" : ""}`} onDoubleClick={() => !full && setFocus(ci)}>
           <span>{tfLabel(col.tf)}{col.header ? `  ${fmt(col.header.open)}  ${fmt(col.header.high)}  ${fmt(col.header.low)}  ${fmt(col.header.close)}  [ ${col.header.chg == null ? "—" : `${col.header.chg >= 0 ? "" : "-"}${Math.abs(col.header.chg * 100).toFixed(2)}%`} ] - ${analystDate(col.header.date)}` : "  no data"}</span>
-          {!full && <button className="anl-exp" title="Open this chart full screen" onClick={(e) => { e.stopPropagation(); setFocus(ci); }}>⤢</button>}
+          {!full && <button className="anl-exp" title="Full screen (both windows)" onClick={(e) => { e.stopPropagation(); setFocus("both"); }}>⤢</button>}
         </div>
         {col.rows.map((row, ri) => (
           <Pane key={`${full ? "f" : ""}${ci}-${ri}`} row={row} ri={ri} last={ri === col.rows.length - 1 && !(extras[ci]?.panes?.length)} mode={mode} overlay={cfg.overlay} v={v} tf={col.tf} from={from}
-            height={Math.round(rowsH[ri] * k)} sync={full ? undefined : syncs[ci]} rangeKey={`${rangeKey}|${ci}${full ? "f" : ""}`} extra={ri === 0 ? extras[ci] : null} dw={dwOf(col)} />
+            height={Math.round(rowsH[ri] * k)} sync={(full ? fullSyncs : syncs)[ci]} rangeKey={`${rangeKey}|${ci}${full ? "f" : ""}`} extra={ri === 0 ? extras[ci] : null} dw={dwOf(col)} timeline={timelines[ci]} />
         ))}
         {(extras[ci]?.panes || []).map((pn, pi, all) => (
-          <StudyPane key={`${full ? "f" : ""}${pn.key}`} pane={pn} time={col.rows[0].time} last={pi === all.length - 1} tf={col.tf} from={from} height={Math.round(exH[pi] * k)} sync={full ? undefined : syncs[ci]} rangeKey={`${rangeKey}|${ci}${full ? "f" : ""}`} dw={dwOf(col)} />
+          <StudyPane key={`${full ? "f" : ""}${pn.key}`} pane={pn} time={col.rows[0].time} last={pi === all.length - 1} tf={col.tf} from={from} height={Math.round(exH[pi] * k)} sync={(full ? fullSyncs : syncs)[ci]} rangeKey={`${rangeKey}|${ci}${full ? "f" : ""}`} dw={dwOf(col)} timeline={timelines[ci]} />
         ))}
       </div>
     );
@@ -255,6 +267,7 @@ export default function StackedScreens({ route }) {
           {focus != null && (focus === "both" || columns[focus]) && (
             <div className="anl-full">
               <div className="anl-fbar">
+                <Seg value={mode} options={Object.keys(ANALYST_MODES)} onChange={(x) => { carryFocus = focus; navigate(`screens/${x}/${encodeURIComponent(instKey || "")}`, route.query.bench ? { bench: route.query.bench } : undefined); }} />
                 <InstrumentPicker value={inst ? { label: instLabel } : null} onChange={go} placeholder="Change instrument… (or press C)" width={260} />
                 {cfg.base === "rsc" && <><span className="small muted">vs</span><InstrumentPicker value={{ label: benchLabel }} onChange={setBench} placeholder="Comparison…" width={200} category={false} /></>}
                 <span className="small muted">Left</span><TfPicker value={left} onChange={(tf) => setTf("left", tf)} />

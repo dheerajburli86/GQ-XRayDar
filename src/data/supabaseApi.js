@@ -3,7 +3,7 @@
 // which the batch engine (cli/run.mjs) fills.
 import { CAP_UNRELIABLE_COUNTRIES } from "../../engine/geography.js";
 import { createClient } from "@supabase/supabase-js";
-import { applyCorporateActions, removeBadPrints } from "../../engine/quality.js";
+import { applyCorporateActions, removeBadPrints, cutAtTickerReuse } from "../../engine/quality.js";
 import { decodeEvents } from "../../engine/eventCodec.js";
 import { SCREEN_KEYS } from "../../engine/screenRow.js";
 import { runGet, runSet, runPurge } from "../lib/idbCache.js";
@@ -129,9 +129,10 @@ export function createSupabaseApi(url, key) {
       const acts = ca.map((x) => ({ exDate: x.ex_date, factor: +x.factor, type: x.type, source: x.source }));
       const adj0 = acts.length ? applyCorporateActions(b, acts).bars : b;
       // the same bad-print filter the engine applies, so a chart never disagrees with the numbers
-      const { bars: adj, removed } = removeBadPrints(adj0);
+      const { bars: adj1, removed } = removeBadPrints(adj0);
+      const { bars: adj, cut } = cutAtTickerReuse(adj1);
       const sec = (await secMap()).get(id);
-      return { ...adj, currency: sec?.currency, adjustments: acts, badPrints: removed };
+      return { ...adj, currency: sec?.currency, adjustments: acts, badPrints: removed, tickerReuse: cut };
     },
     async fxSummary() {
       const rows = await one(sb.from("tas_fx").select("currency,source,estimated,stale_days,max_stale,estimated_days,latest,latest_date"));

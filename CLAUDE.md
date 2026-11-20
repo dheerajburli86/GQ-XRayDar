@@ -261,3 +261,19 @@ The app opens on `home` = `src/pages/Start.jsx` and never opens a page for the u
 ## Phone layout (added 2026-11-20)
 
 At <= 760px the left menu is a slide-in drawer (☰ in the top bar, closes on navigation), the top bar keeps only search, reload and the theme toggle (`.m-hide` hides the rest), tables and cards scroll sideways inside themselves, inputs are 16px (no iOS zoom), and the stacked screens fold their second toolbar row behind "More controls". The floating Data window is off on phones. Tested at 390 px: no page scrolls sideways.
+
+## Synced panes, full-screen screen switcher, ticker reuse (added 2026-11-20, Alok Sir's list)
+
+- **Panes of one window zoom / pan together** (stacked screens). Every pane of a column is drawn on the SAME bar slots: `TvChart`
+  gets `timeline` (union of the column's row dates) and `padToTimeline` adds whitespace before / after a series (and repeats the
+  previous value over a day only the other market was closed, for lines), so `ChartSync({ logical: true })` can follow by bar
+  position. Time-range sync was wrong here: an RSI that starts 14 bars later reported a clipped range and dragged the price with
+  it. Full screen has its own pair of syncs. Other pages keep the time-range sync (different instruments, different dates).
+- **Full screen** (⤢ on a column or the toolbar button) opens BOTH windows; the bar has the RSIMMA / RSIACC / RSCMMA / RSCACC
+  switch (`carryFocus` keeps it open across the switch), instrument, comparison and a period for each side.
+- **Ticker reuse** (`cutAtTickerReuse`, engine/quality.js, applied in the engine and both bar loaders): a gap of 7+ days with a
+  permanent x5 level change means the bars in front belong to a previous holder of the ticker (US META: a ~$14 company until
+  Jan 2022, Facebook from 9 Jun 2022), so the series starts at the break; data health reports `ticker_reuse_cut`. Facebook's
+  2012-2022 history is under FB in the price source and is NOT in `price_history` for META: loading it is a heatmap-pipeline job
+  (this app never writes price_history).
+- `window.__GQ_TEST_CHARTS` (set by a headless test before load) collects every chart so a test can read visible ranges.

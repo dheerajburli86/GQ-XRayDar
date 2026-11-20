@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { removeBadPrints, shareBreaks } from "../engine/quality.js";
+import { removeBadPrints, shareBreaks, cutAtTickerReuse } from "../engine/quality.js";
 import { computeWeightWatcher } from "../engine/weightWatcher.js";
 
 const mk = (c) => ({ time: c.map((_, i) => `2021-01-${String(i + 1).padStart(2, "0")}`), open: [...c], high: [...c], low: [...c], close: [...c], volume: c.map(() => 1) });
@@ -49,4 +49,24 @@ test("weight watcher: dates where a big country had too few stocks are left empt
   assert.equal(us.weights[1], 50);
   assert.deepEqual(g.gaps, [{ date: "2015-03-31", countries: ["US"] }]);
   assert.ok(computeWeightWatcher(ms, geo).some((x) => x.parentKey === "G" && x.childType === "industryGroup"));
+});
+
+test("ticker reuse: bars of the previous holder of a ticker are cut at the gap + level change", () => {
+  const day = (i) => new Date(Date.UTC(2022, 0, 3 + i)).toISOString().slice(0, 10);
+  const old = Array.from({ length: 30 }, (_, i) => ({ time: day(i), close: 14 + (i % 3) * 0.1 }));
+  const fresh = Array.from({ length: 40 }, (_, i) => ({ time: day(30 + 14 + i), close: 184 - i * 0.5 })); // 14-day gap
+  const rows = [...old, ...fresh];
+  const bars = { time: rows.map((r) => r.time), open: rows.map((r) => r.close), high: rows.map((r) => r.close), low: rows.map((r) => r.close), close: rows.map((r) => r.close), volume: rows.map(() => 1) };
+  const r = cutAtTickerReuse(bars);
+  assert.equal(r.bars.close.length, 40);
+  assert.equal(r.bars.time[0], day(44));
+  assert.equal(r.cut.bars, 30);
+  // no gap (an unadjusted split) or a small level change: untouched
+  const noGap = { ...bars, time: rows.map((x, i) => day(i)) };
+  assert.equal(cutAtTickerReuse(noGap).cut, null);
+  const small = { ...bars, close: bars.close.map((x, i) => (i < 30 ? 100 : 130)) };
+  assert.equal(cutAtTickerReuse(small).cut, null);
+  // a short tail after the break is not trusted to be the "real" company
+  const shortTail = { ...bars, time: bars.time.slice(0, 40), open: bars.open.slice(0, 40), high: bars.high.slice(0, 40), low: bars.low.slice(0, 40), close: bars.close.slice(0, 40), volume: bars.volume.slice(0, 40) };
+  assert.equal(cutAtTickerReuse(shortTail).cut, null);
 });

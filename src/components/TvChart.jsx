@@ -47,12 +47,15 @@ export function zoomOutAt(x, y, factor = 1.5) {
 }
 
 export class ChartSync {
-  constructor() { this.members = new Set(); this.busy = false; }
+  /** logical: every member draws the SAME timeline (see `timeline` on TvChart), so panes follow each other by bar
+   *  position. Time-range sync is wrong there: a pane whose line starts later (RSI warm-up) reports a clipped range
+   *  and drags the others with it. */
+  constructor({ logical = false } = {}) { this.members = new Set(); this.busy = false; this.logical = logical; }
   add(m) { this.members.add(m); return () => this.members.delete(m); }
   range(src, r) {
     if (this.busy || !r) return;
     this.busy = true;
-    for (const m of this.members) if (m !== src) { try { m.chart.timeScale().setVisibleRange(r); } catch { /* chart without data */ } }
+    for (const m of this.members) if (m !== src) { try { const ts = m.chart.timeScale(); if (this.logical) ts.setVisibleLogicalRange(r); else ts.setVisibleRange(r); } catch { /* chart without data */ } }
     this.busy = false;
   }
   cross(src, time) {
@@ -82,15 +85,37 @@ function withTheme(base, theme) {
  * times or non-numeric prices. Bad rows are dropped here so one odd bar never blanks a chart.
  */
 const num = (v) => typeof v === "number" && Number.isFinite(v);
+/** A whitespace point ({time} only) keeps a bar slot on the time axis without drawing anything. */
+const isWhite = (d) => d && d.time != null && !("value" in d) && !("open" in d);
+const okPoint = (d) => d && d.time != null && (isWhite(d) || ("value" in d ? num(d.value) : num(d.open) && num(d.high) && num(d.low) && num(d.close)));
+
+/** Give a series exactly the bar slots of `timeline` (sorted, a superset of the series' times): whitespace before its
+ *  first and after its last point; inside, a missing slot repeats the previous value of a line (a day the other market
+ *  was closed) and stays whitespace for candles. */
+export function padToTimeline(data, timeline) {
+  if (!data.length || !Array.isArray(timeline) || !timeline.length) return data;
+  if (timeline.length === data.length && timeline[0] === data[0].time && timeline[timeline.length - 1] === data[data.length - 1].time) return data;
+  const out = [];
+  let j = 0, prev = null;
+  for (const t of timeline) {
+    while (j < data.length && data[j].time < t) j++;
+    if (j < data.length && data[j].time === t) { prev = data[j]; out.push(data[j]); }
+    else if (prev && j < data.length && "value" in prev) out.push({ time: t, value: prev.value });
+    else out.push({ time: t });
+  }
+  // a series with a time outside the timeline cannot be aligned: leave it as it was
+  return out.filter((d) => !isWhite(d)).length < data.length ? data : out;
+}
+
 export function cleanSeriesData(data) {
   if (!Array.isArray(data) || !data.length) return [];
   let ok = true, prev = null;
   for (const d of data) {
-    if (!d || d.time == null || (prev != null && !(d.time > prev)) || !("value" in d ? num(d.value) : num(d.open) && num(d.high) && num(d.low) && num(d.close))) { ok = false; break; }
+    if (!okPoint(d) || (prev != null && !(d.time > prev))) { ok = false; break; }
     prev = d.time;
   }
   if (ok) return data;
-  const rows = data.filter((d) => d && d.time != null && ("value" in d ? num(d.value) : num(d.open) && num(d.high) && num(d.low) && num(d.close)));
+  const rows = data.filter(okPoint);
   rows.sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
   const out = [];
   for (const d of rows) { if (out.length && out[out.length - 1].time === d.time) out[out.length - 1] = d; else out.push(d); }
@@ -101,7 +126,7 @@ export function cleanSeriesData(data) {
  * hoverNames: line names are not printed on the price axis; the name of the line under the
  * cursor (nearest within 14 px) shows next to the pointer instead (owner: Weight Watcher).
  */
-export function TvChart({ series, height = 300, sync, onReady, logScale = false, scaleMargins, visibleRange, fit = true, rangeKey, theme, hoverNames = false, downloadName, ohlcv = null, legend = false }) {
+export function TvChart({ series, height = 300, sync, onReady, logScale = false, scaleMargins, visibleRange, fit = true, rangeKey, theme, hoverNames = false, downloadName, ohlcv = null, legend = false, timeline = null }) {
   const el = useRef(null), chartRef = useRef(null), seriesRef = useRef([]), memberRef = useRef(null), namesRef = useRef(new Map());
   const [hover, setHover] = useState(null);
   // bumped whenever the chart instance is (re)created, e.g. when `sync` changes, so the series
@@ -117,6 +142,7 @@ export function TvChart({ series, height = 300, sync, onReady, logScale = false,
     catch (e) { console.warn(`[chart] could not start: ${e.message}`); return undefined; }
     chartRef.current = chart;
     CHART_BY_EL.set(el.current, chart);
+    if (typeof window !== "undefined" && window.__GQ_TEST_CHARTS) window.__GQ_TEST_CHARTS.push(chart); // headless tests only
     seriesRef.current = [];
     viewKey.current = undefined;
     setGen((g) => g + 1);
@@ -125,7 +151,8 @@ export function TvChart({ series, height = 300, sync, onReady, logScale = false,
     let unsub = null;
     if (sync) {
       unsub = sync.add(member);
-      chart.timeScale().subscribeVisibleTimeRangeChange((r) => sync.range(member, r));
+      if (sync.logical) chart.timeScale().subscribeVisibleLogicalRangeChange((r) => sync.range(member, r));
+      else chart.timeScale().subscribeVisibleTimeRangeChange((r) => sync.range(member, r));
       chart.subscribeCrosshairMove((p) => sync.cross(member, p?.time ?? null));
     }
     onReady?.(chart);
@@ -165,15 +192,16 @@ export function TvChart({ series, height = 300, sync, onReady, logScale = false,
     let anchor = null, anchorData = null;
     for (const spec of series || []) {
       if (!spec) continue;
-      const data = cleanSeriesData(spec.data);
-      if (!data.length) continue;
+      const clean = cleanSeriesData(spec.data).filter((d) => !isWhite(d));
+      if (!clean.length) continue;
+      const data = padToTimeline(clean, timeline);
       let s = null;
       try {
         s = chart.addSeries(TYPES[spec.type || "line"] || LineSeries, { priceLineVisible: false, lastValueVisible: true, ...spec.options }, spec.pane || 0);
         s.setData(data);
         for (const pl of spec.priceLines || []) if (num(pl?.price)) s.createPriceLine({ lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: true, ...pl });
         if (spec.markers?.length) {
-          const t0 = data[0].time, t1 = data[data.length - 1].time;
+          const t0 = clean[0].time, t1 = clean[clean.length - 1].time;
           const mk = spec.markers.filter((m) => m && m.time >= t0 && m.time <= t1).sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
           if (mk.length) createSeriesMarkers(s, mk);
         }
@@ -184,7 +212,7 @@ export function TvChart({ series, height = 300, sync, onReady, logScale = false,
       }
       seriesRef.current.push(s);
       if (spec.name) namesRef.current.set(s, { name: spec.name, color: spec.options?.color });
-      if (!anchor) { anchor = s; anchorData = data; }
+      if (!anchor) { anchor = s; anchorData = clean; }
     }
     try { chart.priceScale("right").applyOptions({ mode: logScale ? 1 : 0, ...(scaleMargins ? { scaleMargins } : {}) }); } catch { /* no price scale yet */ }
     if (memberRef.current && anchor) {
