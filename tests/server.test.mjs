@@ -93,9 +93,15 @@ test("server: link, alerts, tasks, digests, agent fallback", { skip: !DB && "set
     assert.ok(hit, "demo data should have at least one rule firing on the last candle");
     await call("POST", "/api/alerts/rules", { rule: hit.rule, params: hit.params, tf: "D", instrument: hit.id }, agent);
     sent.length = 0;
-    assert.ok((await app.alerts.tick()).fired >= 1);
-    assert.ok(sent.some((m) => /new alert/.test(m.text)));
-    assert.equal((await app.alerts.tick()).fired, 0, "the same candle never alerts twice");
+    // The stale-data guard refuses candles older than 7 days, so pin "now" to the day after the newest stored
+    // session: the test must not start failing just because the demo data ages.
+    const realNow = Date.now;
+    Date.now = () => Date.parse(st.info.asOf) + 86400000;
+    try {
+      assert.ok((await app.alerts.tick()).fired >= 1);
+      assert.ok(sent.some((m) => /new alert/.test(m.text)));
+      assert.equal((await app.alerts.tick()).fired, 0, "the same candle never alerts twice");
+    } finally { Date.now = realNow; }
     const evs = (await call("GET", "/api/alerts/events", null, web)).json;
     assert.ok(evs.length >= 1 && evs[0].delivered.telegram);
 
