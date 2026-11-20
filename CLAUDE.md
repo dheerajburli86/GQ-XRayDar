@@ -277,3 +277,7 @@ At <= 760px the left menu is a slide-in drawer (☰ in the top bar, closes on na
   2012-2022 history is under FB in the price source and is NOT in `price_history` for META: loading it is a heatmap-pipeline job
   (this app never writes price_history).
 - `window.__GQ_TEST_CHARTS` (set by a headless test before load) collects every chart so a test can read visible ranges.
+
+- **Stale indices are removed after a complete run** (`pgSink.finish`): every index of the run is upserted with its `run_id`, so after
+  `status = "ok"` any `tas_index` row with another run_id is no longer produced (India CW, a segment under the minimum cap) and is
+  deleted with its yearly values. Before this, such rows lingered from older runs and kept showing in the app.

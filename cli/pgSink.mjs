@@ -182,6 +182,13 @@ export function pgSink(pool, { log = console.log, dryRun = false } = {}) {
       for (const t of CURRENT_STATE) await pool.query(`delete from ${t} where run_id is distinct from $1`, [runId]);
       await pool.query(`delete from tas_data_issue where run_id is distinct from $1`, [runId]);
       await pool.query(`delete from tas_membership where run_id is distinct from $1`, [runId]);
+      // an index the methodology no longer produces (India CW, a segment under the minimum cap ...) must not linger from an
+      // older run: every index of THIS run was upserted with its run_id, so anything else is stale. Its yearly values go with
+      // it (on delete cascade). Only after a complete run: a partial one may simply not have reached an index yet.
+      if (run.status === "ok") {
+        const { rowCount } = await pool.query(`delete from tas_index where run_id is distinct from $1`, [runId]);
+        if (rowCount) log(`removed ${rowCount} stale index(es) no longer produced`);
+      }
       await pool.query(`update tas_calc_run set finished = $2, status = $3, stats = $4 where run_id = $1`,
         [runId, run.finished, run.status, JSON.stringify({ ...run.stats, writes: counts, screenKeys: SCREEN_KEYS })]);
     },
