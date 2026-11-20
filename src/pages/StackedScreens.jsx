@@ -160,7 +160,7 @@ export default function StackedScreens({ route }) {
     const rowsH = col.rows.map((_, ri) => (ri === 0 ? Math.round(paneH * 1.35) : paneH));
     const exH = (extras[ci]?.panes || []).map(() => Math.round(paneH * 0.8));
     const total = rowsH.reduce((x, y) => x + y, 0) + exH.reduce((x, y) => x + y, 0);
-    const k = full ? Math.max(1, (window.innerHeight - 110) / Math.max(1, total + 26 * (rowsH.length + exH.length))) : 1;
+    const k = full ? Math.max(1, (window.innerHeight - 10 - 13 * (rowsH.length + exH.length)) / Math.max(1, total)) : 1;
     return (
       <div key={ci} className="anl-col" onMouseDown={() => setActive(ci)}>
         <div className={`anl-head ${active === ci ? "on" : ""}`} onDoubleClick={() => !full && setFocus(ci)}>
