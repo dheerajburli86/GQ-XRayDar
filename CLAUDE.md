@@ -250,3 +250,8 @@ The app opens on `home` = `src/pages/Start.jsx` and never opens a page for the u
 ## Back button (added 2026-11-20)
 
 `BackBar` in `App.jsx` sits at the top of every page except Start: a big thick green "← Back" (browser history, so every URL-based drill-down, including heatmap, explorer and chart pages, steps back one level) plus a "⌂ Start" link. If Back does not change the address (deep link, nothing behind), it goes to Start. A drill-down that keeps its state outside the URL would not be covered, so keep drill state in the query string.
+
+## What-if price and two-window full screen on the stacked screens (added 2026-11-20, Alok Sir)
+
+- **What-if price** (`engine/whatif.js`, panel in `StackedScreens.jsx`): a typed close for the last stored session replaces that close; a later date appends a candle (open = previous close). Earlier dates are ignored. Everything on both windows (RSIs, averages, RSC) is rebuilt from the changed daily bars; the panel shows before / with-price closes and RSI. NOTHING is saved or sent anywhere, it clears when the instrument changes, and it is always badged HYPOTHETICAL. RSC carries the price with the last stored FX ratio. Exchange holidays are not known, so a holiday weekday is accepted. Tests: `tests/whatif.test.mjs`.
+- **⤢ Full screen** button (toolbar) puts both windows on the whole screen; the bar there changes the instrument, comparison, periods, and switches Both / Left only / Right only. The per-column ⤢ and double-click are kept.

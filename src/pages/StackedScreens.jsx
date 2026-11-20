@@ -23,6 +23,7 @@ import { loadInstrument, alignCurrency, defaultBenchmark } from "../lib/series.j
 import { usePersistent } from "../lib/storage.js";
 import { captureStack, savePng, savePdf } from "../lib/snapshot.js";
 import { tfLabel } from "../../engine/calendar.js";
+import { applyWhatIf, nextWeekday } from "../../engine/whatif.js";
 import { ANALYST_MODES, ACC_PERIODS, MMA_SHORT, buildAnalystColumn, analystDate } from "../../engine/analyst.js";
 
 const fmt = (v) => (v == null ? "—" : v.toFixed(2));
@@ -59,6 +60,10 @@ export default function StackedScreens({ route }) {
   const [rsiN, setRsiN] = usePersistent("analyst.rsiPeriod", null); // null = the methodology default (14)
   const [active, setActive] = useState(1);
   const [focus, setFocus] = useState(null);
+  // what-if price: hypothetical closes added to the daily candles (never stored); cleared when the instrument changes
+  const [wiState, setWiState] = useState({ key: "", list: [], open: false });
+  const wiList = useMemo(() => (wiState.key === instKey ? wiState.list : []), [wiState, instKey]);
+  const setWiList = (list) => setWiState((s) => ({ ...s, key: instKey, list }));
   useEffect(() => {
     if (focus == null) return undefined;
     const h = (e) => { if (e.key === "Escape") setFocus(null); };
@@ -105,18 +110,22 @@ export default function StackedScreens({ route }) {
   const rsiPer = Number.isInteger(rsiN) && rsiN >= 2 && rsiN <= 200 ? rsiN : m0.rsiPeriod;
   const m = useMemo(() => ({ ...m0, rsiPeriod: rsiPer }), [m0, rsiPer]);
   // one memo per side: changing the left timeframe does not rebuild (and redraw) the right column
-  const buildCol = (tf) => {
+  const wf = useMemo(() => (data?.inst && wiList.length ? applyWhatIf(data.inst, wiList, data.aligned?.a) : null), [data, wiList]);
+  const wiOn = !!wf?.applied.length;
+  const buildCol = (tf, base = false) => {
     if (!data?.inst) return null;
     const { inst, bench, aligned } = data;
+    const hyp = wiOn && !base ? wf : null;
     return buildAnalystColumn({
-      mode, tf, bars: inst, benchLabel,
-      bench: bench && aligned ? { time: bench.time, close: aligned.b } : null, rscCloses: aligned?.a,
+      mode, tf, bars: hyp ? hyp.bars : inst, benchLabel,
+      bench: bench && aligned ? { time: bench.time, close: aligned.b } : null, rscCloses: hyp ? hyp.rscCloses : aligned?.a,
       rsiPeriod: m.rsiPeriod, rsiMethod: m.rsiMethod, rscBase: m.rscRebase, to: to || null, anchor,
     });
   };
   /* eslint-disable react-hooks/exhaustive-deps */
-  const colL = useMemo(() => buildCol(left), [data, left, mode, benchLabel, m, to, anchor]);
-  const colR = useMemo(() => buildCol(right), [data, right, mode, benchLabel, m, to, anchor]);
+  const colL = useMemo(() => buildCol(left), [data, left, mode, benchLabel, m, to, anchor, wf]);
+  const colR = useMemo(() => buildCol(right), [data, right, mode, benchLabel, m, to, anchor, wf]);
+  const baseCols = useMemo(() => (wiOn ? [buildCol(left, true), buildCol(right, true)] : null), [data, left, right, mode, benchLabel, m, to, anchor, wf]); // before / after read-out
   /* eslint-enable react-hooks/exhaustive-deps */
   const columns = useMemo(() => (colL && colR ? [colL, colR] : null), [colL, colR]);
 
@@ -215,6 +224,9 @@ export default function StackedScreens({ route }) {
         <button className="btn sm" onClick={() => setRangeKey((k) => k + 1)} title="Back to the default window">⇥ Latest</button>
         <button className={`btn sm ${tray.open ? "primary" : ""}`} onClick={() => setTray({ ...tray, open: !tray.open })} title="Indicators, your own formulas and projections on the price row">
           Indicators{nStudies + customs.filter((c) => c.on).length + projs.filter((p) => !p.hidden).length ? ` (${nStudies + customs.filter((c) => c.on).length + projs.filter((p) => !p.hidden).length})` : ""}</button>
+        <button className={`btn sm ${wiOn || wiState.open ? "primary" : ""}`} onClick={() => setWiState((x) => ({ ...x, key: instKey, open: !x.open }))} title="Type a price (today's, or a later session's) and see the charts and indicators as if it had printed">
+          What-if price{wiOn ? ` (${wf.applied.length})` : ""}</button>
+        {wiOn && <Badge kind="r">HYPOTHETICAL price in charts</Badge>}
         {sec && <a className="btn sm" href={`#/stock/${sec.id}`}>Stock page</a>}
         <a className="btn sm" href={`#/tiles?inst=${encodeURIComponent(instKey)}&mode=${mode}`} title="Open this instrument's peers in the multi-tile screen">Tiles</a>
         {columns && <><button className="btn sm" onClick={() => savePicture("png")} title="Download this whole screen as a picture">Download PNG</button>
@@ -222,6 +234,7 @@ export default function StackedScreens({ route }) {
         {data?.aligned && data.aligned.currency === "USD" && data.inst.currency !== "USD" && <Badge>RSC in USD (different currencies)</Badge>}
         {data?.inst?.adjustments?.length > 0 && <Badge kind="b">split-adjusted ({data.inst.adjustments.length})</Badge>}
       </div>
+      {wiState.open && data?.inst && <WhatIfPanel bars={data.inst} list={wiList} setList={setWiList} wf={wf} columns={columns} baseCols={baseCols} to={to} />}
       {tray.open && (
         <div className="card" style={{ padding: 8 }}>
           <Tabs value={tray.tab} onChange={(tab) => setTray({ ...tray, tab })} tabs={[{ value: "studies", label: "Indicators" }, { value: "formula", label: `My formulas (${customs.length})` }, { value: "proj", label: `Projections (${projs.length})` }]} />
@@ -244,6 +257,7 @@ export default function StackedScreens({ route }) {
                 {cfg.base === "rsc" && <><span className="small muted">vs</span><InstrumentPicker value={{ label: benchLabel }} onChange={setBench} placeholder="Comparison…" width={200} category={false} /></>}
                 <span className="small muted">Left</span><TfPicker value={left} onChange={(tf) => setTf("left", tf)} />
                 <span className="small muted">Right</span><TfPicker value={right} onChange={(tf) => setTf("right", tf)} />
+                {wiOn && <Badge kind="r">HYPOTHETICAL</Badge>}
                 <div className="seg">{[["both", "Both"], [0, "Left only"], [1, "Right only"]].map(([k, l]) => <button key={l} className={focus === k ? "on" : ""} onClick={() => setFocus(k)}>{l}</button>)}</div>
               </div>
               <button className="anl-x" title="Back (Esc)" onClick={() => setFocus(null)}>✕</button>
@@ -257,3 +271,49 @@ export default function StackedScreens({ route }) {
   );
 }
 
+
+/** Type a price for today or a later session; read what changes. Nothing is saved. */
+function WhatIfPanel({ bars, list, setList, wf, columns, baseCols, to }) {
+  const lastDate = bars.time.at(-1), lastClose = bars.close.at(-1);
+  const [date, setDate] = useState(lastDate);
+  const [price, setPrice] = useState("");
+  const p = parseFloat(price);
+  const ok = Number.isFinite(p) && p > 0 && date >= lastDate;
+  const add = () => { if (!ok) return; setList([...list.filter((e) => e.date !== date), { date, close: p }].sort((a, b) => (a.date < b.date ? -1 : 1))); setPrice(""); setDate(nextWeekday(date)); };
+  const chg = (v) => (lastClose > 0 ? `${v / lastClose - 1 >= 0 ? "+" : ""}${((v / lastClose - 1) * 100).toFixed(2)}%` : "");
+  const rsiIdx = (col) => col.rows.findIndex((r) => r.kind === "rsi");
+  const at = (col, i) => { const b = col?.rows[i]?.base; return b ? b[b.length - 1] : null; };
+  const f = (v) => (v == null || !Number.isFinite(v) ? "—" : v.toFixed(2));
+  return (
+    <div className="card" style={{ padding: 8 }}>
+      <div className="row wrap" style={{ gap: 8, alignItems: "center" }}>
+        <b>What-if price</b>
+        <span className="small muted">Last stored close {lastClose?.toFixed(2)} on {analystDate(lastDate)}. Same date as that = replace the close; a later date = a new candle.</span>
+      </div>
+      <div className="row wrap" style={{ gap: 8, marginTop: 6, alignItems: "center" }}>
+        <span className="small muted">Date</span><input type="date" value={date} min={lastDate} onChange={(e) => setDate(e.target.value || lastDate)} />
+        <button className="btn sm" onClick={() => setDate(lastDate)} title="Use the last stored session (today's price)">Today's session</button>
+        <button className="btn sm" onClick={() => setDate(nextWeekday(list.length ? list.at(-1).date : lastDate))} title="The next weekday after the last one entered">Next day</button>
+        <span className="small muted">Close price</span>
+        <input type="number" step="any" min="0" value={price} placeholder={lastClose?.toFixed(2)} style={{ width: 110 }} onChange={(e) => setPrice(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
+        {ok && <span className="small muted">{chg(p)} vs last close</span>}
+        <button className="btn sm primary" disabled={!ok} onClick={add}>Add</button>
+        {list.length > 0 && <button className="btn sm" onClick={() => setList([])}>Reset</button>}
+      </div>
+      {list.length > 0 && <div className="row wrap" style={{ gap: 6, marginTop: 6 }}>
+        {list.map((e) => <span key={e.date} className="badge">{analystDate(e.date)} · {e.close} ({chg(e.close)}) <a style={{ cursor: "pointer" }} title="Remove" onClick={() => setList(list.filter((x) => x.date !== e.date))}>✕</a></span>)}
+      </div>}
+      {wf?.ignored.length > 0 && <div className="note warn small">Dates before the last stored session are ignored (history is not rewritten): {wf.ignored.map((e) => analystDate(e.date)).join(", ")}.</div>}
+      {to && wf?.applied.some((e) => e.date > to) && <div className="note warn small">The “To” date ({analystDate(to)}) cuts off prices after it; clear it to see them.</div>}
+      {baseCols && columns && (
+        <table className="tbl" style={{ marginTop: 8 }}>
+          <thead><tr><th>Window</th><th>Close before</th><th>Close with price</th><th>Indicator</th><th>Before</th><th>With price</th></tr></thead>
+          <tbody>
+            {columns.map((c, ci) => { const ri = rsiIdx(c); const bc = baseCols[ci]; return (
+              <tr key={ci}><td>{tfLabel(c.tf)}</td><td>{f(bc?.header?.close)}</td><td>{f(c.header?.close)}</td><td>{ri >= 0 ? c.rows[ri].label : ""}</td><td>{f(at(bc, ri))}</td><td>{f(at(c, ri))}</td></tr>); })}
+          </tbody>
+        </table>)}
+      <div className="small muted" style={{ marginTop: 4 }}>Hypothetical: nothing is saved, the stored data is unchanged, and the charts, RSIs and averages on both windows are recalculated with the typed price. Exchange holidays are not known here, so a weekday that is a holiday is still accepted. Changing the instrument clears it.</div>
+    </div>
+  );
+}
