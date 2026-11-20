@@ -187,6 +187,14 @@ function Shell() {
   const route = useRoute();
   const [collapsed, setCollapsed] = usePersistent("navCollapsed", typeof window !== "undefined" && window.innerWidth < 760);
   const acct = useAccount();
+  const [sideW, setSideW] = usePersistent("navWidth", 228);
+  const [drag, setDrag] = useState(false);
+  const startDrag = (e) => {
+    e.preventDefault(); setDrag(true);
+    const move = (ev) => setSideW(Math.max(160, Math.min(520, Math.round(ev.clientX))));
+    const up = () => { setDrag(false); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+  };
   useEffect(() => {
     const apply = () => { document.documentElement.dataset.theme = resolveTheme(d.settings.theme); };
     apply();
@@ -228,8 +236,9 @@ function Shell() {
   }
 
   return (
-    <div className={`shell ${collapsed ? "collapsed" : ""}`}>
+    <div className={`shell ${collapsed ? "collapsed" : ""}`} style={collapsed ? undefined : { "--side-w": `${sideW}px` }}>
       <nav className="side">
+        {!collapsed && <div className={`side-grip ${drag ? "on" : ""}`} onPointerDown={startDrag} onDoubleClick={() => setSideW(228)} title="Drag to resize · double-click to reset" />}
         <div className="brand" onClick={() => setCollapsed(!collapsed)} style={{ cursor: "pointer" }} title="Collapse / expand">
           <div className="logo">GQ</div>
           <div className="bt"><div className="t1">GQ XRayDar</div><div className="t2">Global market intelligence · {d.mode === "demo" ? "demo data" : "live data"}</div></div>

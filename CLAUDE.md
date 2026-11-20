@@ -229,3 +229,8 @@ redeploy ENDS the job that is running. On 2026-11-19 a push at 06:26 UTC killed 
 - **Item 30**: the top-down explorer now lists Sub-industries (owner's US workbook + rules) under a sector or industry group; clicking one (`sub=` in the URL) shows its stocks, and the stocks tables carry a Sub-industry column.
 - **Item 31**: Market breadth has a Period selector (1M ... All, or Custom from / to). It slices the charts and KPIs; the data itself is unchanged.
 - **Item 29 (house indices as rows)**: `engine/pipeline.js` analyses the USD CW series of Global / region / classification / country / country-sector (plus India's EW ones) as close-only rows, id `h:<index key>`, `asset_class = 'Index'`, `universe = 'house_indices'`, snapshots under country "House indices" (136 on the local data). They join scanners / RS / screener when the scope includes Index; they never enter CW / EW. Rows appear after the next engine run. Chart lab has no price_history bars for `h:` ids; open them through the index series instead.
+
+## Resizable side menu and full-screen charts (added 2026-11-20)
+
+- The left menu has a drag handle on its right edge (160-520 px, saved as `navWidth`, double-click resets to 228). Collapsed mode is unchanged.
+- Stacked screens (RSIMMA / RSIACC / RSCMMA / RSCACC): ⤢ on a column header (or double-click it) opens that column full screen with taller panes; ✕ or Esc returns. Workspace panels have the same ⤢. The Multi-tile screen already had its own maximise.

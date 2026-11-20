@@ -1,6 +1,6 @@
 // Multi-chart workspace: any securities, indices, benchmarks and indicator
 // panels side by side, saved as named layouts.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useData } from "../data/store.jsx";
 import { useAsync } from "../lib/useAsync.js";
 import { PageHead, Seg, Select, Loading } from "../components/ui.jsx";
@@ -93,18 +93,33 @@ function ChartPanel({ p, onChange, onRemove, sync }) {
     if (p.ind === "mma") return [base, ...[3, 5, 8, 10, 12, 15].map((n) => L(emaStrict(b.close, n), "#facc15")), ...[30, 35, 40, 45, 50, 60].map((n) => L(emaStrict(b.close, n), "#ef4444")), ...proj];
     return [base, L(emaStrict(b.close, 20), "#22d3ee", 1, "20"), L(emaStrict(b.close, 50), "#14a44d", 1, "50"), L(emaStrict(b.close, 200), "#d97706", 1, "200"), ...proj];
   }, [data, p.tf, p.ind, projList]);
+  const [big, setBig] = useState(false);
+  useEffect(() => {
+    if (!big) return undefined;
+    const h = (e) => { if (e.key === "Escape") setBig(false); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [big]);
+  const chart = (h) => (loading ? <Loading /> : <TvChart height={h} series={series} sync={big ? null : sync} ohlcv={bars ? { name: data?.inst?.label || p.inst?.label || "", tf: p.tf, bars } : null} legend={!["rsi", "macd", "rsc", "volume"].includes(p.ind)} />);
   return (
     <div className="card tight" style={{ padding: 0 }}>
+      {big && (
+        <div className="anl-full">
+          <button className="anl-x" title="Back to all charts (Esc)" onClick={() => setBig(false)}>✕</button>
+          <div style={{ paddingTop: 36 }}>{chart(Math.max(320, window.innerHeight - 90))}</div>
+        </div>
+      )}
       <div className="panel-head">
         <InstrumentPicker value={p.inst} onChange={(r) => onChange({ inst: r })} width={210} />
         <div className="row">
           <TfPicker value={p.tf} onChange={(tf) => onChange({ tf })} />
           <Select value={p.ind} options={INDICATORS} onChange={(ind) => onChange({ ind })} />
           {p.ind === "rsc" && <InstrumentPicker value={p.bench} onChange={(r) => onChange({ bench: r })} width={170} placeholder="Benchmark…" />}
+          <button className="btn sm ghost" onClick={() => setBig(true)} title="Open this chart full screen">⤢</button>
           <button className="btn sm ghost" onClick={onRemove} title="Remove panel">✕</button>
         </div>
       </div>
-      {loading ? <Loading /> : <TvChart height={280} series={series} sync={sync} ohlcv={bars ? { name: data?.inst?.label || p.inst?.label || "", tf: p.tf, bars } : null} legend={!["rsi", "macd", "rsc", "volume"].includes(p.ind)} />}
+      {chart(280)}
     </div>
   );
 }

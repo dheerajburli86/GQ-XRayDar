@@ -58,6 +58,13 @@ export default function StackedScreens({ route }) {
   const anchor = from && rg.anchor ? from : null;
   const [rsiN, setRsiN] = usePersistent("analyst.rsiPeriod", null); // null = the methodology default (14)
   const [active, setActive] = useState(1);
+  const [focus, setFocus] = useState(null);
+  useEffect(() => {
+    if (focus == null) return undefined;
+    const h = (e) => { if (e.key === "Escape") setFocus(null); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [focus]);
   // studies, own formulas and projections on the price row (the same stores the chart lab uses)
   const [studies, setStudies] = usePersistent("analyst.studies", {});
   const [customs, setCustoms] = usePersistent("customIndicators", []);
@@ -149,6 +156,28 @@ export default function StackedScreens({ route }) {
   useLayoutEffect(() => { const el = anlRef.current; if (el) setTop(Math.max(60, el.getBoundingClientRect().top + window.scrollY)); }, [hasCols, vh, mode, v.avgOnly, rg.from, rg.to, picking, tray.open, tray.tab]);
   const paneH = Math.max(70, Math.floor((vh - top - 22 - 34) / (nRows + 0.35)));
 
+  const renderCol = (col, ci, full) => {
+    const rowsH = col.rows.map((_, ri) => (ri === 0 ? Math.round(paneH * 1.35) : paneH));
+    const exH = (extras[ci]?.panes || []).map(() => Math.round(paneH * 0.8));
+    const total = rowsH.reduce((x, y) => x + y, 0) + exH.reduce((x, y) => x + y, 0);
+    const k = full ? Math.max(1, (window.innerHeight - 110) / Math.max(1, total + 26 * (rowsH.length + exH.length))) : 1;
+    return (
+      <div key={ci} className="anl-col" onMouseDown={() => setActive(ci)}>
+        <div className={`anl-head ${active === ci ? "on" : ""}`} onDoubleClick={() => !full && setFocus(ci)}>
+          <span>{tfLabel(col.tf)}{col.header ? `  ${fmt(col.header.open)}  ${fmt(col.header.high)}  ${fmt(col.header.low)}  ${fmt(col.header.close)}  [ ${col.header.chg == null ? "—" : `${col.header.chg >= 0 ? "" : "-"}${Math.abs(col.header.chg * 100).toFixed(2)}%`} ] - ${analystDate(col.header.date)}` : "  no data"}</span>
+          {!full && <button className="anl-exp" title="Open this chart full screen" onClick={(e) => { e.stopPropagation(); setFocus(ci); }}>⤢</button>}
+        </div>
+        {col.rows.map((row, ri) => (
+          <Pane key={`${full ? "f" : ""}${ci}-${ri}`} row={row} ri={ri} last={ri === col.rows.length - 1 && !(extras[ci]?.panes?.length)} mode={mode} overlay={cfg.overlay} v={v} tf={col.tf} from={from}
+            height={Math.round(rowsH[ri] * k)} sync={full ? undefined : syncs[ci]} rangeKey={`${rangeKey}|${ci}${full ? "f" : ""}`} extra={ri === 0 ? extras[ci] : null} dw={dwOf(col)} />
+        ))}
+        {(extras[ci]?.panes || []).map((pn, pi, all) => (
+          <StudyPane key={`${full ? "f" : ""}${pn.key}`} pane={pn} time={col.rows[0].time} last={pi === all.length - 1} tf={col.tf} from={from} height={Math.round(exH[pi] * k)} sync={full ? undefined : syncs[ci]} rangeKey={`${rangeKey}|${ci}${full ? "f" : ""}`} dw={dwOf(col)} />
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="stack" style={{ gap: 6 }}>
       {picking && <QuickTicker initial={picking.initial} onClose={() => setPicking(null)} onPick={go} />}
@@ -202,22 +231,17 @@ export default function StackedScreens({ route }) {
         </div>
       )}
       {!inst ? <Empty>Pick an instrument</Empty> : loading ? <Loading what="series" /> : error ? <div className="note warn">{String(error.message)}</div> : !columns ? <Empty>No price history</Empty> : (
-        <div className="anl" ref={(el) => { shotRef.current = el; anlRef.current = el; }}>
-          {columns.map((col, ci) => (
-            <div key={ci} className="anl-col" onMouseDown={() => setActive(ci)}>
-              <div className={`anl-head ${active === ci ? "on" : ""}`}>
-                {tfLabel(col.tf)}{col.header ? `  ${fmt(col.header.open)}  ${fmt(col.header.high)}  ${fmt(col.header.low)}  ${fmt(col.header.close)}  [ ${col.header.chg == null ? "—" : `${col.header.chg >= 0 ? "" : "-"}${Math.abs(col.header.chg * 100).toFixed(2)}%`} ] - ${analystDate(col.header.date)}` : "  no data"}
-              </div>
-              {col.rows.map((row, ri) => (
-                <Pane key={`${ci}-${ri}`} row={row} ri={ri} last={ri === col.rows.length - 1 && !(extras[ci]?.panes?.length)} mode={mode} overlay={cfg.overlay} v={v} tf={col.tf} from={from}
-                  height={ri === 0 ? Math.round(paneH * 1.35) : paneH} sync={syncs[ci]} rangeKey={`${rangeKey}|${ci}`} extra={ri === 0 ? extras[ci] : null} dw={dwOf(col)} />
-              ))}
-              {(extras[ci]?.panes || []).map((pn, pi, all) => (
-                <StudyPane key={pn.key} pane={pn} time={col.rows[0].time} last={pi === all.length - 1} tf={col.tf} from={from} height={Math.round(paneH * 0.8)} sync={syncs[ci]} rangeKey={`${rangeKey}|${ci}`} dw={dwOf(col)} />
-              ))}
+        <>
+          <div className="anl" ref={(el) => { shotRef.current = el; anlRef.current = el; }}>
+            {columns.map((col, ci) => renderCol(col, ci, false))}
+          </div>
+          {focus != null && columns[focus] && (
+            <div className="anl-full">
+              <button className="anl-x" title="Back to all charts (Esc)" onClick={() => setFocus(null)}>✕</button>
+              <div className="anl anl-one">{renderCol(columns[focus], focus, true)}</div>
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
       <div className="small muted">Keys: D W M Q H Y change the selected column's period · C (or start typing) changes the instrument. RSI {m.rsiPeriod} and every EMA are counted in candles of that column. {anchor ? `Candles of 2 months and longer are counted from ${analystDate(anchor)}; data before it still warms up the RSIs and averages.` : "n-month candles run on a fixed grid from January 2000 (2M, 4M and 2Y line up with the calendar)."}{to ? ` Nothing after ${analystDate(to)} is used.` : ""} Click a column to select it.</div>
     </div>
