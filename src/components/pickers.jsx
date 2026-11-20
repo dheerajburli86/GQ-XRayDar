@@ -27,10 +27,12 @@ export const idColumns = (keys = ["country", "sector", "cap"]) => [symbolColumn,
 export function ScopeFilter({ scope, onChange, show = ["region", "country", "sector", "cap", "asset"] }) {
   const d = useData();
   const set = (k, v) => onChange({ ...scope, [k]: v || null });
-  const countries = scope.region ? d.countries.filter((c) => d.secs.some((s) => s.country === c && s.region === scope.region)) : d.countries;
+  const inRegion = (x, r) => (r === "India" ? x.country === "India" : x.region === r);
+  const countries = scope.region ? d.countries.filter((c) => d.secs.some((s) => s.country === c && inRegion(s, scope.region))) : d.countries;
+  const regionOptions = d.regions.includes("India") ? d.regions : [...d.regions, "India"].sort();
   return (
     <div className="row">
-      {show.includes("region") && <Select label="Region" value={scope.region} options={d.regions} onChange={(v) => onChange({ ...scope, region: v, country: null })} allowEmpty />}
+      {show.includes("region") && <Select label="Region" value={scope.region} options={regionOptions} onChange={(v) => onChange({ ...scope, region: v, country: null })} allowEmpty />}
       {show.includes("classification") && <Select label="Class" value={scope.classification} options={d.classifications} onChange={(v) => set("classification", v)} allowEmpty />}
       {show.includes("country") && <Select label="Country" value={scope.country} options={countries} onChange={(v) => set("country", v)} allowEmpty />}
       {show.includes("sector") && <Select label="Sector" value={scope.sector} options={d.sectors} onChange={(v) => set("sector", v)} allowEmpty />}
@@ -40,7 +42,7 @@ export function ScopeFilter({ scope, onChange, show = ["region", "country", "sec
   );
 }
 export function applyScope(rows, scope) {
-  return rows.filter((r) => (!scope.region || r.sec.region === scope.region) && (!scope.classification || r.sec.classification === scope.classification)
+  return rows.filter((r) => (!scope.region || (scope.region === "India" ? r.sec.country === "India" : r.sec.region === scope.region)) && (!scope.classification || r.sec.classification === scope.classification)
     && (!scope.country || r.sec.country === scope.country) && (!scope.sector || r.sec.sector === scope.sector)
     && (!scope.industryGroup || r.sec.industryGroup === scope.industryGroup) && (!scope.cap || r.sec.capSegment === scope.cap)
     && (!scope.assetClass || (r.sec.assetClass || "Stock") === scope.assetClass));
