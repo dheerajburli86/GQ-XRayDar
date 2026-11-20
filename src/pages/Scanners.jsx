@@ -112,7 +112,7 @@ export default function Scanners({ route }) {
     return rows;
   }, [d.rows, s.scope, s.market, s.wl, wls]);
 
-  const tfs = sc.tf === "DW" ? ["D", "W"] : sc.tf === "DWMQ" ? ["D", "W", "M", "Q"] : sc.tf ? ["D", "W", "M"] : null;
+  const tfs = sc.tf === "DW" ? ["D", "W"] : sc.tf === "DWMQ" ? ["D", "W", "M", "Q", "N"] : sc.tf ? ["D", "W", "M", "Q", "N", "Y"] : null;
   const tf = tfs && tfs.includes(s.tf) ? s.tf : "D";
   const mode = sc.modes ? sc.modes.find((m) => m.value === s.mode?.[sc.id]) || sc.modes[0] : null;
 
@@ -127,7 +127,7 @@ export default function Scanners({ route }) {
       <div className="card tight">
         <div className="small muted" style={{ marginBottom: 6 }}>{sc.desc}</div>
         <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-          {tfs && <Seg value={tf} options={tfs.map((t) => ({ value: t, label: { D: "Daily", W: "Weekly", M: "Monthly", Q: "Quarterly" }[t] }))} onChange={(t) => set({ tf: t })} />}
+          {tfs && <Seg value={tf} options={tfs.map((t) => ({ value: t, label: { D: "Daily", W: "Weekly", M: "Monthly", Q: "Quarterly", N: "9-month", Y: "Yearly" }[t] }))} onChange={(t) => set({ tf: t })} />}
           {sc.modes && sc.modes.length > 1 && <Select value={mode.value} options={sc.modes.map((m) => ({ value: m.value, label: m.label }))} onChange={(v) => set({ mode: { ...(s.mode || {}), [sc.id]: v } })} />}
           <ScopeFilter scope={s.scope || {}} onChange={(scope) => set({ scope })} show={["sector", "cap", "asset"]} />
           <Select label="Watchlist" value={s.wl} options={Object.entries(wls).map(([k, v]) => ({ value: k, label: v.name }))} onChange={(wl) => set({ wl })} allowEmpty="Any" />

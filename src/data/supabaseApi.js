@@ -94,7 +94,7 @@ export function createSupabaseApi(url, key) {
       return rows.map((r) => (CAP_UNRELIABLE_COUNTRIES.has(r.country) ? { ...r, cap_local: null, cap_currency: null, cap_usd: null, cap_usd_now: null, cap_segment: null } : r)).map((r) => ({
         id: r.id, symbol: r.symbol, name: r.name, universe: r.universe, exchange: r.exchange, isin: r.isin, country: r.country, region: r.region,
         classification: r.classification, geoAssigned: r.geo_assigned, currency: r.currency, currencyMajor: r.currency_major, currencyDivisor: r.currency_divisor,
-        countryCurrency: r.country_currency, sector: r.sector, industryGroup: r.industry_group, industry: r.industry, classSource: r.class_source,
+        countryCurrency: r.country_currency, sector: r.sector, industryGroup: r.industry_group, industry: r.industry, subIndustry: r.sub_industry ?? null, classSource: r.class_source,
         capLocal: r.cap_local, capCurrency: r.cap_currency, capUsd: r.cap_usd, capUsdNow: r.cap_usd_now, turnoverUsd: r.turnover_usd ?? null, capSegment: r.cap_segment, assetClass: r.asset_class || "Stock", active: r.active,
       }));
     },

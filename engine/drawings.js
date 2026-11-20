@@ -132,6 +132,6 @@ export const DRAW_TOOLS = [
   { value: "fibarc", label: "Fib arcs", clicks: 2 }, { value: "fibtime", label: "Fib time zones", clicks: 2 },
   { value: "pitchfork", label: "Pitchfork", clicks: 3 }, { value: "schiff", label: "Schiff pitchfork", clicks: 3 }, { value: "modschiff", label: "Modified Schiff", clicks: 3 },
   { value: "gannfan", label: "Gann fan", clicks: 2 }, { value: "ganngrid", label: "Gann grid", clicks: 2 },
-  { value: "rr", label: "Risk / reward", clicks: 3 }, { value: "measure", label: "Measure", clicks: 2 }, { value: "note", label: "Note", clicks: 1 },
+  { value: "rr", label: "Risk / reward", clicks: 3 }, { value: "measure", label: "Measure", clicks: 2 }, { value: "note", label: "Note", clicks: 1 }, { value: "callout", label: "Callout (text box)", clicks: 1 },
   { value: "avwap", label: "Anchored VWAP", clicks: 1 }, { value: "avp", label: "Anchored volume profile", clicks: 1 },
 ];

@@ -22,8 +22,8 @@ const r4 = (v) => (num(v) ? Math.round(v * 1e4) / 1e4 : null);
 const r2 = (v) => (num(v) ? Math.round(v * 100) / 100 : null);
 const pct = (a, b) => (num(a) && num(b) && b !== 0 ? (a / b - 1) * 100 : null);
 
-const N52 = { D: 252, W: 52, M: 12, Q: 8, Y: 5 };
-const TREND_EMA = { D: 50, W: 10, M: 6, Q: 4, Y: 3 };
+const N52 = { D: 252, W: 52, M: 12, Q: 8, N: 6, Y: 5 };
+const TREND_EMA = { D: 50, W: 10, M: 6, Q: 4, N: 3, Y: 3 };
 
 /** Bars-per-timeframe analysis. Returns the per-bar arrays the snapshot and events need. */
 export function analyzeTimeframe(daily, tf, m = METHODOLOGY) {
@@ -143,7 +143,7 @@ function rscBoxFor(daily, own, bser, tf) {
 export function analyzeSecurity(daily, usdClose, ccClose, bench, ctx = {}, m = METHODOLOGY) {
   const n = daily.time.length;
   if (n < 30) return null;
-  const tfs = { D: analyzeTimeframe(daily, "D", m), W: analyzeTimeframe(daily, "W", m), M: analyzeTimeframe(daily, "M", m), Q: analyzeTimeframe(daily, "Q", m), Y: analyzeTimeframe(daily, "Y", m) };
+  const tfs = { D: analyzeTimeframe(daily, "D", m), W: analyzeTimeframe(daily, "W", m), M: analyzeTimeframe(daily, "M", m), Q: analyzeTimeframe(daily, "Q", m), N: analyzeTimeframe(daily, "N", m), Y: analyzeTimeframe(daily, "Y", m) };
   const D = tfs.D, i = n - 1, c = daily.close;
 
   // --- returns (local and USD) ---

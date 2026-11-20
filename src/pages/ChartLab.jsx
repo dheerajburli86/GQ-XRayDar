@@ -250,7 +250,7 @@ export default function ChartLab({ route }) {
           <button className="btn sm" onClick={pdf}>PDF</button>
         </div>
         {tool !== "none" && !timeStyle && <div className="note small" style={{ marginTop: 6 }}>Drawings work on Candles, Heikin-Ashi and Line.</div>}
-        {tool !== "none" && timeStyle && <div className="small muted" style={{ marginTop: 6 }}>{({ trend: "Click two points.", hline: "Click a price.", channel: "Click two points for the line, then a third for the parallel.", note: "Click where the note goes.",
+        {tool !== "none" && timeStyle && <div className="small muted" style={{ marginTop: 6 }}>{({ trend: "Click two points.", hline: "Click a price.", channel: "Click two points for the line, then a third for the parallel.", note: "Click where the note goes.", callout: "Click where the callout goes; you then pick its text, background and text colour.",
           fib: "Click the start and the end of the move.", fibext: "Click the start and end of the move, then the point to project from.", fibfan: "Click the start and end of the move.", fibarc: "Click the start and end of the move.", fibtime: "Click two candles: their distance is the time unit.",
           pitchfork: "Click the handle, then the two reaction points.", schiff: "Click the handle, then the two reaction points.", modschiff: "Click the handle, then the two reaction points.",
           gannfan: "Click the origin, then a point that sets the 1x1.", ganngrid: "Click two points: span and slope of the grid.", rr: "Click entry, then stop, then target.", measure: "Click two points.",
@@ -311,6 +311,7 @@ function ChartCanvas({ name = "", bars, v, levels, extraLines = [], patterns = [
   useEffect(() => { toolRef.current = tool; onDrawRef.current = onDraw; srcRef.current = src; });
   const [vpBars, setVpBars] = useState([]);
   const [vpInfo, setVpInfo] = useState(null);
+  const [boxes, setBoxes] = useState([]);
   const timeStyle = TIME_STYLES.has(v.style);
   const panes = (v.vol && timeStyle ? 1 : 0) + (v.rsi ? 1 : 0) + (v.macd ? 1 : 0) + (timeStyle ? extra?.panes?.length || 0 : 0);
   const height = 430 + panes * 110;
@@ -330,6 +331,11 @@ function ChartCanvas({ name = "", bars, v, levels, extraLines = [], patterns = [
       const pt = { time: p.time, price: +price.toFixed(4) };
       if (t === "hline") return onDrawRef.current({ type: "hline", a: pt });
       if (t === "note") { const text = prompt("Note text"); if (text) onDrawRef.current({ type: "note", a: pt, text: text.slice(0, 60) }); return; }
+      if (t === "callout") {
+        const text = prompt("Callout text"); if (!text) return;
+        const bg = prompt("Background colour (name or #hex)", "#facc15") || "#facc15", fg = prompt("Text colour (name or #hex)", "#111827") || "#111827";
+        onDrawRef.current({ type: "callout", a: pt, text: text.slice(0, 120), bg, fg }); return;
+      }
       const need = DRAW_TOOLS.find((x) => x.value === t)?.clicks || 2;
       if (need === 1) return onDrawRef.current({ type: t, a: pt });
       pending.current.push(pt);
@@ -465,6 +471,24 @@ function ChartCanvas({ name = "", bars, v, levels, extraLines = [], patterns = [
     } catch (e) { console.warn(`[chart lab] drawing failed: ${e.message}`); }
   }, [bars, v.ema, v.mma, v.vol, v.rsi, v.macd, v.style, levels, extraLines, patterns, cmp, drawings, timeStyle, v.tf, extra]);
 
+  // callouts: text boxes pinned to a candle and a price, kept in place while the chart moves
+  useEffect(() => {
+    const chart = chartRef.current, list = drawings.filter((d) => d.type === "callout" && !d.hidden);
+    if (!chart || !timeStyle || !list.length) { setBoxes([]); return; }
+    const place = () => {
+      try {
+        setBoxes(list.map((d) => {
+          const x = chart.timeScale().timeToCoordinate(d.a.time), y = mainRef.current?.priceToCoordinate(d.a.price);
+          return x == null || y == null ? null : { id: d.id, x, y, text: d.text, bg: d.bg, fg: d.fg };
+        }).filter(Boolean));
+      } catch { setBoxes([]); }
+    };
+    place();
+    chart.timeScale().subscribeVisibleLogicalRangeChange(place);
+    chart.subscribeCrosshairMove(place);
+    return () => { try { chart.timeScale().unsubscribeVisibleLogicalRangeChange(place); chart.unsubscribeCrosshairMove(place); } catch { /* removed */ } };
+  }, [drawings, bars, timeStyle, v.style, v.tf, v.vol, v.rsi, v.macd]);
+
   // busiest price levels, drawn as bars against the price axis of the visible window
   useEffect(() => {
     const chart = chartRef.current;
@@ -496,6 +520,7 @@ function ChartCanvas({ name = "", bars, v, levels, extraLines = [], patterns = [
     <div style={{ position: "relative" }}>
       <div ref={el} className="chartbox" style={{ height, cursor: tool !== "none" ? "crosshair" : undefined }} />
       {timeStyle && <OhlcvLegend src={src} />}
+      {boxes.map((b) => <div key={b.id} style={{ position: "absolute", left: b.x, top: b.y, transform: "translate(-50%, -100%)", background: b.bg, color: b.fg, padding: "2px 6px", borderRadius: 4, fontSize: 11, fontWeight: 600, pointerEvents: "none", zIndex: 5, whiteSpace: "nowrap", boxShadow: "0 1px 3px rgba(0,0,0,.4)" }}>{b.text}</div>)}
       {vpInfo && v.vp && <div className="small muted" style={{ position: "absolute", left: 8, bottom: 2, zIndex: 4 }}>{vpInfo}</div>}
       {vpBars.length > 0 && (
         <div className="vp-overlay" title="Busiest price levels in view: volume traded at each price band">

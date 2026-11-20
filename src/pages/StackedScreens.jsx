@@ -71,11 +71,13 @@ export default function StackedScreens({ route }) {
   const [vh, setVh] = useState(window.innerHeight);
   useEffect(() => { const h = () => setVh(window.innerHeight); window.addEventListener("resize", h); return () => window.removeEventListener("resize", h); }, []);
 
-  // benchmark: ?bench=, else BSE 500 for an Indian stock (the owner's reference), else the country CW index
+  // benchmark: ?bench=, else BSE 500 for an Indian stock and the S&P 500 for a US one (the owner's references), else the country CW index
   const bse500 = useMemo(() => d.secs.find((x) => x.symbol === "BSE500"), [d.secs]);
+  const spx = useMemo(() => d.secs.find((x) => x.symbol === "^GSPC" && x.assetClass === "Index"), [d.secs]); // US default: S&P 500 (owner, item 22)
   const benchRef = route.query.bench
     ? (route.query.bench.startsWith("idx:") ? { kind: "index", key: route.query.bench.slice(4) } : route.query.bench.startsWith("x:") ? { kind: "x", key: route.query.bench.slice(2) } : { kind: "sec", id: route.query.bench })
-    : sec?.country === "India" && bse500 && bse500.id !== secId ? { kind: "sec", id: bse500.id } : sec ? defaultBenchmark(sec) : { kind: "index", key: "CW|USD|G", label: "Global CW (USD)" };
+    : sec?.country === "India" && bse500 && bse500.id !== secId ? { kind: "sec", id: bse500.id }
+    : sec?.country === "United States" && spx && spx.id !== secId ? { kind: "sec", id: spx.id } : sec ? defaultBenchmark(sec) : { kind: "index", key: "CW|USD|G", label: "Global CW (USD)" };
   const benchLabel = benchRef.kind === "index" ? d.indexByKey.get(benchRef.key)?.name || benchRef.key : benchRef.kind === "x" ? benchRef.key.replace(/^FX:/, "") : d.secById.get(benchRef.id)?.symbol;
 
   const { data, loading, error } = useAsync(async () => {

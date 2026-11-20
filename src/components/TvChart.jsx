@@ -23,6 +23,29 @@ function themeOptions() {
 }
 
 /** Shared scroll/zoom/crosshair across charts. */
+// chart containers -> chart, so a key press can zoom the chart under the mouse (owner: Z zooms out the window)
+const CHART_BY_EL = new WeakMap();
+/** Zoom out the chart under (x, y): widens the visible range to the left, the latest bar stays put. */
+export function zoomOutAt(x, y, factor = 1.5) {
+  if (typeof document === "undefined") return false;
+  for (const node of document.elementsFromPoint(x, y)) {
+    let n = node;
+    while (n && n !== document.body) {
+      const chart = CHART_BY_EL.get(n);
+      if (chart) {
+        try {
+          const ts = chart.timeScale(), r = ts.getVisibleLogicalRange();
+          if (!r) return false;
+          ts.setVisibleLogicalRange({ from: r.to - (r.to - r.from) * factor, to: r.to });
+          return true;
+        } catch { return false; }
+      }
+      n = n.parentElement;
+    }
+  }
+  return false;
+}
+
 export class ChartSync {
   constructor() { this.members = new Set(); this.busy = false; }
   add(m) { this.members.add(m); return () => this.members.delete(m); }
@@ -93,6 +116,7 @@ export function TvChart({ series, height = 300, sync, onReady, logScale = false,
     try { chart = createChart(el.current, { ...withTheme(themeOptions(), theme), autoSize: true, height }); }
     catch (e) { console.warn(`[chart] could not start: ${e.message}`); return undefined; }
     chartRef.current = chart;
+    CHART_BY_EL.set(el.current, chart);
     seriesRef.current = [];
     viewKey.current = undefined;
     setGen((g) => g + 1);
@@ -123,9 +147,10 @@ export function TvChart({ series, height = 300, sync, onReady, logScale = false,
         setHover(best);
       });
     }
+    const node = el.current;
     const mo = new MutationObserver(() => { try { chart.applyOptions(withTheme(themeOptions(), theme)); } catch { /* removed */ } });
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    return () => { mo.disconnect(); unsub?.(); try { chart.remove(); } catch { /* already removed */ } chartRef.current = null; };
+    return () => { mo.disconnect(); unsub?.(); try { CHART_BY_EL.delete(node); } catch { /* gone */ } try { chart.remove(); } catch { /* already removed */ } chartRef.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sync]);
 

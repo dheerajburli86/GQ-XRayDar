@@ -14,7 +14,7 @@ const g = (o, path) => path.split(".").reduce((x, k) => (x == null ? x : x[k]), 
 export const FIELD_GROUPS = ["Identity", "Returns", "Price levels", "Trend & MMA", "Momentum", "Relative strength", "Volume & liquidity", "Patterns", "Fundamentals", "Weight Watcher", "Scores", "GLOCOM", "IMB / ETI"];
 
 const F = [];
-const IDENT = new Set(["symbol", "name", "country", "region", "classification", "sector", "industryGroup", "industry", "cap", "capUsd", "currency", "assetClass"]);
+const IDENT = new Set(["symbol", "name", "country", "region", "classification", "sector", "industryGroup", "industry", "subIndustry", "cap", "capUsd", "currency", "assetClass"]);
 // A row may carry `flat` (decoded screen row) instead of the full snapshot; a
 // field then reads its precomputed value. Identity fields always read `sec`.
 const add = (key, label, group, type, get, extra = {}) =>
@@ -29,6 +29,7 @@ add("classification", "Market class", "Identity", "cat", (r) => r.sec.classifica
 add("sector", "Sector", "Identity", "cat", (r) => r.sec.sector);
 add("industryGroup", "Industry group", "Identity", "cat", (r) => r.sec.industryGroup);
 add("industry", "Industry", "Identity", "cat", (r) => r.sec.industry);
+add("subIndustry", "Sub-industry (US stocks and ADRs)", "Identity", "cat", (r) => r.sec.subIndustry);
 add("cap", "Cap segment", "Identity", "cat", (r) => r.sec.capSegment);
 add("capUsd", "Market cap (USD)", "Identity", "money", (r) => r.sec.capUsdNow ?? r.sec.capUsd);
 add("currency", "Currency", "Identity", "cat", (r) => r.sec.currency);
@@ -56,20 +57,11 @@ add("newHigh63", "New 3-month high", "Price levels", "bool", (r) => r.snap?.day?
 add("newLow20", "New 20-day low", "Price levels", "bool", (r) => r.snap?.day?.newLow20);
 add("newLow63", "New 3-month low", "Price levels", "bool", (r) => r.snap?.day?.newLow63);
 
-// MMA on the longer timeframes (quarterly / yearly) for the squeeze & breakout scanner
-for (const tf of ["Q", "Y"]) {
-  const T = { Q: "Quarterly", Y: "Yearly" }[tf];
-  add(`mma${tf}`, `MMA state (${T})`, "Trend & MMA", "cat", (r) => r.snap?.tf?.[tf]?.mma, { values: ["bull", "above", "mixed", "below", "bear"] });
-  add(`mmaBull${tf}`, `MMA bullish alignment (${T})`, "Trend & MMA", "bool", (r) => r.snap?.tf?.[tf]?.mma === "bull");
-  add(`compression${tf}`, `MMA compression (${T})`, "Trend & MMA", "bool", (r) => r.snap?.tf?.[tf]?.compression);
-  add(`postConsBreak${tf}`, `Post-consolidation MMA break (${T})`, "Trend & MMA", "bool", (r) => r.snap?.tf?.[tf]?.postConsBreak);
-  add(`rsi${tf}`, `RSI (${T})`, "Momentum", "num", (r) => r.snap?.tf?.[tf]?.rsi);
-}
 // trend & MMA per timeframe
-for (const tf of ["D", "W", "M"]) {
-  const T = { D: "Daily", W: "Weekly", M: "Monthly" }[tf];
+for (const tf of ["D", "W", "M", "Q", "N", "Y"]) {
+  const T = { D: "Daily", W: "Weekly", M: "Monthly", Q: "Quarterly", N: "9-month", Y: "Yearly" }[tf];
   add(`rsiDivergence${tf}`, `RSI divergence (${T})`, "Momentum", "cat", (r) => r.snap?.tf?.[tf]?.rsiDivergence, { values: ["bullish", "bearish"] });
-  if (tf !== "M") {
+  if (tf === "D" || tf === "W") {
     add(`candleBull${tf}`, `Bullish candle pattern (${T})`, "Patterns", "bool", (r) => r.snap?.tf?.[tf]?.candleBull);
     add(`candleBear${tf}`, `Bearish candle pattern (${T})`, "Patterns", "bool", (r) => r.snap?.tf?.[tf]?.candleBear);
     add(`candles${tf}`, `Candle patterns (${T})`, "Patterns", "text", (r) => (r.snap?.tf?.[tf]?.candles || []).join(", ") || null);
@@ -100,8 +92,8 @@ for (const tf of ["D", "W", "M"]) {
 // owner's multi-period consolidation -> breakout (engine/consolidation.js), on the price pane
 // (as on his RSIMMA screen) and on the RSC pane against the country index (as on RSCMMA)
 const BOX_STATES = ["consolidating", "fan_up", "fan_down"];
-for (const tf of ["D", "W", "M", "Q"]) {
-  const T = { D: "Daily", W: "Weekly", M: "Monthly", Q: "Quarterly" }[tf];
+for (const tf of ["D", "W", "M", "Q", "N"]) {
+  const T = { D: "Daily", W: "Weekly", M: "Monthly", Q: "Quarterly", N: "9-month" }[tf];
   const P = (r) => r.snap?.tf?.[tf]?.mmaBox, Q = (r) => r.snap?.tf?.[tf]?.rscBox;
   add(`boxState${tf}`, `Yellow/red averages: state (${T})`, "Trend & MMA", "cat", (r) => P(r)?.st, { values: BOX_STATES });
   add(`boxSince${tf}`, `Yellow/red averages: state since (${T})`, "Trend & MMA", "text", (r) => P(r)?.since);

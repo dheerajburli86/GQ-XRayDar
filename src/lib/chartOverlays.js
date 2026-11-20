@@ -89,7 +89,7 @@ export function drawingOverlays(b, drawings = []) {
       if (va) out.notes.push(`Anchored volume profile from ${t[k]}: POC ${va.poc.toFixed(2)}, value area ${va.val.toFixed(2)} – ${va.vah.toFixed(2)}`);
       continue;
     }
-    if (["trend", "hline", "channel", "note"].includes(dw.type)) continue; // drawn by the chart lab itself
+    if (["trend", "hline", "channel", "note", "callout"].includes(dw.type)) continue; // drawn by the chart lab itself
     const g = geometry({ ...dw, a: at(dw.a), b: at(dw.b), c: at(dw.c) }, last);
     for (const ln of g.lines) {
       const data = [];

@@ -202,3 +202,11 @@ redeploy ENDS the job that is running. On 2026-11-19 a push at 06:26 UTC killed 
 ## Index minimum market cap (added 2026-11-19, owner / Alok Sir)
 
 - `methodology.eligibility.minCapUsd` = USD 1B developed, USD 200M emerging, tested on the (estimated) cap at every rebalance in `IndexBuilder.addCountry`, before the Large/Mid/Small split (so the percentile bands are computed on the stocks that pass). Countries without a reliable cap (India) skip it and the bands: wait for a cap source, do not substitute turnover. Methodology version 1.1.0; the stored indices change at the next engine run.
+
+## Added 2026-11-20: US classification workbook, 9-month timeframe, Z key, callouts
+
+- **US stocks and ADRs use the owner's workbook** (`engine/reference/usClassification.js`, 1,450 symbols, Sector / Industry / Sub-industry; stock sheet wins over the ADR sheet). `toSecurity` applies it first (`classSource: us_workbook`); the rest of the US stays on GICS with no sub-industry, so industry-level GLOCOM mixes the two until the workbook is extended. `tas_security.sub_industry` (migration 20261120000000) and field `subIndustry`.
+- **Timeframe N = 9 months** is in `analyzeSecurity`, the field registry (all per-timeframe fields incl. MMA / RSC boxes) and the scanner timeframe lists, which now offer D W M Q N Y. Stored snapshots lack N until the next engine run.
+- Tables (`.tbl`) wrap headers and cap text columns; numeric columns are never truncated.
+- **Z** zooms the chart under the cursor out (`zoomOutAt` in TvChart). **Callout** drawing = text box with chosen background and text colour (chart lab overlay).
+- US default RSC benchmark in the stacked screens is the S&P 500 (`^GSPC`), as BSE 500 is for India.
