@@ -30,3 +30,19 @@ test("security questions and chart commands", () => {
   assert.equal(parseCommand("go to weight watcher").page, "ww");
   assert.equal(parseCommand("dark mode").theme, "dark");
 });
+
+test("owner's screen question with typos: no ticker picked from a number, every condition read", () => {
+  const secs = [{ symbol: "50", name: "Hong Kong Ferry Holdings Co. Ltd.", id: "x" }];
+  const c = parseCommand("give me list of US listed stocks with markt cap above $10B and Fundmental score above 50, Technical score also above 60", { securities: secs, countries: ["United States", "Hong Kong"] });
+  assert.equal(c.intent, "screen");
+  assert.equal(c.securityId, null);
+  assert.equal(c.scope.country, "United States");
+  assert.equal(c.scope.assetClass, "Stock");
+  assert.deepEqual(c.conditions, [
+    { field: "capUsd", op: ">", value: 1e10 },
+    { field: "score_fundamentals", op: ">", value: 50 },
+    { field: "score_technical", op: ">", value: 60 },
+  ]);
+  const r = parseCommand("US stocks mcap > 5bn with 3m return above 20%", { securities: [], countries: ["United States"] });
+  assert.deepEqual(r.conditions, [{ field: "capUsd", op: ">", value: 5e9 }, { field: "ret3M", op: ">", value: 20 }]);
+});

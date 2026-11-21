@@ -75,11 +75,12 @@ export default function Stock({ route }) {
       {loading ? <Loading /> : !sn ? <div className="note">No stored analysis for this security (too little history, or not in the latest run).</div> : (
         <>
           <div className="grid g4">
-            <div className="card"><Kpi label={`Close (${sec.currency}) · ${sn.asOf}`} value={fmtNum(sn.close)} sub={`USD ${fmtNum(sn.closeUsd)} · cap ${fmtMoney(sec.capUsdNow)} (est.)`} /></div>
+            <div className="card"><Kpi label={`Close (${sec.currency}) · ${sn.asOf}`} value={fmtNum(sn.close)} sub={<>USD {fmtNum(sn.closeUsd)}<br /><CapLine sec={sec} /></>} /></div>
             <div className="card"><Kpi label="Returns (local)" value={<Pct v={sn.ret["3M"]} />} sub={<>1M <Pct v={sn.ret["1M"]} /> · 12M <Pct v={sn.ret["12M"]} /> · YTD <Pct v={sn.ret.YTD} /></>} /></div>
             <div className="card"><Kpi label="Stage" value={<Badge kind={STAGE_BADGE[sn.stage.id]}>{sn.stage.label}</Badge>} sub={sn.stage.evidence.join("; ")} /></div>
             <div className="card"><Kpi label="Weight Watcher" value={data.snap.ww ? <Badge kind={TREND_BADGE[data.snap.ww.trend]}>{WW_TREND_LABEL[data.snap.ww.trend]}</Badge> : "—"} sub={data.snap.ww?.last != null ? `${data.snap.ww.last.toFixed(3)}% of ${sec.country} ${sec.sector}` : ""} /></div>
           </div>
+          {sec.assetClass === "ETF" && <EtfDetails sec={sec} />}
           <div className="card tight">
             <div className="row between" style={{ padding: "0 4px 4px" }}><span className="small muted">EMA 20 / 50 / 200 · purple dots = results filed (revenue YoY){data.inst.adjustments?.length ? " · split-adjusted" : ""}</span><Seg value={tf} options={CHART_TFS} onChange={setTf} /></div>
             <TvChart height={330} series={charts.price} sync={sync} ohlcv={{ name: sec?.symbol || "", tf, bars: charts.bars }} legend />
@@ -133,6 +134,51 @@ export default function Stock({ route }) {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/** Market cap in the local currency and in USD (owner, Nov 2026). Both are estimates: latest share count x close. */
+function CapLine({ sec }) {
+  if (sec.assetClass !== "Stock") return <span className="muted">{sec.assetClass === "ETF" ? "fund size: see AUM below" : ""}</span>;
+  if (sec.capUsdNow == null && sec.capLocal == null) return <span className="muted">market cap not available{sec.country === "India" ? " (no reliable India source)" : ""}</span>;
+  const local = sec.capLocal != null && sec.capCurrency && sec.capCurrency !== "USD" ? `${sec.capCurrency} ${fmtBig(sec.capLocal)}` : null;
+  return <span>Market cap {local ? <>{local} · </> : null}USD {fmtBig(sec.capUsdNow ?? sec.capUsd)} <span className="muted">(est.)</span></span>;
+}
+const fmtBig = (v) => { if (v == null || !Number.isFinite(+v)) return "—"; const a = Math.abs(v); return a >= 1e12 ? `${(v / 1e12).toFixed(2)}T` : a >= 1e9 ? `${(v / 1e9).toFixed(2)}B` : a >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : fmtNum(v); };
+
+/** ETF details (owner, Nov 2026): type, issuer, AUM, cost, top 10 holdings, sector and country exposure. */
+function EtfDetails({ sec }) {
+  const d = useData();
+  const { data: e, loading } = useAsync(() => d.api.etfInfo ? d.api.etfInfo(sec.symbol) : null, [sec.symbol]);
+  const info = e?.info || {};
+  const typ = info.type || sec.industryGroup;
+  const top = (e?.holdings || []).slice(0, 10), sectors = (e?.sectors || []).slice(0, 8), countries = (e?.countries || []).slice(0, 8);
+  const w = (v) => (v == null ? "—" : `${(+v).toFixed(2)}%`);
+  const rows = [
+    ["ETF type", <><b>{typ}</b>{info.typeSource === "name" || !e ? <span className="muted small"> (read from the fund name)</span> : e?.asset_class ? <span className="muted small"> (provider: {e.asset_class})</span> : null}</>],
+    ["Issuer", info.issuer], ["AUM", info.aum != null ? `USD ${fmtBig(info.aum)}` : null], ["Expense ratio", info.expenseRatio != null ? `${info.expenseRatio}%` : null],
+    ["Inception", info.inception], ["Holdings", info.holdingsCount], ["NAV", info.nav != null ? `${info.nav} ${info.navCurrency || ""}` : null], ["Domicile", info.domicile],
+    ["Sector (largest)", sectors[0] ? `${sectors[0].sector} ${w(sectors[0].weight)}` : null], ["Country (largest)", countries[0] ? `${countries[0].country} ${w(countries[0].weight)}` : null],
+    ["Listed in", sec.country],
+  ].filter(([, v]) => v != null && v !== "");
+  return (
+    <div className="card"><h3>ETF details</h3>
+      {loading ? <Loading /> : (
+        <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
+          <div><table className="tbl"><tbody>{rows.map(([k, v]) => <tr key={k}><td className="muted">{k}</td><td>{v}</td></tr>)}</tbody></table>
+            {!e && <div className="small muted" style={{ marginTop: 6 }}>Fund details (AUM, holdings, sector and country weights) are loaded from FMP by the server; this ETF has not been loaded yet.</div>}
+            {e?.status === "no_data" && <div className="small muted" style={{ marginTop: 6 }}>The data provider has no details for this fund.</div>}
+            {info.description && <div className="small muted" style={{ marginTop: 6, maxHeight: 110, overflow: "auto" }}>{info.description}</div>}</div>
+          <div><b className="small">Top 10 holdings</b>
+            {top.length ? <table className="tbl"><tbody>{top.map((h, i) => { const s = h.symbol ? d.secs.find((x) => x.symbol === h.symbol && x.assetClass === "Stock") : null; return <tr key={i}><td>{s ? <a href={href(`stock/${s.id}`)}>{h.symbol}</a> : h.symbol || "—"}</td><td className="small">{h.name || s?.name || ""}</td><td className="num">{w(h.weight)}</td></tr>; })}</tbody></table> : <div className="small muted">Not available.</div>}</div>
+          <div><b className="small">Sector exposure</b>
+            {sectors.length ? <table className="tbl"><tbody>{sectors.map((x) => <tr key={x.sector}><td>{x.sector}</td><td className="num">{w(x.weight)}</td></tr>)}</tbody></table> : <div className="small muted">Not available.</div>}
+            <b className="small" style={{ display: "block", marginTop: 8 }}>Country exposure</b>
+            {countries.length ? <table className="tbl"><tbody>{countries.map((x) => <tr key={x.country}><td>{x.country}</td><td className="num">{w(x.weight)}</td></tr>)}</tbody></table> : <div className="small muted">Not available.</div>}</div>
+        </div>
+      )}
+      {e?.source && <div className="small muted" style={{ marginTop: 6 }}>Source: {e.source}, updated {String(e.updated_at || "").slice(0, 10)}.</div>}
     </div>
   );
 }

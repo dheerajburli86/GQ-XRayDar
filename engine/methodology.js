@@ -5,10 +5,10 @@
 // back to the rules that produced it.
 
 export const METHODOLOGY = Object.freeze({
-  version: "1.1.0",
+  version: "1.2.0",
 
   // History window the index engine builds from. [C]
-  startDate: "2015-01-01",
+  startDate: "2010-01-01", // owner (Nov 2026): Weight Watcher and indices from 2010 (was 2015)
 
   // Index base. [C]
   baseLevel: 1000,

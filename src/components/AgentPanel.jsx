@@ -7,6 +7,7 @@ import { useData } from "../data/store.jsx";
 import { useAccount } from "./Account.jsx";
 import { api } from "../lib/server.js";
 import { answer } from "../../engine/assistant.js";
+import { parseCommand } from "../../engine/nl.js";
 import { href } from "../lib/router.js";
 import { load, save, uid } from "../lib/storage.js";
 import { parseProjectionText, computeProjection } from "../../engine/projection.js";
@@ -90,15 +91,19 @@ export function AgentPanel() {
     const entry = { q: text, at: new Date().toISOString(), ctx: ctx?.symbol || null };
     try {
       const local = await chartAction(text, ctx || pageContext, d).catch((e) => [{ kind: "text", text: `Could not do that: ${e.message}` }]);
+      // screens ("US stocks with market cap above $10B and technical score above 60") and "explain <ticker>" are
+      // answered exactly from the stored data, here, instead of being paraphrased by the chat agent
+      const cmd = local ? null : parseCommand(text, { securities: d.secs, countries: d.countries });
+      const exact = cmd && ((cmd.intent === "screen" && cmd.conditions.length) || (cmd.intent === "explain" && cmd.securityId));
       if (local) { entry.blocks = local; entry.source = "built-in"; }
-      else if (viaAgent) {
+      else if (exact || !viaAgent) {
+        const r = await answer(text, d);
+        entry.blocks = r.blocks; entry.source = "built-in";
+      } else if (viaAgent) {
         const history = (fresh ? [] : hist).slice(-5).flatMap((h) => [{ role: "user", content: h.q }, { role: "assistant", content: h.text || (h.blocks || []).map((b) => b.text || (b.items || []).join("; ")).join("\n") }]);
         const r = await api("POST", "/api/agent/chat", { message: text, history, context: ctx });
         entry.source = r.source; entry.notice = r.notice;
         if (r.answer) entry.text = r.answer; else entry.blocks = r.blocks;
-      } else {
-        const r = await answer(text, d);
-        entry.blocks = r.blocks; entry.source = "built-in";
       }
     } catch (e) { entry.blocks = [{ kind: "text", text: `Could not answer: ${e.message}` }]; }
     setHist((h) => [...(fresh ? [] : h).slice(-40), entry]);

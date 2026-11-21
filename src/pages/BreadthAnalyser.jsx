@@ -30,13 +30,27 @@ function buildOptions(list) {
   const parents = [{ value: "G", label: "Global" }];
   for (const x of usd.filter((y) => y.level === "4")) parents.push({ value: x.scopeKey, label: `${x.scopeValue} (region)` });
   for (const x of usd.filter((y) => y.level === "5")) parents.push({ value: x.scopeKey, label: `${x.scopeValue} (classification)` });
+  // a global sector, broken down by country (each country's own sector index)
+  for (const x of usd.filter((y) => y.level === "6s" && y.scopeKey.startsWith("G|S:")).sort((a, b) => a.scopeKey.localeCompare(b.scopeKey))) parents.push({ value: x.scopeKey, label: `Global · ${x.scopeKey.slice(4)} (by country)` });
   for (const x of usd.filter((y) => y.level === "3").sort((a, b) => a.scopeValue.localeCompare(b.scopeValue))) parents.push({ value: x.scopeKey, label: x.scopeValue });
   return parents;
+}
+
+/** Direct sub-indices of a parent scope: `${parent}|S:<sector>` or `${parent}|K:<size>`, nothing deeper. */
+function subIndices(L, parent, tag) {
+  const pre = `${parent}|${tag}:`;
+  return L.filter((x) => x.scopeKey?.startsWith(pre) && !x.scopeKey.slice(pre.length).includes("|")).map((x) => ({ key: x.key, name: x.scopeKey.slice(pre.length) }));
 }
 
 function childrenOf(list, parent, kind, fam) {
   const L = list.filter((x) => x.ccy === "USD" && x.family === fam);
   const name = (x) => x.sector || x.scopeValue || x.name;
+  if (kind === "sectors") return subIndices(L, parent, "S");
+  if (kind === "size") return subIndices(L, parent, "K");
+  if (parent.startsWith("G|S:")) { // countries of one global sector
+    const sector = parent.slice(4);
+    return L.filter((x) => x.level === "1s" && x.scopeKey.endsWith(`|S:${sector}`)).map((x) => ({ key: x.key, name: x.scopeKey.split("|")[0].slice(2) }));
+  }
   if (parent === "G") {
     const lvl = kind === "regions" ? "4" : kind === "classifications" ? "5" : "3";
     return L.filter((x) => x.level === lvl).map((x) => ({ key: x.key, name: x.scopeValue || name(x) }));
@@ -45,13 +59,14 @@ function childrenOf(list, parent, kind, fam) {
     const field = parent[0] === "R" ? "region" : "classification", v = parent.slice(2);
     return L.filter((x) => x.level === "3" && x[field] === v).map((x) => ({ key: x.key, name: x.scopeValue || name(x) }));
   }
-  if (kind === "size") return L.filter((x) => x.level === "2" && x.scopeKey.startsWith(`${parent}|K:`)).map((x) => ({ key: x.key, name: x.scopeKey.split("|K:")[1] }));
-  return L.filter((x) => x.level === "1s" && x.scopeKey.startsWith(`${parent}|S:`)).map((x) => ({ key: x.key, name: x.scopeKey.split("|S:")[1] }));
+  return [];
 }
 
 function kindsFor(parent) {
-  if (parent === "G") return [{ value: "countries", label: "Countries" }, { value: "regions", label: "Regions" }, { value: "classifications", label: "Market classifications" }];
-  if (parent.startsWith("R:") || parent.startsWith("M:")) return [{ value: "countries", label: "Countries" }];
+  // owner (Nov 2026): Global (and regions / classifications) by sector as well as by country
+  if (parent === "G") return [{ value: "countries", label: "Countries" }, { value: "sectors", label: "Sectors" }, { value: "regions", label: "Regions" }, { value: "classifications", label: "Market classifications" }, { value: "size", label: "Size segments" }];
+  if (parent.startsWith("G|S:")) return [{ value: "countries", label: "Countries" }];
+  if (parent.startsWith("R:") || parent.startsWith("M:")) return [{ value: "countries", label: "Countries" }, { value: "sectors", label: "Sectors" }, { value: "size", label: "Size segments" }];
   return [{ value: "sectors", label: "Sectors" }, { value: "size", label: "Size segments" }];
 }
 
@@ -130,7 +145,7 @@ export default function BreadthAnalyser() {
       {!list || loading ? <Loading what="indices" /> : !series?.length ? <div className="empty">No constituent indices found for this parent.</div> : (
         <>
           <div className="note" style={{ margin: "6px 0 10px" }}>
-            {series.length} constituents ({famUsed === "EW" ? "equal-weighted indices" : "cap-weighted indices"}), changes from index levels, weights from each constituent's cap on the start date.
+            <b>CCR here is computed across {series.length} {kinds.find((k) => k.value === kindNow)?.label.toLowerCase() || "constituents"}</b> of {parents.find((p) => p.value === parent)?.label || parent} ({famUsed === "EW" ? "equal-weighted indices" : "cap-weighted indices"}): each one's change comes from its index level, its weight from its cap on the start date. Switch "Constituents" to compute it across countries or across sectors instead.
             {equalW && " No cap history for these indices, so every constituent carries the same weight."}
           </div>
           <div className="row" style={{ gap: 6, flexWrap: "wrap", marginBottom: 8 }}>

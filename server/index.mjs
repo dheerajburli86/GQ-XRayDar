@@ -25,6 +25,7 @@ import { createAgentProxy } from "./lib/agent.mjs";
 import { createFo, foConfig } from "./lib/fo.mjs";
 import { runXasset } from "../cli/xassetJob.mjs";
 import { runExtra } from "../cli/extraJob.mjs";
+import { runEtfInfo } from "../cli/etfInfoJob.mjs";
 import { RULES, DEFAULT_PARAMS, normalizeParams, describeRule, evaluateRule } from "../engine/rules.js";
 import { ALERT_TEMPLATES } from "../engine/alerts.js";
 import { FIELD } from "../engine/fields.js";
@@ -472,6 +473,10 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
       if (rows[0]?.t && Date.now() - new Date(rows[0].t).getTime() < 20 * 3600_000) return;
       await runExtra(pool, { log, fetchImpl });
     };
+    // ETF details (asset class, AUM, holdings, sector / country weights): a slice of stale ETFs every hour
+    const etfInfo = async () => { await runEtfInfo(pool, { log, fetchImpl }); };
+    timers.push(setInterval(guard("etf-info", etfInfo), 3600_000));
+    setTimeout(guard("etf-info", etfInfo), 210_000);
     timers.push(setInterval(guard("extra", extra), 3 * 3600_000));
     setTimeout(guard("extra", extra), 150_000);
     timers.push(setInterval(guard("xasset", xasset), 3 * 3600_000));

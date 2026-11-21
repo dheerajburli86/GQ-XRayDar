@@ -14,7 +14,7 @@ const g = (o, path) => path.split(".").reduce((x, k) => (x == null ? x : x[k]), 
 export const FIELD_GROUPS = ["Identity", "Returns", "Price levels", "Trend & MMA", "Momentum", "Relative strength", "Volume & liquidity", "Patterns", "Fundamentals", "Weight Watcher", "Scores", "GLOCOM", "IMB / ETI"];
 
 const F = [];
-const IDENT = new Set(["symbol", "name", "country", "region", "classification", "sector", "industryGroup", "industry", "subIndustry", "cap", "capUsd", "currency", "assetClass"]);
+const IDENT = new Set(["symbol", "name", "country", "region", "classification", "sector", "industryGroup", "industry", "subIndustry", "cap", "capUsd", "currency", "assetClass", "etfType"]);
 // A row may carry `flat` (decoded screen row) instead of the full snapshot; a
 // field then reads its precomputed value. Identity fields always read `sec`.
 const add = (key, label, group, type, get, extra = {}) =>
@@ -34,6 +34,8 @@ add("cap", "Cap segment", "Identity", "cat", (r) => r.sec.capSegment);
 add("capUsd", "Market cap (USD)", "Identity", "money", (r) => r.sec.capUsdNow ?? r.sec.capUsd);
 add("currency", "Currency", "Identity", "cat", (r) => r.sec.currency);
 add("assetClass", "Asset class", "Identity", "cat", (r) => r.sec.assetClass || "Stock", { values: ["Stock", "ETF", "Index", "Commodity", "Crypto", "Currency"] });
+// ETF type (Equity / Fixed income / Commodity / Currency / Real estate / Alternative / Multi-asset), carried in the industry-group slot
+add("etfType", "ETF type", "Identity", "cat", (r) => (r.sec.assetClass === "ETF" ? r.sec.industryGroup : null), { values: ["Equity", "Fixed income", "Commodity", "Currency", "Real estate", "Alternative", "Multi-asset", "Crypto"] });
 
 // returns
 for (const h of ["1D", "1W", "1M", "3M", "6M", "12M", "YTD"]) {

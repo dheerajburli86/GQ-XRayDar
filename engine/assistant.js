@@ -51,13 +51,19 @@ export async function answer(text, d) {
   }
 
   if (cmd.intent === "screen") {
-    let rows = runScreen(d.rows, { conditions: cmd.conditions, scope: { country: cmd.scope.country, region: cmd.scope.region, classification: cmd.scope.classification, sector: cmd.scope.sector, industryGroup: cmd.scope.industryGroup, cap: cmd.scope.cap } });
-    const sf = cmd.sort?.field || "score";
-    rows = [...rows].sort((a, b) => (FIELD[sf]?.get(b) ?? -1e9) - (FIELD[sf]?.get(a) ?? -1e9) * 1);
+    let rows = runScreen(d.rows, { conditions: cmd.conditions, scope: { country: cmd.scope.country, region: cmd.scope.region, classification: cmd.scope.classification, sector: cmd.scope.sector, industryGroup: cmd.scope.industryGroup, cap: cmd.scope.cap, assetClass: cmd.scope.assetClass } });
+    // sort: what was asked; otherwise the first numeric condition asked about (largest first), else the AI setup score
+    const sf = cmd.sort?.field || cmd.conditions.find((c) => FIELD[c.field] && ["num", "pct", "money"].includes(FIELD[c.field].type))?.field || "score";
+    const val = (r, f) => { const v = FIELD[f]?.get(r); return Number.isFinite(v) ? v : null; };
+    rows = [...rows].sort((a, b) => (val(b, sf) ?? -1e18) - (val(a, sf) ?? -1e18));
     if (cmd.sort?.dir === "asc") rows.reverse();
-    const lim = cmd.limit || 15;
-    say(`${rows.length} stocks match (${cmd.understood.join(", ") || "no filters"}), data as of ${d.info.asOf}. ${rows.length > lim ? `Top ${lim}:` : ""}`);
-    list(rows.slice(0, lim).map((r) => `${r.sec.symbol} (${r.sec.country}, ${r.sec.sector}) — ${FIELD[sf]?.label || sf}: ${fmtVal(FIELD[sf], FIELD[sf]?.get(r))}; 3M ${p(r.flat.ret3M)}; score ${r.flat.score ?? "—"}`));
+    const lim = cmd.limit || 25;
+    const noun = cmd.scope.assetClass === "ETF" ? "ETFs" : cmd.scope.assetClass === "Stock" ? "stocks" : "instruments";
+    say(`${rows.length} ${noun} match: ${cmd.understood.join(" · ") || "no filters"}. Data as of ${d.info.asOf}.${rows.length > lim ? ` Showing the top ${lim}, by ${FIELD[sf]?.label || sf}:` : ""}`);
+    if (!rows.length) say("Nothing passes every condition. Loosen one of them (for example a lower score or a smaller market cap) and ask again.");
+    // every value the question asked about, per row, so the answer can be checked at a glance
+    const shownF = [...new Set([...cmd.conditions.map((c) => c.field), sf])].filter((f) => FIELD[f]).slice(0, 5);
+    list(rows.slice(0, lim).map((r) => `${r.sec.symbol} · ${r.sec.name || ""} (${r.sec.country}, ${r.sec.sector || r.sec.assetClass || ""}) — ${shownF.map((f) => `${FIELD[f].label}: ${fmtVal(FIELD[f], FIELD[f].get(r))}`).join("; ")}`));
     link("Open in the screener", `screener?q=${encodeURIComponent(text)}`);
     return out;
   }
@@ -96,4 +102,4 @@ export async function answer(text, d) {
   list(["explain <SYMBOL>", "show strongest weekly IT stocks with improving relative strength", "which sectors are leading in Europe", "market breadth in India", "large cap Japanese stocks near 52 week high with unusual volume", "what is the regime in Asia"]);
   return out;
 }
-function fmtVal(f, v) { if (!f) return String(v); if (f.type === "pct") return fmtPct(v); if (f.type === "money") return fmtMoney(v); if (typeof v === "number") return v.toFixed(2); return String(v ?? "—"); }
+function fmtVal(f, v) { if (v == null) return "—"; if (!f) return String(v); if (f.type === "pct") return fmtPct(v); if (f.type === "money") return fmtMoney(v); if (typeof v === "number") return Number.isInteger(v) ? String(v) : v.toFixed(2); return String(v); }

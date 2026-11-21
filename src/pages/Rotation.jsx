@@ -7,10 +7,10 @@ import { PageHead, Select, Badge, QUAD_COLOR, Loading, Empty } from "../componen
 import { DataTable } from "../components/DataTable.jsx";
 import { PALETTE } from "../components/TvChart.jsx";
 
-export default function Rotation() {
+export default function Rotation({ route }) {
   const d = useData();
   const { data: scopes } = useAsync(() => d.api.rotationScopes(), []);
-  const [scope, setScope] = useState("G");
+  const [scope, setScope] = useState(route?.query?.scope || "G");
   const [tail, setTail] = useState(8);
   const { data, loading } = useAsync(() => d.api.rotation(scope), [scope]);
   const [hide, setHide] = useState(new Set());

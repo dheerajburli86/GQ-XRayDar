@@ -9,7 +9,7 @@ import { DataTable } from "../components/DataTable.jsx";
 import { glocomBand, groupMoves, groupTimeline, GLOCOM_RULES, NEUTRAL } from "../../engine/glocom.js";
 
 const BACK = [{ value: "1", label: "vs 1 session" }, { value: "5", label: "vs 1 week" }, { value: "21", label: "vs 1 month" }, { value: "63", label: "vs 3 months" }];
-import { GBadge, Jump, UP, DOWN, comName } from "../components/glocomUi.jsx";
+import { GBadge, Jump, UP, DOWN, comName, BandChange } from "../components/glocomUi.jsx";
 
 const pct01 = (v) => (v == null ? "—" : Math.round(v * 100));
 
@@ -19,48 +19,50 @@ export default function Glocom({ route }) {
   const { data: scopes } = useAsync(() => d.api.glocomScopes(), []);
   const markets = useMemo(() => [...new Set((scopes || []).map((k) => k.split("|")[0]))].sort((a, b) => (a === "G" ? -1 : b === "G" ? 1 : a.localeCompare(b))), [scopes]);
   const market = q.m || (markets.includes("C:India") ? "C:India" : markets[0] || "G");
-  const level = q.lv || "industry";
+  const level = q.lv === "country" && market !== "G" ? "industry" : q.lv || "industry";
   const back = +(q.back || 1);
   const sel = q.g || null;
   const set = (p) => navigate("glocom", { ...q, ...p });
   const { data: hist, loading } = useAsync(() => d.api.glocomGroups(`${market}|${level}`), [market, level]);
 
   const moves = useMemo(() => (hist ? groupMoves(hist, back) : []), [hist, back]);
-  // owner: the groups that gained strength first, in rank order (the one now #1 first), then the
-  // ones that lost it, again in rank order, so the weakest sits at the bottom
+  // owner (Nov 2026): category (band) changes are what matter. Band upgrades first, then band downgrades,
+  // each in rank order; groups that only changed rank inside the same band follow, plainly.
   const movers = useMemo(() => {
-    const gained = (x) => (x.bandMove || 0) > 0 || (!x.bandMove && (x.jump || 0) > 0);
-    return moves.filter((x) => x.jump || x.bandMove).sort((a, b) => (gained(b) - gained(a)) || a.rank - b.rank);
+    const cls = (x) => ((x.bandMove || 0) > 0 ? 0 : (x.bandMove || 0) < 0 ? 1 : 2);
+    return moves.filter((x) => x.jump || x.bandMove).sort((a, b) => cls(a) - cls(b) || a.rank - b.rank);
   }, [moves]);
+  const nBand = movers.filter((x) => x.bandMove).length;
   const nm = comName(market);
   const tooShort = hist && hist.dates.length - 1 - back < 0;
   const asOf = hist?.dates?.at(-1), prevDate = hist?.dates?.[hist.dates.length - 1 - back];
   const label = (k) => (k === "G" ? "Global (all markets, USD)" : k.slice(2));
-  const noun = level === "industry" ? "Industry" : "Sector";
-  const nouns = level === "industry" ? "industries" : "sectors";
+  const noun = level === "industry" ? "Industry" : level === "country" ? "Country" : "Sector";
+  const nouns = level === "industry" ? "industries" : level === "country" ? "countries" : "sectors";
 
   return (
     <div className="stack">
       <PageHead title={`${nm} · ${label(market)}`} sub={`Each ${noun.toLowerCase()} is rated against the other ${nouns} of the market on its average 1-week, 6-month and 1-year return percentiles (heatmap rule sheet). Rank 1 = best: band first, then score. GLOCOM and LOCOM are the same rule sheet: it is called LOCOM for Indian industries and sectors, GLOCOM everywhere else.`}>
         <Select label="Market" value={market} options={markets.map((k) => ({ value: k, label: label(k) }))} onChange={(v) => set({ m: v, g: undefined })} />
-        <Seg value={level} options={[{ value: "industry", label: "Industries" }, { value: "sector", label: "Sectors" }]} onChange={(v) => set({ lv: v, g: undefined })} />
+        <Seg value={level} options={[{ value: "industry", label: "Industries" }, { value: "sector", label: "Sectors" }, ...(market === "G" ? [{ value: "country", label: "Countries" }] : [])]} onChange={(v) => set({ lv: v, g: undefined })} />
         <Seg value={String(back)} options={BACK} onChange={(v) => set({ back: v })} />
       </PageHead>
       {loading ? <Loading /> : !hist ? <Empty>No GLOCOM history yet for this market. It is written by the nightly engine run.</Empty> : (
         <>
           <div className="card">
-            <h3>Moves {prevDate ? `${prevDate} → ${asOf}` : `to ${asOf}`} <span className="small muted">({movers.length} of {moves.length} {nouns} moved · gainers first in rank order, then losers, weakest last)</span></h3>
+            <h3>Moves {prevDate ? `${prevDate} → ${asOf}` : `to ${asOf}`} <span className="small muted">({nBand} {nBand === 1 ? "category change" : "category changes"} · {movers.length - nBand} rank-only moves · upgrades first, then downgrades, then rank-only)</span></h3>
             {tooShort && <div className="note warn small">Not enough stored history for this comparison yet: the engine keeps {hist.dates.length} sessions; the 3-month view fills in after the next engine run.</div>}
             {!movers.length ? <div className="small muted">No {noun.toLowerCase()} changed rank or band.</div> : (
               <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
                 {movers.map((x) => {
-                  const up = (x.bandMove || 0) > 0 || (!x.bandMove && x.jump > 0);
+                  const bm = x.bandMove || 0;
+                  const col = bm > 0 ? UP : bm < 0 ? DOWN : "var(--line)";
                   return (
                     <button key={x.name} onClick={() => set({ g: x.name })} title="Show history and stocks"
-                      style={{ textAlign: "left", border: `2px solid ${up ? UP : DOWN}`, background: up ? "rgba(22,163,74,.10)" : "rgba(220,38,38,.10)", borderRadius: 8, padding: "6px 10px", cursor: "pointer", color: "inherit" }}>
-                      <div style={{ fontWeight: 700 }}>{x.name}</div>
-                      <div className="small">#{x.prevRank} → #{x.rank} <Jump v={x.jump} unit={Math.abs(x.jump) === 1 ? " place" : " places"} /></div>
-                      {x.bandMove ? <div className="small" style={{ marginTop: 2 }}><GBadge small code={x.prevCode} label={x.prevLabel} /> → <GBadge small code={x.code} label={x.label} /></div> : null}
+                      style={{ textAlign: "left", border: `${bm ? 2 : 1}px solid ${col}`, background: bm > 0 ? "rgba(22,163,74,.12)" : bm < 0 ? "rgba(220,38,38,.12)" : "transparent", borderRadius: 8, padding: "6px 10px", cursor: "pointer", color: "inherit", opacity: bm ? 1 : 0.85 }}>
+                      <div style={{ fontWeight: bm ? 700 : 500 }}>{x.name}</div>
+                      <div className="small muted">#{x.prevRank} → #{x.rank}</div>
+                      <div className="small" style={{ marginTop: 3 }}><BandChange small prevCode={x.prevCode} prevLabel={x.prevLabel} code={x.code} label={x.label} /></div>
                     </button>
                   );
                 })}
@@ -74,9 +76,9 @@ export default function Glocom({ route }) {
               columns={[
                 { key: "rank", label: "Rank", num: true, value: (x) => x.rank },
                 { key: "jump", label: "Move", num: true, value: (x) => x.jump, render: (x) => <Jump v={x.jump} /> },
-                { key: "name", label: noun, value: (x) => x.name, render: (x) => <span style={{ borderLeft: `4px solid ${x.jump > 0 || x.bandMove > 0 ? UP : x.jump < 0 || x.bandMove < 0 ? DOWN : "transparent"}`, paddingLeft: 6, fontWeight: x.jump || x.bandMove ? 700 : 400 }}>{x.name}</span> },
+                { key: "name", label: noun, value: (x) => x.name, render: (x) => <span style={{ borderLeft: `4px solid ${x.bandMove > 0 ? UP : x.bandMove < 0 ? DOWN : "transparent"}`, paddingLeft: 6, fontWeight: x.bandMove ? 700 : 400 }}>{x.name}</span> },
                 { key: "label", label: nm, value: (x) => x.code, render: (x) => <GBadge code={x.code} label={x.label} /> },
-                { key: "prev", label: "Before", value: (x) => x.prevCode, render: (x) => (x.bandMove ? <GBadge small code={x.prevCode} label={x.prevLabel} /> : <span className="muted">same</span>) },
+                { key: "prev", label: "Category change", value: (x) => x.bandMove || 0, render: (x) => (x.bandMove ? <BandChange small prevCode={x.prevCode} prevLabel={x.prevLabel} code={x.code} label={x.label} /> : <span className="muted">same</span>) },
                 { key: "w", label: "1W avg", num: true, value: (x) => x.w, render: (x) => <Pct v={x.w == null ? null : x.w * 100} /> },
                 { key: "m6", label: "6M", num: true, value: (x) => x.m6, render: (x) => <Pct v={x.m6 == null ? null : x.m6 * 100} /> },
                 { key: "y", label: "1Y", num: true, value: (x) => x.y, render: (x) => <Pct v={x.y == null ? null : x.y * 100} /> },
@@ -108,7 +110,7 @@ export default function Glocom({ route }) {
 
 function GroupDetail({ hist, name, market, level, rows, onClose }) {
   const tl = useMemo(() => groupTimeline(hist, name), [hist, name]);
-  const stocks = useMemo(() => rows.filter((r) => (r.sec.assetClass || "Stock") === "Stock" && (market === "G" || r.sec.country === market.slice(2)) && (level === "industry" ? r.sec.industryGroup : r.sec.sector) === name), [rows, market, level, name]);
+  const stocks = useMemo(() => rows.filter((r) => (r.sec.assetClass || "Stock") === "Stock" && (market === "G" || r.sec.country === market.slice(2)) && (level === "industry" ? r.sec.industryGroup : level === "country" ? r.sec.country : r.sec.sector) === name), [rows, market, level, name]);
   return (
     <>
       <div className="card">
@@ -119,8 +121,8 @@ function GroupDetail({ hist, name, market, level, rows, onClose }) {
             {tl.map((e) => (
               <div key={e.date} className="row between small" style={{ padding: "2px 0", borderBottom: "1px solid var(--line)" }}>
                 <span className="mono">{e.date}</span>
-                <span>#{e.prevRank} → #{e.rank} <Jump v={e.jump} /></span>
-                <span>{e.bandMove ? <><GBadge small code={e.prevCode} label={e.prevLabel} /> → <GBadge small code={e.code} label={e.label} /></> : <GBadge small code={e.code} label={e.label} />}</span>
+                <span>#{e.prevRank} → #{e.rank}</span>
+                <span><BandChange small prevCode={e.prevCode} prevLabel={e.prevLabel} code={e.code} label={e.label} /></span>
               </div>
             ))}
           </div>

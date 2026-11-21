@@ -34,7 +34,7 @@ export default function EarlyStage() {
       <div className="grid" style={{ gridTemplateColumns: "minmax(0,1fr) 340px" }}>
         <DataTable exportName="early_stage" rows={rows} initialSort={{ key: "stageId", dir: "desc" }} onRowClick={(r) => setSel(r.id)} selectedId={sel}
           columns={[...idColumns(["country", "sector", "cap"]), { key: "stageId", label: "Stage", num: true, value: (r) => r.flat.stageId, render: (r) => <Badge kind={STAGE_BADGE[r.flat.stageId]}>{r.flat.stage}</Badge> },
-            fieldColumn("shortSpreadW"), fieldColumn("rscRising_country_W", { label: "RSC rising (W)" }), fieldColumn("volRatio"), fieldColumn("ret3M"), fieldColumn("score")]} />
+            fieldColumn("shortSpreadW"), fieldColumn("rscRising_country_W", { label: "RSC rising (W)" }), fieldColumn("volRatio"), fieldColumn("ret3M"), fieldColumn("glocom", { label: "GLOCOM" }), fieldColumn("score")]} />
         <div className="card">
           <h3>Evidence</h3>
           {!sel ? <div className="small muted">Select a stock.</div> : loading ? <Loading /> : snap ? (

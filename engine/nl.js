@@ -25,7 +25,7 @@ const REGION_ALIASES = { asia: "Asia", asian: "Asia", europe: "Europe", european
 const CLASS_ALIASES = { "emerging markets": "Emerging Markets", emerging: "Emerging Markets", em: "Emerging Markets", "developed europe": "European Developed Markets", "other developed": "Other Developed Markets" };
 
 const PAGES = {
-  "command centre": "home", "command center": "home", home: "home", dashboard: "home",
+  "command centre": "market", "command center": "market", home: "home", dashboard: "market",
   explorer: "explorer", navigate: "explorer", heatmap: "heatmap", "heat map": "heatmap",
   indices: "indices", index: "indices", ewcw: "ewcw", "ew cw": "ewcw", participation: "ewcw",
   "weight watcher": "ww", weights: "ww", ww: "ww", rsiacc: "screens/RSIACC", rscacc: "screens/RSCACC", rsimma: "screens/RSIMMA", rscmma: "screens/RSCMMA",
@@ -71,17 +71,56 @@ const SIGNALS = [
   [/divergence/, () => [{ field: "rscDivergence", op: "is set" }], "price-RSC divergence"],
 ];
 
+// comparison words: ">" family and "<" family (and "between a and b")
+const GT = "(?:above|over|greater than|more than|higher than|at least|>=|>|exceeding|exceeds|min(?:imum)?)";
+const LT = "(?:below|under|less than|lower than|at most|<=|<|max(?:imum)?)";
+const NUM = "(-?\\d+(?:\\.\\d+)?)";
+const UNIT = { t: 1e12, tn: 1e12, trillion: 1e12, b: 1e9, bn: 1e9, billion: 1e9, m: 1e6, mn: 1e6, mm: 1e6, million: 1e6, k: 1e3, thousand: 1e3 };
+const money = (n, u) => +n * (UNIT[(u || "").toLowerCase()] || 1);
+const UNITRE = "\\s?(t|tn|trillion|b|bn|billion|m|mn|mm|million|k|thousand)?\\b";
+// score words -> field ("fundamental score above 50", "technical score > 60")
+const SCORE_KIND = [["fundamentals?|fundamental|funda", "score_fundamentals", "fundamentals score"], ["technicals?|technical|tech", "score_technical", "technical score"],
+  ["relative(?: strength)?|rs", "score_relative", "relative-strength score"], ["participation|volume", "score_participation", "participation score"], ["timeframes?|time frame|alignment", "score_timeframe", "timeframe score"],
+  ["ai|setup|overall|total|ai setup", "score", "AI setup score"]];
+const RET_H = { "1d": "1D", "1 day": "1D", "1w": "1W", "1 week": "1W", "weekly": "1W", "1m": "1M", "1 month": "1M", "monthly": "1M", "3m": "3M", "3 month": "3M", "3 months": "3M", "6m": "6M", "6 month": "6M", "6 months": "6M", "12m": "12M", "1y": "12M", "1 year": "12M", "12 months": "12M", "yearly": "12M", "annual": "12M", "ytd": "YTD" };
+
 const NUMERIC = [
-  [/rsi (above|over|greater than|>) (\d+)/, (m, tf) => ({ field: `rsi${tf}`, op: ">", value: +m[2] }), "RSI above"],
-  [/rsi (below|under|less than|<) (\d+)/, (m, tf) => ({ field: `rsi${tf}`, op: "<", value: +m[2] }), "RSI below"],
-  [/revenue growth (above|over|>) (\d+)/, (m) => ({ field: "revenueGrowthYoY", op: ">", value: +m[2] }), "revenue growth above"],
-  [/eps growth (above|over|>) (\d+)/, (m) => ({ field: "epsGrowthYoY", op: ">", value: +m[2] }), "EPS growth above"],
-  [/(pe|p\/e) (below|under|<) (\d+)/, (m) => ({ field: "pe", op: "<", value: +m[3] }), "P/E below"],
-  [/roe (above|over|>) (\d+)/, (m) => ({ field: "roe", op: ">", value: +m[2] }), "ROE above"],
-  [/(market cap|cap) (above|over|>) \$?(\d+(\.\d+)?) ?(b|bn|billion)/, (m) => ({ field: "capUsd", op: ">", value: +m[3] * 1e9 }), "market cap above"],
-  [/(traded value|turnover|liquidity) (above|over|>) \$?(\d+(\.\d+)?) ?(m|mn|million)/, (m) => ({ field: "tradedValueUsd", op: ">", value: +m[3] * 1e6 }), "traded value above"],
-  [/score (above|over|>) (\d+)/, (m) => ({ field: "score", op: ">", value: +m[2] }), "score above"],
+  [new RegExp(`(?:weekly |daily |monthly )?rsi ${GT} ${NUM}`), (m, tf) => ({ field: `rsi${tf}`, op: ">", value: +m[1] }), (m) => `RSI above ${m[1]}`],
+  [new RegExp(`(?:weekly |daily |monthly )?rsi ${LT} ${NUM}`), (m, tf) => ({ field: `rsi${tf}`, op: "<", value: +m[1] }), (m) => `RSI below ${m[1]}`],
+  [new RegExp(`revenue growth ${GT} ${NUM}%?`), (m) => ({ field: "revenueGrowthYoY", op: ">", value: +m[1] }), (m) => `revenue growth above ${m[1]}%`],
+  [new RegExp(`eps growth ${GT} ${NUM}%?`), (m) => ({ field: "epsGrowthYoY", op: ">", value: +m[1] }), (m) => `EPS growth above ${m[1]}%`],
+  [new RegExp(`(?:pe|p/e|pe ratio) ${LT} ${NUM}`), (m) => ({ field: "pe", op: "<", value: +m[1] }), (m) => `P/E below ${m[1]}`],
+  [new RegExp(`(?:pe|p/e|pe ratio) ${GT} ${NUM}`), (m) => ({ field: "pe", op: ">", value: +m[1] }), (m) => `P/E above ${m[1]}`],
+  [new RegExp(`roe ${GT} ${NUM}%?`), (m) => ({ field: "roe", op: ">", value: +m[1] }), (m) => `ROE above ${m[1]}%`],
+  [new RegExp(`market cap (?:between|from) \\$?${NUM}${UNITRE} (?:and|to|-) \\$?${NUM}${UNITRE}`), (m) => ({ field: "capUsd", op: "between", value: money(m[1], m[2] || m[4]), value2: money(m[3], m[4]) }), (m) => `market cap between $${m[1]}${m[2] || m[4] || ""} and $${m[3]}${m[4] || ""}`],
+  [new RegExp(`market cap ${GT} (?:of )?\\$?${NUM}${UNITRE}`), (m) => ({ field: "capUsd", op: ">", value: money(m[1], m[2]) }), (m) => `market cap above $${m[1]}${(m[2] || "").toUpperCase()}`],
+  [new RegExp(`market cap ${LT} (?:of )?\\$?${NUM}${UNITRE}`), (m) => ({ field: "capUsd", op: "<", value: money(m[1], m[2]) }), (m) => `market cap below $${m[1]}${(m[2] || "").toUpperCase()}`],
+  [new RegExp(`(?:traded value|turnover|liquidity) ${GT} \\$?${NUM}${UNITRE}`), (m) => ({ field: "tradedValueUsd", op: ">", value: money(m[1], m[2]) }), (m) => `traded value above $${m[1]}${(m[2] || "").toUpperCase()}`],
+  ...SCORE_KIND.flatMap(([w, field, label]) => [
+    [new RegExp(`(?:${w}) scores? ${GT} ${NUM}`), (m) => ({ field, op: ">", value: +m[1] }), (m) => `${label} above ${m[1]}`],
+    [new RegExp(`(?:${w}) scores? ${LT} ${NUM}`), (m) => ({ field, op: "<", value: +m[1] }), (m) => `${label} below ${m[1]}`],
+  ]),
+  [new RegExp(`scores? ${GT} ${NUM}`), (m) => ({ field: "score", op: ">", value: +m[1] }), (m) => `AI setup score above ${m[1]}`],
+  [new RegExp(`scores? ${LT} ${NUM}`), (m) => ({ field: "score", op: "<", value: +m[1] }), (m) => `AI setup score below ${m[1]}`],
+  [new RegExp(`(${Object.keys(RET_H).join("|")}) (?:return|returns|performance|change|gain) ${GT} ${NUM}%?`), (m) => ({ field: `ret${RET_H[m[1]]}`, op: ">", value: +m[2] }), (m) => `${RET_H[m[1]]} return above ${m[2]}%`],
+  [new RegExp(`(${Object.keys(RET_H).join("|")}) (?:return|returns|performance|change) ${LT} ${NUM}%?`), (m) => ({ field: `ret${RET_H[m[1]]}`, op: "<", value: +m[2] }), (m) => `${RET_H[m[1]]} return below ${m[2]}%`],
+  [new RegExp(`(?:up|gained|rallied) (?:more than |over |at least )?${NUM}% (?:in|over) (?:the )?(?:last |past )?(1 week|1 month|3 months|6 months|1 year|week|month|year|ytd)`), (m) => ({ field: `ret${RET_H[m[2].replace(/^(week|month|year)$/, "1 $1")] || "1M"}`, op: ">", value: +m[1] }), (m) => `up more than ${m[1]}% over ${m[2]}`],
 ];
+
+/** Typos and spellings people actually type, folded before parsing. */
+function normalise(t) {
+  return t
+    .replace(/\b(m(ar)?k(e)?t|makret|marekt|mrkt|mkt)[ -]?(cap(italization|italisation)?|caps)\b/g, "market cap")
+    .replace(/\bmarket[ -]?capitali[sz]ation\b|\bmarketcap\b|\bm[ -]?cap\b|\bmcap\b/g, "market cap")
+    .replace(/\bfund[ae]?m[ae]?n?t[ae]?ls?\b|\bfundamnetal\b/g, "fundamental")
+    .replace(/\btechincal\b|\btechnial\b|\btechnicals\b/g, "technical")
+    .replace(/\$\s?(\d)/g, "$$$1")
+    .replace(/(\d)\s?(bn|b|billion|mn|million|tn|trillion)\b/g, "$1 $2")
+    .replace(/ (is |are |of )?(greater than or equal to|more than or equal to) /g, " at least ")
+    .replace(/ score of (above|over|more than|greater than|below|under|less than) /g, " score $1 ")
+    .replace(/ scores? (is |are )?(should be |must be )?(also )?/g, " score ")
+    .replace(/ score (\d)/g, " score above $1");
+}
 
 const HORIZON_WORDS = [[/(this|1|one|past|last) week|weekly (return|performance)/, "1W"], [/(1|one|past|last) month|this month/, "1M"], [/(3|three) months?|quarter/, "3M"], [/(6|six) months?|half[- ]year/, "6M"], [/(12|twelve) months?|(1|one|past|last) year|this year|annual/, "12M"], [/ytd|year to date/, "YTD"]];
 
@@ -91,7 +130,7 @@ const STOP = new Set([...Object.keys(SECTOR_ALIASES), ...Object.keys(COUNTRY_ALI
 
 export function parseCommand(text, ctx = {}) {
   const raw = String(text || "").trim();
-  const t = ` ${raw.toLowerCase().replace(/[?!.,]/g, " ").replace(/\s+/g, " ")} `;
+  const t = normalise(` ${raw.toLowerCase().replace(/[?!,]/g, " ").replace(/\.(?!\d)/g, " ").replace(/\s+/g, " ")} `);
   const understood = [];
   const out = { raw, intent: null, page: null, conditions: [], scope: {}, sort: null, limit: null, tf: null, horizon: null, symbol: null, securityId: null, understood, theme: null };
 
@@ -112,7 +151,8 @@ export function parseCommand(text, ctx = {}) {
   if (secs.length) {
     const words = raw.split(/[^A-Za-z0-9.&-]+/).filter(Boolean);
     for (const w of words) {
-      if (w.length < 2 || STOP.has(w.toLowerCase())) continue;
+      // a bare number is a value ("score above 50"), never a ticker, unless the whole question is that number
+      if (w.length < 2 || STOP.has(w.toLowerCase()) || (/^\d+(\.\d+)?$/.test(w) && words.length > 1)) continue;
       const hit = secs.find((s) => s.symbol === w || s.symbol === w.toUpperCase() && w === w.toUpperCase());
       if (hit) { out.symbol = hit.symbol; out.securityId = hit.id; understood.push(`security: ${hit.symbol} (${hit.name})`); break; }
     }
@@ -150,7 +190,7 @@ export function parseCommand(text, ctx = {}) {
 
   // numeric conditions then phrase signals
   let rest = t;
-  for (const [re, mk, label] of NUMERIC) { const m = rest.match(re); if (m) { out.conditions.push(mk(m, tf)); understood.push(`${label} ${m[m.length - 1] ?? ""}`.trim()); rest = rest.replace(m[0], " "); } }
+  for (const [re, mk, label] of NUMERIC) { let m; while ((m = rest.match(re))) { out.conditions.push(mk(m, tf)); understood.push(label(m)); rest = rest.replace(m[0], " "); } }
   for (const [re, mk, label] of SIGNALS) { if (re.test(rest)) { out.conditions.push(...mk(tf)); understood.push(label); rest = rest.replace(re, " "); } }
 
   // ranking
@@ -166,7 +206,15 @@ export function parseCommand(text, ctx = {}) {
   const pageHit = Object.entries(PAGES).sort((a, b) => b[0].length - a[0].length).find(([k]) => t.includes(` ${k} `));
   const wantsChart = /chart|rsiacc|rscacc|rsimma|rscmma|open/.test(t);
   const question = /^ (why|how|what|which|is|are|explain|tell me|describe|compare)/.test(t);
-  if (out.securityId && (question || /explain|analy[sz]e|score|about/.test(t))) out.intent = "explain";
+  // a list question with conditions is a screen even if a word happened to look like a ticker or a name
+  const listy = /\b(list|show|find|screen|scan|give|which|stocks|companies|names|shares|etfs?)\b/.test(t);
+  if (out.securityId && out.conditions.length && listy && !/\b(explain|analy[sz]e|tell me about)\b/.test(t)) {
+    const k = understood.findIndex((u) => u.startsWith("security:")); if (k >= 0) understood.splice(k, 1);
+    out.securityId = null; out.symbol = null;
+  }
+  if (/\betfs?\b|exchange traded fund/.test(t)) { out.scope.assetClass = "ETF"; understood.push("asset class: ETF"); }
+  else if (/\b(stocks?|companies|shares|equities|names)\b/.test(t) || out.conditions.some((c) => /^score|^cap|^pe$|^roe$|growth/.test(c.field))) { out.scope.assetClass = "Stock"; understood.push("asset class: stocks"); }
+  if (out.securityId && (question || /explain|analy[sz]e|about/.test(t))) out.intent = "explain";
   else if (out.securityId && wantsChart) { out.intent = "chart"; out.page = (pageHit && pageHit[1].startsWith("screens/")) ? pageHit[1] : "screens/RSIMMA"; }
   else if (out.securityId) out.intent = "stock";
   else if (/rotation|leading sector|sectors? (are )?(leading|lagging)|which sectors/.test(t)) out.intent = "rotation";

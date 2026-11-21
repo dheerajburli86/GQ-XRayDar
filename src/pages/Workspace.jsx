@@ -105,8 +105,14 @@ function ChartPanel({ p, onChange, onRemove, sync }) {
     <div className="card tight" style={{ padding: 0 }}>
       {big && (
         <div className="anl-full">
+          <div className="anl-fbar">
+            <InstrumentPicker value={p.inst} onChange={(r) => onChange({ inst: r })} width={240} />
+            <span className="small">Period</span><TfPicker dark value={p.tf} onChange={(tf) => onChange({ tf })} />
+            <div className="seg">{["D", "W", "M", "Q", "H", "N", "Y"].map((t) => <button key={t} className={p.tf === t ? "on" : ""} onClick={() => onChange({ tf: t })}>{tfLabel(t)}</button>)}</div>
+            <Select value={p.ind} options={INDICATORS} onChange={(ind) => onChange({ ind })} />
+          </div>
           <button className="anl-x" title="Back to all charts (Esc)" onClick={() => setBig(false)}>✕</button>
-          <div style={{ paddingTop: 36 }}>{chart(Math.max(320, window.innerHeight - 90))}</div>
+          <div>{chart(Math.max(320, window.innerHeight - 70))}</div>
         </div>
       )}
       <div className="panel-head">

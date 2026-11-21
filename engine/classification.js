@@ -11,6 +11,7 @@ import { US_CLASS } from "./reference/usClassification.js";
 import { usRuleFor } from "./reference/usIndustryRules.js";
 import { canonicalCountry, countryMeta, CAP_UNRELIABLE_COUNTRIES } from "./geography.js";
 import { majorCurrency } from "./fx.js";
+import { etfType } from "./etfType.js";
 
 // Rows the heatmap marks as non-companies (ETF, index, bonds, InvITs, SPACs,
 // dormant). GICS classifies companies; these never enter an equity index.
@@ -66,7 +67,8 @@ export function toSecurity(row, indiaMap = null) {
   if (universe === "us_stocks") industry = INDUSTRY_MAP[row.symbol] ?? industry;
   if (universe === "india_stocks" && indiaMap) industry = indiaMap[row.symbol] ?? indiaMap[nseBaseSymbol(row.symbol)] ?? industry;
   const fund = universe === "us_etfs" && row.etf_category === "currency" ? "Currency" : FUND_UNIVERSES[universe] || null;
-  const g = fund ? { sector: fund, industryGroup: row.etf_category || fund, source: "asset_class" } : classifyGics({ symbol: row.symbol, industry, sector: row.sector, universe });
+  // ETFs: the industry-group slot carries the ETF type (Equity / Fixed income / Commodity / Currency / Real estate ...)
+  const g = fund ? { sector: fund, industryGroup: fund === "ETF" ? etfType({ name: row.name, category: row.etf_category }).type : row.etf_category || fund, source: "asset_class" } : classifyGics({ symbol: row.symbol, industry, sector: row.sector, universe });
   // owner's US workbook: sector / industry / sub-industry for US stocks and US-listed ADRs (replaces the GICS-derived labels where listed)
   let us = universe === "us_stocks" ? US_CLASS[row.symbol] || null : null;
   let usSource = us ? "us_workbook" : null;

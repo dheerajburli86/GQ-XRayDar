@@ -39,16 +39,23 @@ export default function WeightWatcher({ route }) {
   const set = (p) => navigate("ww", { view, parent, ...p });
   const { data: grp, loading } = useAsync(() => d.api.ww(parent, ctype), [parent, ctype]);
   const [visible, setVisible] = useState(null);
-  useEffect(() => { setVisible(null); }, [parent, ctype]);
+  const [page, setPage] = useState(0); // which block of 10 (by latest weight) is on the chart
+  const [log, setLog] = useState(true); // owner (Nov 2026): log scale by default, so small weights are readable
+  useEffect(() => { setVisible(null); setPage(0); }, [parent, ctype]);
 
   const children = useMemo(() => {
     if (!grp) return [];
-    return grp.children.map((c, i) => {
-      const sec = ctype === "stock" ? d.secById.get(c.key) : null;
-      return { ...c, id: c.key, name: sec ? `${sec.symbol} · ${(sec.name || "").slice(0, 22)}` : c.key, sec, color: PALETTE[i % PALETTE.length], tr: wwTrend(c.weights) };
-    });
+    // ordered by latest weight, largest first, so "Top 10", "Next 10" ... walk down the list
+    return grp.children.map((c) => ({ c, tr: wwTrend(c.weights) }))
+      .sort((a, b) => (b.tr.last ?? -1) - (a.tr.last ?? -1))
+      .map(({ c, tr }, i) => {
+        const sec = ctype === "stock" ? d.secById.get(c.key) : null;
+        return { ...c, id: c.key, name: sec ? `${sec.symbol} · ${(sec.name || "").slice(0, 22)}` : c.key, sec, color: PALETTE[i % PALETTE.length], tr };
+      });
   }, [grp, ctype, d.secById]);
   const shown = useMemo(() => visible || new Set(children.slice(0, 10).map((c) => c.key)), [visible, children]);
+  const pages = Math.max(1, Math.ceil(children.length / 10));
+  const showPage = (p) => { const k = Math.max(0, Math.min(pages - 1, p)); setPage(k); setVisible(new Set(children.slice(k * 10, k * 10 + 10).map((c) => c.key))); };
   const toggle = (k, on) => { const n = new Set(shown); if (on) n.add(k); else n.delete(k); setVisible(n); };
 
   const series = useMemo(() => {
@@ -94,16 +101,20 @@ export default function WeightWatcher({ route }) {
             <div className="row between" style={{ padding: "2px 6px 6px" }}>
               <b>{parent === "G" ? "Global" : parent.replace(/^G\|I:/, "Global · ").replace(/^[A-Z]:/, "").replace("|S:", " · ").replace("|I:", " · ")} — {ctype === "industryGroup" ? "industry group" : ctype} weights (%)</b>
               <div className="row">
-                <button className="btn sm" onClick={() => setVisible(new Set(children.slice(0, 10).map((c) => c.key)))}>Top 10</button>
+                <button className="btn sm" onClick={() => showPage(0)}>Top 10</button>
+                <button className="btn sm" disabled={page <= 0} onClick={() => showPage(page - 1)} title="Previous 10 by weight">◀ Prev 10</button>
+                <span className="small muted mono">{children.length ? `${page * 10 + 1}–${Math.min(children.length, page * 10 + 10)} of ${children.length}` : ""}</span>
+                <button className="btn sm" disabled={page >= pages - 1} onClick={() => showPage(page + 1)} title="Next 10 by weight">Next 10 ▶</button>
                 <button className="btn sm" onClick={() => setVisible(new Set(children.map((c) => c.key)))}>All</button>
                 <button className="btn sm" onClick={() => setVisible(new Set())}>None</button>
+                <Check checked={log} onChange={setLog}>Log scale</Check>
               </div>
             </div>
-            <TvChart height={380} series={series} hoverNames />
+            <TvChart height={380} series={series} hoverNames logScale={log} />
             {grp.gaps?.length > 0 && <div className="note small" style={{ margin: "4px 6px" }}>
               {grp.gaps.length} quarter{grp.gaps.length > 1 ? "s" : ""} left empty ({grp.gaps[0].date}{grp.gaps.length > 1 ? ` to ${grp.gaps.at(-1).date}` : ""}): {[...new Set(grp.gaps.flatMap((g) => g.countries))].slice(0, 6).join(", ")} had too few stocks with prices then, so any weight would be wrong.</div>}
             <div className="legend" style={{ padding: 6 }}>
-              {children.slice(0, 40).map((c) => (
+              {children.slice(page * 10, page * 10 + 10).concat(children.filter((c, i) => shown.has(c.key) && (i < page * 10 || i >= page * 10 + 10)).slice(0, 30)).map((c) => (
                 <span key={c.key} className="row" style={{ gap: 4 }}>
                   <Check checked={shown.has(c.key)} onChange={(on) => toggle(c.key, on)} color={c.color}>{c.name.split(" · ")[0]}</Check>
                   <button className="btn sm ghost" title="Isolate this line" onClick={() => setVisible(new Set([c.key]))}>◎</button>

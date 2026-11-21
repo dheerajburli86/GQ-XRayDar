@@ -281,3 +281,15 @@ At <= 760px the left menu is a slide-in drawer (☰ in the top bar, closes on na
 - **Stale indices are removed after a complete run** (`pgSink.finish`): every index of the run is upserted with its `run_id`, so after
   `status = "ok"` any `tas_index` row with another run_id is no longer produced (India CW, a segment under the minimum cap) and is
   deleted with its yearly values. Before this, such rows lingered from older runs and kept showing in the app.
+
+## Owner's list, 21 Nov 2026 (Alok Sir's meeting)
+
+- **GLOCOM / LOCOM category changes** (`BandChange` in `glocomUi.jsx`): the coloured arrow between the two bands carries the change (green up, red down); rank moves are shown plainly (#5 → #1), no "N places". Moves list: upgrades, downgrades, then rank-only. Global also rates **countries** against each other (`G|country`, engine `accG.country`, equal-weighted like industries).
+- **Weight Watcher**: children ordered by latest weight; Top 10 / Prev 10 / Next 10 paging; log scale on by default. `methodology.startDate` moved 2015 → **2010** (version 1.2.0) so WW and every index start earlier: first real run on the full data, watch the run time and memory.
+- **Breadth analyser**: Global / region / classification by sectors or size as well as countries; "Global · <sector> (by country)" parents; the note says what CCR is computed across.
+- **Command centre** (`market?m=G|R:x|M:x|C:x`, US / India one click): sector strength with bands and 1W band change, industry strength (GLOCOM / LOCOM), setup report by stage, PDF download (`downloadPage`).
+- **Full screen** (stacked screens and Workspace): period-pair bar and period pickers in the full-screen bar; Both / "<period> only" buttons name the period. Double-click opens Both.
+- **GQ Agent**: `GQAGENT_URL` is not set on ta-server, so the built-in assistant answers. `nl.js` folds typos (markt cap, Fundmental), reads score components (`score_fundamentals`, `score_technical` ...), money units, returns, and never takes a bare number as a ticker; a list question with conditions is always a screen. The panel answers screens / "explain X" itself even when the remote agent is connected. The button is a tab on the right edge (it covered tables' Next button).
+- **ETF type** (`engine/etfType.js`): Equity / Fixed income / Commodity / Currency / Real estate / Alternative / Multi-asset / Crypto in the industry-group slot of ETFs (engine and `supabaseApi.securities`), field `etfType`. Provider asset class wins when known.
+- **ETF details** on the stock page from `tas_etf_info` (migration 20261121000000, filled hourly in slices by `cli/etfInfoJob.mjs` on the TA server from FMP etf/info, holdings, sector and country weightings; India as `<SYMBOL>.NS`, else the heatmap's `etf_weights`). Stock page shows market cap in local currency and USD.
+- **Funnel** starts at Global, US or India; India uses its EW indices and equal weights; only stocks reach the last step.

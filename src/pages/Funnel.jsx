@@ -6,24 +6,27 @@ import { useData } from "../data/store.jsx";
 import { useAsync } from "../lib/useAsync.js";
 import { PageHead, Seg, Pct, Loading, StockLink, ScoreBar, ErrorBox } from "../components/ui.jsx";
 import { changeOver, HBARS } from "../lib/indexMath.js";
+import { countryFamily } from "../../engine/geography.js";
 
 const rel = (s, b, h) => { const a = changeOver(s, HBARS[h]), c = changeOver(b, HBARS[h]); return a != null && c != null ? ((1 + a / 100) / (1 + c / 100) - 1) * 100 : null; };
 
-export default function Funnel() {
+export default function Funnel({ route }) {
   const d = useData();
   const [h, setH] = useState("3M");
   const [topN, setTopN] = useState(2);
-  const [pick, setPick] = useState({});
+  // owner (Nov 2026): start the funnel at a country (US, India) as well as at Global
+  const [pick, setPick] = useState(() => (route?.query?.country ? { country: route.query.country } : {}));
   const { data, loading, error } = useAsync(async () => {
     const g = await d.api.indexSeries("CW|USD|G");
     const reg = await Promise.all(d.regions.map(async (r) => ({ name: r, s: await d.api.indexSeries(`CW|USD|R:${r}`) })));
-    const ctry = await Promise.all(d.countries.map(async (c) => ({ name: c, region: d.secs.find((s) => s.country === c)?.region, ...(await Promise.all([d.api.indexSeries(`CW|USD|C:${c}`), d.api.indexSeries(`CW|LCL|C:${c}`)]).then(([s, l]) => ({ s, l }))) })));
+    const ctry = await Promise.all(d.countries.map(async (c) => ({ name: c, region: d.secs.find((s) => s.country === c)?.region, ...(await Promise.all([d.api.indexSeries(`${countryFamily(c)}|USD|C:${c}`), d.api.indexSeries(`${countryFamily(c)}|LCL|C:${c}`)]).then(([s, l]) => ({ s, l }), () => ({ s: null, l: null }))) })));
     return { g, reg: reg.filter((x) => x.s), ctry: ctry.filter((x) => x.s) };
   }, []);
   const steps = useMemo(() => {
     if (!data) return null;
     const regions = data.reg.map((r) => ({ ...r, v: rel(r.s, data.g, h) })).filter((r) => r.v != null).sort((a, b) => b.v - a.v);
-    const selR = pick.region ? [pick.region] : regions.slice(0, topN).map((r) => r.name);
+    const pinnedRegion = pick.country ? data.ctry.find((c) => c.name === pick.country)?.region : null;
+    const selR = pick.region ? [pick.region] : pinnedRegion ? [pinnedRegion] : regions.slice(0, topN).map((r) => r.name);
     const countries = data.ctry.filter((c) => selR.includes(c.region)).map((c) => ({ ...c, v: rel(c.s, data.reg.find((r) => r.name === c.region)?.s, h) })).filter((c) => c.v != null).sort((a, b) => b.v - a.v);
     const selC = pick.country ? [pick.country] : countries.slice(0, topN).map((c) => c.name);
     return { regions, selR, countries, selC };
@@ -34,7 +37,7 @@ export default function Funnel() {
     for (const c of steps.selC) {
       const base = data.ctry.find((x) => x.name === c)?.l;
       for (const s of d.sectors) {
-        const key = `CW|LCL|C:${c}|S:${s}`;
+        const key = `${countryFamily(c)}|LCL|C:${c}|S:${s}`;
         if (!d.indexByKey.has(key)) continue;
         jobs.push(d.api.indexSeries(key).then((ser) => ({ country: c, name: s, v: rel(ser, base, h) }), () => ({ country: c, name: s, v: null })));
       }
@@ -47,10 +50,12 @@ export default function Funnel() {
     if (!selS) return [];
     const m = new Map();
     for (const r of d.rows) {
+      if ((r.sec.assetClass || "Stock") !== "Stock") continue; // house-index rows and funds are not stocks
       if (!selS.some((s) => s.country === r.sec.country && s.name === r.sec.sector)) continue;
       const k = `${r.sec.country}|${r.sec.industryGroup}`;
       if (!m.has(k)) m.set(k, { key: k, country: r.sec.country, name: r.sec.industryGroup, a: 0, w: 0, rows: [] });
-      const g = m.get(k), v = r.flat[`rscChg_country_${h}`], c = r.sec.capUsdNow || 0;
+      // cap-weighted where caps exist; a country without a reliable cap (India) is averaged equally
+      const g = m.get(k), v = r.flat[`rscChg_country_${h}`], c = countryFamily(r.sec.country) === "EW" ? 1 : r.sec.capUsdNow || 0;
       g.rows.push(r); if (v != null && c) { g.a += v * c; g.w += c; }
     }
     return [...m.values()].map((g) => ({ ...g, v: g.w ? g.a / g.w : null })).filter((g) => g.v != null).sort((a, b) => b.v - a.v);
@@ -65,6 +70,8 @@ export default function Funnel() {
       <PageHead title="Global opportunity funnel" sub={`Each step keeps the strongest by relative strength vs its parent over ${h}. Click any item to fix that step by hand; click again to return to automatic.`}>
         <Seg value={h} options={["1M", "3M", "6M", "12M"]} onChange={setH} />
         <Seg value={topN} options={[1, 2, 3].map((n) => ({ value: n, label: `top ${n}` }))} onChange={setTopN} />
+        <Seg value={pick.country === "United States" ? "us" : pick.country === "India" ? "in" : pick.country ? "other" : "g"} options={[{ value: "g", label: "Global" }, { value: "us", label: "US" }, { value: "in", label: "India" }]}
+          onChange={(v) => setPick(v === "us" ? { country: "United States" } : v === "in" ? { country: "India" } : {})} />
         <button className="btn sm" onClick={() => setPick({})}>Reset to automatic</button>
       </PageHead>
       <div className="grid" style={{ gridTemplateColumns: "repeat(5, minmax(0,1fr))" }}>

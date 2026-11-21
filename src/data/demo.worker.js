@@ -61,6 +61,7 @@ const api = {
   async etiRows() { return []; },
   async etiChanges() { return []; },
   async etiFor() { return []; },
+  async etfInfo() { return null; },
   async glocomScopes() { return Object.keys(sink.glocomGroups || {}); },
   async glocomGroups(key) { return sink.glocomGroups?.[key] || null; },
   async regimes() { return sink.regimes; },

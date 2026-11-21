@@ -20,3 +20,21 @@ export function Jump({ v, unit = "" }) {
  * LOCOM when Indian industries / sectors are rated against each other, GLOCOM everywhere else.
  */
 export const comName = (market) => (market === "C:India" ? "LOCOM" : "GLOCOM");
+
+/**
+ * Category change (owner, Nov 2026): the arrow between the two bands is what carries the colour,
+ * green when the band got better, red when it got worse. A rank change inside the same band is shown
+ * plainly (#5 → #1) without a "places" count and without colour.
+ */
+export function BandChange({ prevCode, prevLabel, code, label, small }) {
+  const mv = prevCode == null || code == null ? 0 : prevCode - code;
+  if (!mv) return <GBadge small={small} code={code} label={label} />;
+  const c = mv > 0 ? UP : DOWN;
+  return (
+    <span style={{ whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 4 }}>
+      <GBadge small={small} code={prevCode} label={prevLabel} />
+      <b style={{ color: "#fff", background: c, borderRadius: 4, padding: "0 6px", fontSize: small ? 11 : 13, lineHeight: small ? "15px" : "18px" }}>{mv > 0 ? "▲ ➜" : "▼ ➜"}</b>
+      <GBadge small={small} code={code} label={label} />
+    </span>
+  );
+}

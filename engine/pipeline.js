@@ -205,7 +205,7 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
   // GLOCOM / LOCOM: group rank history per market (local currency) and globally (USD)
   const gK = m.glocom.historySessions;
   const ckG = dates.slice(-gK);
-  const accG = { industry: new GroupAccumulator(ckG), sector: new GroupAccumulator(ckG) };
+  const accG = { industry: new GroupAccumulator(ckG), sector: new GroupAccumulator(ckG), country: new GroupAccumulator(ckG) };
   const glocomGroups = {};
   for (const country of countries) {
     progress("signals", ci++, countries.length, country);
@@ -257,7 +257,7 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
       if (isStock(sec) && sec.industryGroup && sec.industryGroup !== UNCLASSIFIED) {
         const rc = checkpointReturns(b.time, cc, ckC), rg = checkpointReturns(b.time, usd, ckG);
         accC.industry.add(sec.industryGroup, rc); accC.sector.add(sec.sector, rc);
-        accG.industry.add(sec.industryGroup, rg); accG.sector.add(sec.sector, rg);
+        accG.industry.add(sec.industryGroup, rg); accG.sector.add(sec.sector, rg); accG.country.add(country, rg);
         if (rc[rc.length - 1]) latestRet.set(sec.id, rc[rc.length - 1]);
       }
       const shares = estimateSharesFromRow(sec, b, fx, T);
@@ -372,7 +372,7 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
     if (sectors.length >= 2) rot[sc] = rotation(sectors, base, m.rotation);
   }
   await sink.rotation?.(rot);
-  for (const lv of ["industry", "sector"]) glocomGroups[`G|${lv}`] = accG[lv].history();
+  for (const lv of ["industry", "sector", "country"]) glocomGroups[`G|${lv}`] = accG[lv].history();
   await sink.glocomGroups?.(glocomGroups);
   await sink.regimes?.(regimeRows);
   await sink.ewcw?.(ewcwRows);

@@ -1,6 +1,8 @@
 // Data API over Supabase (anon key, read only). Market data comes from the
 // heatmap dashboard's tables; computed analytics from this app's tas_* tables,
 // which the batch engine (cli/run.mjs) fills.
+import { etfType, ETF_TYPES } from "../../engine/etfType.js";
+const ETF_TYPES_SET = new Set(ETF_TYPES);
 import { CAP_UNRELIABLE_COUNTRIES } from "../../engine/geography.js";
 import { createClient } from "@supabase/supabase-js";
 import { applyCorporateActions, removeBadPrints, cutAtTickerReuse } from "../../engine/quality.js";
@@ -96,7 +98,9 @@ export function createSupabaseApi(url, key) {
       return rows.filter((r) => !HIDE_CRYPTO || r.asset_class !== "Crypto").map((r) => (CAP_UNRELIABLE_COUNTRIES.has(r.country) ? { ...r, cap_local: null, cap_currency: null, cap_usd: null, cap_usd_now: null, cap_segment: null } : r)).map((r) => ({
         id: r.id, symbol: r.symbol, name: r.name, universe: r.universe, exchange: r.exchange, isin: r.isin, country: r.country, region: r.region,
         classification: r.classification, geoAssigned: r.geo_assigned, currency: r.currency, currencyMajor: r.currency_major, currencyDivisor: r.currency_divisor,
-        countryCurrency: r.country_currency, sector: r.sector, industryGroup: r.industry_group, industry: r.industry, subIndustry: r.sub_industry ?? null, classSource: r.class_source,
+        countryCurrency: r.country_currency, sector: r.sector,
+        // ETF type in the industry-group slot (Equity / Fixed income / Commodity / ...), also for rows stored before the engine did it
+        industryGroup: r.asset_class === "ETF" && !ETF_TYPES_SET.has(r.industry_group) ? etfType({ name: r.name, category: r.industry_group }).type : r.industry_group, industry: r.industry, subIndustry: r.sub_industry ?? null, classSource: r.class_source,
         capLocal: r.cap_local, capCurrency: r.cap_currency, capUsd: r.cap_usd, capUsdNow: r.cap_usd_now, turnoverUsd: r.turnover_usd ?? null, capSegment: r.cap_segment, assetClass: r.asset_class || "Stock", active: r.active,
       }));
     },
@@ -160,6 +164,7 @@ export function createSupabaseApi(url, key) {
     async breadth(key) { const r = await one(sb.from("tas_breadth").select("data").eq("scope_key", key).maybeSingle()); return r?.data || null; },
     async rotationScopes() { return (await all("tas_rotation", "scope_key")).map((r) => r.scope_key); },
     async etiRows() { return all("tas_eti_characteristic", "company_id,characteristic,framework,isin,nse_symbol,bse_code,company_name,instrument_id,as_of,meets,value,note,method_version,synced_at", undefined, "company_id"); },
+    async etfInfo(symbol) { try { return await one(sb.from("tas_etf_info").select("symbol,asset_class,info,holdings,sectors,countries,source,status,updated_at").eq("symbol", symbol).maybeSingle()); } catch { return null; } },
     async etiFor(instrumentId) { return one(sb.from("tas_eti_characteristic").select("company_id,characteristic,company_name,nse_symbol,isin,instrument_id,as_of,meets,value,note,method_version").eq("instrument_id", instrumentId)); },
     async etiChanges(limit = 300) { return one(sb.from("tas_eti_change").select("id,company_id,instrument_id,characteristic,from_meets,to_meets,as_of,at").order("at", { ascending: false }).limit(limit)); },
     async glocomScopes() { return (await all("tas_glocom_group", "scope_key")).map((r) => r.scope_key); },
