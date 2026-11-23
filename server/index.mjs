@@ -292,6 +292,7 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
     const hit = FIELDS.filter((f) => (!group || f.group.toLowerCase().includes(group)) && words.every((w) => `${f.key} ${f.label} ${f.group}`.toLowerCase().includes(w)));
     return {
       groups: FIELD_GROUPS, total: hit.length,
+      scopeValues: await data.get().then((st) => ({ countries: st.countries, regions: st.regions, sectors: st.sectors })).catch(() => null),
       timeframes: "per-timeframe keys end in D (daily), W (weekly), M (monthly), Q (quarterly), N (9 months) or Y (yearly)",
       ops: [">", ">=", "<", "<=", "between", "is", "is not", "in", "contains", "is true", "is false", "is set"],
       fields: hit.slice(0, 150).map((f) => ({ key: f.key, label: f.label, group: f.group, type: f.type, ...(f.values ? { values: f.values } : {}) })),

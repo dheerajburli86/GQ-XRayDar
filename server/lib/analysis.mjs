@@ -8,6 +8,7 @@ import { EVENT_LABEL } from "../../engine/signals.js";
 import { WW_TREND_LABEL } from "../../engine/weightWatcher.js";
 import { fmtPct, fmtMoney } from "../../engine/format.js";
 import { describeChart } from "../../engine/chartRead.js";
+import { canonicalCountry } from "../../engine/geography.js";
 
 const r2 = (v) => (v == null || !Number.isFinite(v) ? null : Math.round(v * 100) / 100);
 const TFN = { D: "daily", W: "weekly", M: "monthly", Q: "quarterly", Y: "yearly" };
@@ -77,12 +78,20 @@ export function createAnalysis(data, cfg) {
     const st = await data.get();
     let conds = conditions || [], sc = scope, so = sort, lim = limit, understood = [];
     if (query) { const c = parseCommand(query, { securities: st.secs, countries: st.countries }); conds = [...conds, ...c.conditions]; sc = { ...c.scope, ...scope }; so = sort || c.sort; lim = c.limit || limit; understood = c.understood; }
-    for (const c of conds) if (!FIELD[c.field]) return { error: `unknown field ${c.field}` };
+    for (const c of conds) if (!FIELD[c.field]) return { error: `unknown field ${c.field}; look keys up with /api/fields` };
+    // scope words as people (and models) write them: "US", "usa", "india", "it" sector in any case
+    const pick = (v, list) => { if (v == null || v === "") return v; const x = String(v).trim().toLowerCase(); return list.find((o) => String(o).toLowerCase() === x) ?? v; };
+    conds = conds.map((c) => (c.field === "country" && c.value && ["is", "is not"].includes(c.op) ? { ...c, value: pick(canonicalCountry(c.value) || c.value, st.countries) }
+      : ["sector", "region"].includes(c.field) && c.value && ["is", "is not"].includes(c.op) ? { ...c, value: pick(c.value, c.field === "sector" ? st.sectors : st.regions) } : c));
+    if (sc.country) sc = { ...sc, country: pick(canonicalCountry(sc.country) || sc.country, st.countries) };
+    if (sc.region) sc = { ...sc, region: pick(sc.region, st.regions) };
+    if (sc.sector) sc = { ...sc, sector: pick(sc.sector, st.sectors) };
     let rows = runScreen(st.rows, { conditions: conds, scope: { country: sc.country, region: sc.region, classification: sc.classification, sector: sc.sector, industryGroup: sc.industryGroup, cap: sc.cap, assetClass: sc.assetClass } });
     const sf = so?.field || "score";
     rows = [...rows].sort((p, q) => { const u = FIELD[sf]?.get(p), v = FIELD[sf]?.get(q); if (u == null) return 1; if (v == null) return -1; return so?.dir === "asc" ? u - v : v - u; });
     return {
-      asOf: st.info.asOf, understood, conditions: conds, total: rows.length, sortedBy: sf,
+      asOf: st.info.asOf, understood, conditions: conds, scope: sc, total: rows.length, sortedBy: sf,
+      ...(rows.length ? {} : { hint: `nothing matched; countries are written like ${st.countries.slice(0, 6).join(", ")}; sectors: ${st.sectors.join(", ")}` }),
       results: rows.slice(0, Math.min(lim || 25, 100)).map((r) => ({ id: r.id, symbol: r.sec.symbol, name: r.sec.name, country: r.sec.country, sector: r.sec.sector, [sf]: FIELD[sf]?.get(r) ?? null, ret3M: r.flat.ret3M, weeklyMma: r.flat.mmaW, score: r.flat.score, stage: r.flat.stage,
         ...Object.fromEntries((Array.isArray(columns) ? columns : []).slice(0, 20).filter((k) => FIELD[k]).map((k) => [k, FIELD[k].get(r) ?? null])),
         ...Object.fromEntries(conds.filter((c) => c.field && FIELD[c.field]).map((c) => [c.field, FIELD[c.field].get(r) ?? null])) })),
