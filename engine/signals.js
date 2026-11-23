@@ -15,7 +15,7 @@ import {
 import { HORIZONS, lowerBound } from "./calendar.js";
 import { candleSummary } from "./candles.js";
 import { mmaBreakoutSummary } from "./consolidation.js";
-import { stochastic, adx as adxStudy, supertrend, parabolicSar, ichimoku, cmf } from "./studies.js";
+import { stochastic, adx as adxStudy, supertrend, parabolicSar, ichimoku, cmf, kst } from "./studies.js";
 
 const num = isFiniteNum;
 const r4 = (v) => (num(v) ? Math.round(v * 1e4) / 1e4 : null);
@@ -38,6 +38,7 @@ export function analyzeTimeframe(daily, tf, m = METHODOLOGY) {
   const states = new Array(n);
   for (let i = 0; i < n; i++) states[i] = mmaState(shortL, longL, i);
   const md = macd(c);
+  const ks = kst(c, ind.kst);
   const at = atr(b.high, b.low, c, 14);
   const cb = m.signals.consolidationBars;
   const hh = rollingMax(b.high, cb), ll = rollingMin(b.low, cb);
@@ -58,7 +59,7 @@ export function analyzeTimeframe(daily, tf, m = METHODOLOGY) {
   const trendE = ema(c, TREND_EMA[tf] || 50);
   const N = N52[tf] || 52;
   const hiN = rollingMax(c, N), loN = rollingMin(c, N);
-  return { tf, b, c, n, r1, r2: r2_, r3, shortL, longL, states, md, at, hh, ll, consol, breakout, breakdown, vol, volRatio, trendE, hiN, loN };
+  return { tf, b, c, n, r1, r2: r2_, r3, ks, shortL, longL, states, md, at, hh, ll, consol, breakout, breakdown, vol, volRatio, trendE, hiN, loN };
 }
 
 function compressionAt(A, i, m) {
@@ -207,6 +208,10 @@ export function analyzeSecurity(daily, usdClose, ccClose, bench, ctx = {}, m = M
       shortSpread: r2(st?.shortSpread), longSpread: r2(st?.longSpread), gap: r2(st?.gapPct),
       compression: comp, expansion, postConsBreak,
       macd: A.md.line[k] > A.md.signal[k] ? "bull" : "bear", macdCross,
+      kst: r2(A.ks.kst[k]), kstSignal: r2(A.ks.signal[k]),
+      kstAbove: num(A.ks.kst[k]) && num(A.ks.signal[k]) ? A.ks.kst[k] > A.ks.signal[k] : null,
+      kstCross: num(A.ks.kst[k]) && num(A.ks.signal[k]) && num(A.ks.kst[k - 1]) && num(A.ks.signal[k - 1])
+        ? (A.ks.kst[k] > A.ks.signal[k] && A.ks.kst[k - 1] <= A.ks.signal[k - 1] ? "bull" : A.ks.kst[k] < A.ks.signal[k] && A.ks.kst[k - 1] >= A.ks.signal[k - 1] ? "bear" : null) : null,
       consolidation: A.consol[k], breakout: A.breakout[k], breakdown: A.breakdown[k],
       breakoutRecent: A.breakout.slice(Math.max(0, k - 4), k + 1).some(Boolean),
       reversalUp, reversalDown,

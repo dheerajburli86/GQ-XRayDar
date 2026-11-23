@@ -71,3 +71,25 @@ test("ROC is the % change over n bars, null before n bars and on a zero base", (
   assert.equal(r[4], null);
   assert.equal(roc([1, 2, 3], 5).every((x) => x === null), true);
 });
+
+import { kst, KST_PARAMS } from "../engine/studies.js";
+test("KST matches a hand computation of Pring's formula and takes every parameter", () => {
+  const c = Array.from({ length: 120 }, (_, i) => 100 + 10 * Math.sin(i / 7) + i * 0.3);
+  const rocN = (n) => c.map((v, i) => (i >= n ? (v / c[i - n] - 1) * 100 : null));
+  const smaN = (x, n) => x.map((_, i) => { const w = x.slice(i - n + 1, i + 1); return i >= n - 1 && w.every((v) => v != null) ? w.reduce((a, b) => a + b, 0) / n : null; });
+  const legs = [[10, 10, 1], [15, 10, 2], [20, 10, 3], [30, 15, 4]].map(([r, s, w]) => smaN(rocN(r), s).map((v) => (v == null ? null : v * w)));
+  const want = c.map((_, i) => (legs.every((l) => l[i] != null) ? legs.reduce((a, l) => a + l[i], 0) : null));
+  const got = kst(c);
+  for (let i = 0; i < c.length; i++) {
+    if (want[i] == null) assert.equal(got.kst[i], null, `bar ${i}`);
+    else assert.ok(Math.abs(got.kst[i] - want[i]) < 1e-9, `bar ${i}`);
+  }
+  assert.equal(got.kst[43], null); assert.ok(got.kst[44] != null); // first value at ROC 30 + SMA 15 - 1
+  const sig = smaN(got.kst, 9);
+  assert.ok(Math.abs(got.signal[100] - sig[100]) < 1e-9);
+  // custom periods, weights and signal are honoured; blank inputs fall back to Pring's
+  const k2 = kst(c, { roc1: 5, roc2: 7, roc3: 9, roc4: 11, sma1: 3, sma2: 3, sma3: 3, sma4: 4, w1: 1, w2: 1, w3: 1, w4: 1, signal: 4 });
+  assert.ok(k2.kst[14] != null && got.kst[14] == null);
+  assert.deepEqual(kst(c, { roc1: "" }).params, KST_PARAMS);
+  assert.ok(kst([1, 2, 3]).kst.every((v) => v === null));
+});

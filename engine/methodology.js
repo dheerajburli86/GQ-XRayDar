@@ -5,7 +5,7 @@
 // back to the rules that produced it.
 
 export const METHODOLOGY = Object.freeze({
-  version: "1.2.0",
+  version: "1.3.0",
 
   // History window the index engine builds from. [C]
   startDate: "2010-01-01", // owner (Nov 2026): Weight Watcher and indices from 2010 (was 2015)
@@ -67,6 +67,7 @@ export const METHODOLOGY = Object.freeze({
     mmaLong: [30, 35, 40, 45, 50, 60],
     mmaCompressionPct: { D: 2.0, W: 4.0, M: 8.0, Q: 12.0, H: 15.0, N: 16.5, Y: 18.0 }, // short-group spread below this % = compression
     rscEma: 10,
+    kst: { roc1: 10, roc2: 15, roc3: 20, roc4: 30, sma1: 10, sma2: 10, sma3: 10, sma4: 15, w1: 1, w2: 2, w3: 3, w4: 4, signal: 9 }, // Pring; screen fields use these
     rscRebase: 100,
   },
 

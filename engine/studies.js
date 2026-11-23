@@ -218,6 +218,22 @@ export function roc(c, n = 12) {
   return c.map((v, i) => { const p = c[i - n]; return num(v) && num(p) && p !== 0 ? (v / p - 1) * 100 : null; });
 }
 
+/**
+ * KST, Know Sure Thing (Martin Pring): a weighted sum of four smoothed rates of change,
+ *   KST = w1 SMA(ROC(r1), s1) + w2 SMA(ROC(r2), s2) + w3 SMA(ROC(r3), s3) + w4 SMA(ROC(r4), s4)
+ * and a signal line = SMA(KST, sig). Pring's daily settings are ROC 10/15/20/30, SMA 10/10/10/15,
+ * weights 1/2/3/4, signal 9; every one of them is a parameter. Null until all four legs exist.
+ */
+export const KST_PARAMS = { roc1: 10, roc2: 15, roc3: 20, roc4: 30, sma1: 10, sma2: 10, sma3: 10, sma4: 15, w1: 1, w2: 2, w3: 3, w4: 4, signal: 9 };
+export function kst(c, p = {}) {
+  const P = { ...KST_PARAMS };
+  for (const [k, v] of Object.entries(p || {})) if (v !== "" && v != null && Number.isFinite(+v)) P[k] = +v;
+  const per = (x) => Math.max(1, Math.round(x));
+  const legs = [1, 2, 3, 4].map((j) => sma(roc(c, per(P[`roc${j}`])), per(P[`sma${j}`])));
+  const line = c.map((_, i) => (legs.every((l) => num(l[i])) ? legs.reduce((a, l, j) => a + P[`w${j + 1}`] * l[i], 0) : null));
+  return { kst: line, signal: sma(line, per(P.signal)), params: P };
+}
+
 /** Catalogue for the UI: key, label, where it is drawn, default parameters. */
 export const STUDIES = [
   { key: "ichimoku", label: "Ichimoku cloud", pane: "price", params: { tenkan: 9, kijun: 26, spanB: 52 } },
@@ -234,5 +250,6 @@ export const STUDIES = [
   { key: "cmf", label: "Chaikin Money Flow", pane: "own", params: { n: 20 } },
   { key: "ad", label: "Accumulation / Distribution", pane: "own", params: {} },
   { key: "roc", label: "ROC (rate of change %)", pane: "own", params: { n: 12 } },
+  { key: "kst", label: "KST (Know Sure Thing)", pane: "own", params: { roc1: 10, roc2: 15, roc3: 20, roc4: 30, sma1: 10, sma2: 10, sma3: 10, sma4: 15, w1: 1, w2: 2, w3: 3, w4: 4, signal: 9 } },
   { key: "volosc", label: "Volume oscillator", pane: "own", params: { fast: 5, slow: 10 } },
 ];

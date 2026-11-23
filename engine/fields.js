@@ -84,6 +84,10 @@ for (const tf of ["D", "W", "M", "Q", "N", "Y"]) {
   add(`rsi2${tf}`, `RSI of RSI (${T})`, "Momentum", "num", (r) => r.snap?.tf?.[tf]?.rsi2);
   add(`macd${tf}`, `MACD above signal (${T})`, "Momentum", "bool", (r) => r.snap?.tf?.[tf]?.macd === "bull");
   add(`macdCross${tf}`, `MACD cross (${T})`, "Momentum", "cat", (r) => r.snap?.tf?.[tf]?.macdCross, { values: ["bull", "bear"] });
+  add(`kst${tf}`, `KST (${T})`, "Momentum", "num", (r) => r.snap?.tf?.[tf]?.kst);
+  add(`kstSignal${tf}`, `KST signal line (${T})`, "Momentum", "num", (r) => r.snap?.tf?.[tf]?.kstSignal);
+  add(`kstAbove${tf}`, `KST above its signal (${T})`, "Momentum", "bool", (r) => r.snap?.tf?.[tf]?.kstAbove);
+  add(`kstCross${tf}`, `KST cross of its signal (${T})`, "Momentum", "cat", (r) => r.snap?.tf?.[tf]?.kstCross, { values: ["bull", "bear"] });
   add(`consolidation${tf}`, `Consolidation (${T})`, "Patterns", "bool", (r) => r.snap?.tf?.[tf]?.consolidation);
   add(`breakout${tf}`, `Breakout, last 5 bars (${T})`, "Patterns", "bool", (r) => r.snap?.tf?.[tf]?.breakoutRecent);
   add(`breakdown${tf}`, `Breakdown (${T})`, "Patterns", "bool", (r) => r.snap?.tf?.[tf]?.breakdown);

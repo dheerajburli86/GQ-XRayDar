@@ -293,3 +293,9 @@ At <= 760px the left menu is a slide-in drawer (☰ in the top bar, closes on na
 - **ETF type** (`engine/etfType.js`): Equity / Fixed income / Commodity / Currency / Real estate / Alternative / Multi-asset / Crypto in the industry-group slot of ETFs (engine and `supabaseApi.securities`), field `etfType`. Provider asset class wins when known.
 - **ETF details** on the stock page from `tas_etf_info` (migration 20261121000000, filled hourly in slices by `cli/etfInfoJob.mjs` on the TA server from FMP etf/info, holdings, sector and country weightings; India as `<SYMBOL>.NS`, else the heatmap's `etf_weights`). Stock page shows market cap in local currency and USD.
 - **Funnel** starts at Global, US or India; India uses its EW indices and equal weights; only stocks reach the last step.
+
+## ROC and KST (added 2026-11-23, Shankar Sir)
+
+- `roc` and `kst` in `engine/studies.js` (tests in `tests/studies.test.mjs`, KST checked against a hand computation). Chart lab / Workspace studies "ROC" and "KST (Know Sure Thing)": every period, weight and the signal length is an editable box.
+- KST = w1 SMA(ROC r1, s1) + ... + w4 SMA(ROC r4, s4), signal = SMA(KST, sig); Pring's 10/15/20/30, 10/10/10/15, 1/2/3/4, 9 are only the starting values.
+- Screen fields per timeframe (D W M Q N Y): `kst*`, `kstSignal*`, `kstAbove*`, `kstCross*`, computed by the batch engine with `methodology.indicators.kst` (methodology 1.3.0). Null until a timeframe has ROC r4 + SMA s4 - 1 bars (45 at Pring's settings), so Q / N / Y are empty for short histories. Rows appear after the next engine run.
