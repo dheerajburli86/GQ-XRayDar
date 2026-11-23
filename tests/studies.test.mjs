@@ -61,3 +61,13 @@ test("anchored VWAP with equal volume = running mean of the typical price", () =
   near(w.vwap[12], (up.c[10] + up.c[11] + up.c[12]) / 3);
   assert.ok(w.upper[0][50] > w.vwap[50] && w.lower[0][50] < w.vwap[50]);
 });
+
+import { roc } from "../engine/studies.js";
+test("ROC is the % change over n bars, null before n bars and on a zero base", () => {
+  const r = roc([100, 110, 121, 0, 50], 1);
+  assert.equal(r[0], null);
+  assert.ok(Math.abs(r[1] - 10) < 1e-9 && Math.abs(r[2] - 10) < 1e-9);
+  assert.ok(Math.abs(r[3] + 100) < 1e-9);
+  assert.equal(r[4], null);
+  assert.equal(roc([1, 2, 3], 5).every((x) => x === null), true);
+});

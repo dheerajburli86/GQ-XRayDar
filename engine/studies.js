@@ -212,6 +212,12 @@ export function vwap(time, h, l, c, v, { anchor = null, bands = [1, 2], session 
   return { vwap: out, upper: up, lower: dn, bands };
 }
 
+/** Rate of change: % change of the close over n bars (null until n bars exist or when the base is 0). */
+export function roc(c, n = 12) {
+  n = Math.max(1, Math.round(+n) || 12);
+  return c.map((v, i) => { const p = c[i - n]; return num(v) && num(p) && p !== 0 ? (v / p - 1) * 100 : null; });
+}
+
 /** Catalogue for the UI: key, label, where it is drawn, default parameters. */
 export const STUDIES = [
   { key: "ichimoku", label: "Ichimoku cloud", pane: "price", params: { tenkan: 9, kijun: 26, spanB: 52 } },
@@ -227,5 +233,6 @@ export const STUDIES = [
   { key: "obv", label: "On-Balance Volume", pane: "own", params: {} },
   { key: "cmf", label: "Chaikin Money Flow", pane: "own", params: { n: 20 } },
   { key: "ad", label: "Accumulation / Distribution", pane: "own", params: {} },
+  { key: "roc", label: "ROC (rate of change %)", pane: "own", params: { n: 12 } },
   { key: "volosc", label: "Volume oscillator", pane: "own", params: { fast: 5, slow: 10 } },
 ];

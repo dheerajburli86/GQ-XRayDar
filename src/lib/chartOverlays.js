@@ -2,7 +2,7 @@
 // projections, the seasonal path, anchored VWAP / volume profile) into series specs:
 //   { price: [spec], panes: [{ key, title, specs: [spec] }], notes: [string] }
 // spec = { type: "line"|"histogram", data, options, priceLines?, markers? }. All maths is in engine/.
-import { ichimoku, parabolicSar, supertrend, pivots, vwap, stochastic, adx, atrW, obv, cmf, adLine, volumeOscillator } from "../../engine/studies.js";
+import { ichimoku, parabolicSar, supertrend, pivots, vwap, stochastic, adx, atrW, obv, cmf, adLine, volumeOscillator, roc } from "../../engine/studies.js";
 import { geometry } from "../../engine/drawings.js";
 import { evalFormula, isCondition } from "../../engine/formula.js";
 import { computeProjection } from "../../engine/projection.js";
@@ -58,6 +58,7 @@ export function studyOverlays(b, studies = {}, tf = "D") {
   }
   if (on("adx")) { const a = adx(h, l, c, +P("adx").n || 14); pane("adx", "ADX", [{ ...line(L(t, a.adx), "#e5e7eb", { title: "ADX", lineWidth: 2 }), priceLines: [{ price: 25, color: "#6b7280" }] }, line(L(t, a.plusDI), "#16a34a", { title: "+DI" }), line(L(t, a.minusDI), "#dc2626", { title: "-DI" })]); }
   if (on("atr")) pane("atr", "ATR", [line(L(t, atrW(h, l, c, +P("atr").n || 14)), "#a78bfa", { title: "ATR", lineWidth: 2 })]);
+  if (on("roc")) pane("roc", "ROC", [{ ...line(L(t, roc(c, +P("roc").n || 12)), "#22d3ee", { title: "ROC %", lineWidth: 2 }), priceLines: [{ price: 0, color: "#6b7280" }] }]);
   if (on("obv")) pane("obv", "OBV", [line(L(t, obv(c, v)), "#38bdf8", { title: "OBV", lineWidth: 2, priceFormat: { type: "volume" } })]);
   if (on("cmf")) pane("cmf", "CMF", [{ type: "histogram", data: L(t, cmf(h, l, c, v, +P("cmf").n || 20)).map((x) => ({ ...x, color: x.value >= 0 ? "#16a34a" : "#dc2626" })), options: { title: "CMF" } }]);
   if (on("ad")) pane("ad", "A/D line", [line(L(t, adLine(h, l, c, v)), "#f59e0b", { title: "A/D", lineWidth: 2, priceFormat: { type: "volume" } })]);
