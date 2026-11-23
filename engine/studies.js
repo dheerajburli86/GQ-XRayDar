@@ -143,8 +143,8 @@ export function pivots(h, l, c, o, kind = "standard") {
     let p;
     switch (kind) {
       case "fibonacci": { const P = (H + L + C) / 3; p = { P, R1: P + 0.382 * R, R2: P + 0.618 * R, R3: P + R, S1: P - 0.382 * R, S2: P - 0.618 * R, S3: P - R }; break; }
-      case "camarilla": p = { P: (H + L + C) / 3, R1: C + (R * 1.1) / 12, R2: C + (R * 1.1) / 6, R3: C + (R * 1.1) / 4, R4: C + (R * 1.1) / 2, S1: C - (R * 1.1) / 12, S2: C - (R * 1.1) / 6, S3: C - (R * 1.1) / 4, S4: C - (R * 1.1) / 2 }; break;
-      case "woodie": { const P = (H + L + 2 * O) / 4; p = { P, R1: 2 * P - L, R2: P + R, S1: 2 * P - H, S2: P - R }; break; }
+      case "camarilla": p = { P: (H + L + C) / 3, ...(L > 0 ? { R5: (H / L) * C, S5: C - ((H / L) * C - C) } : {}), R1: C + (R * 1.1) / 12, R2: C + (R * 1.1) / 6, R3: C + (R * 1.1) / 4, R4: C + (R * 1.1) / 2, S1: C - (R * 1.1) / 12, S2: C - (R * 1.1) / 6, S3: C - (R * 1.1) / 4, S4: C - (R * 1.1) / 2 }; break;
+      case "woodie": { const P = (H + L + 2 * O) / 4; const R3 = H + 2 * (P - L), S3 = L - 2 * (H - P); p = { P, R1: 2 * P - L, R2: P + R, R3, R4: R3 + R, S1: 2 * P - H, S2: P - R, S3, S4: S3 - R }; break; }
       case "demark": {
         const X = C < (o ? o[i - 1] : C) ? H + 2 * L + C : C > (o ? o[i - 1] : C) ? 2 * H + L + C : H + L + 2 * C;
         p = { P: X / 4, R1: X / 2 - L, S1: X / 2 - H }; break;
@@ -193,13 +193,21 @@ export function volumeOscillator(v, fast = 5, slow = 10) {
  * VWAP) with optional standard-deviation bands. Without one on daily candles the "session" is
  * each calendar month (end-of-day data has no intraday sessions), and so on for other periods.
  */
+/** Monday of the date's week, as a session key (dates are ISO strings; UTC arithmetic only). */
+function weekKey(t) {
+  const d = new Date(`${t.slice(0, 10)}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
 export function vwap(time, h, l, c, v, { anchor = null, bands = [1, 2], session = "M" } = {}) {
   const len = c.length, out = nulls(len), up = bands.map(() => nulls(len)), dn = bands.map(() => nulls(len));
   let pv = 0, vv = 0, pv2 = 0, key = null;
   for (let i = 0; i < len; i++) {
     if (anchor != null && i < anchor) continue;
     if (anchor == null) {
-      const k = session === "Y" ? time[i].slice(0, 4) : session === "W" ? null : time[i].slice(0, 7);
+      const t = time[i];
+      const k = session === "Y" ? t.slice(0, 4) : session === "Q" ? `${t.slice(0, 4)}Q${Math.floor((+t.slice(5, 7) - 1) / 3)}` : session === "W" ? weekKey(t) : session === "D" ? t : t.slice(0, 7);
       if (k !== key) { key = k; pv = 0; vv = 0; pv2 = 0; }
     }
     const tp = (h[i] + l[i] + c[i]) / 3, vol = v[i] || 0;
@@ -414,10 +422,13 @@ export function ppo(c, fast = 12, slow = 26, sig = 9) {
 }
 
 /** Detrended Price Oscillator: close (n/2 + 1) bars ago minus the n-bar SMA (not centred, so it ends today). */
-export function dpo(c, n = 20) {
+export function dpo(c, n = 20, centered = false) {
   n = Math.max(2, Math.round(n));
   const m = sma(c, n), k = Math.floor(n / 2) + 1;
-  return c.map((_, i) => (i - k >= 0 && num(m[i]) ? c[i - k] - m[i] : null));
+  // TradingView default: close - SMA(n) from k bars ago. Centred: close k bars ago - SMA now (a picture of past cycles).
+  return centered
+    ? c.map((_, i) => (i - k >= 0 && num(m[i]) ? c[i - k] - m[i] : null))
+    : c.map((v, i) => (i - k >= 0 && num(m[i - k]) ? v - m[i - k] : null));
 }
 
 /** Vortex (Botes / Siepman): VI+ and VI- over n. */
@@ -550,13 +561,121 @@ export function ulcerIndex(c, n = 14) {
   return out;
 }
 
+/** Kaufman Adaptive Moving Average: efficiency ratio over n scales the smoothing between the fast and slow EMA constants. */
+export function kama(c, n = 10, fast = 2, slow = 30) {
+  n = Math.max(1, Math.round(n));
+  const fs = 2 / (fast + 1), ss = 2 / (slow + 1), out = nulls(c.length);
+  let k = null;
+  for (let i = n; i < c.length; i++) {
+    let vol = 0; for (let j = i - n + 1; j <= i; j++) vol += Math.abs(c[j] - c[j - 1]);
+    const er = vol > 0 ? Math.abs(c[i] - c[i - n]) / vol : 0, sc = (er * (fs - ss) + ss) ** 2;
+    k = k == null ? c[i - 1] + sc * (c[i] - c[i - 1]) : k + sc * (c[i] - k);
+    out[i] = k;
+  }
+  return out;
+}
+
+/** Ehlers Fisher Transform over n bars of the median price (TradingView's formula); trigger = previous value. */
+export function fisherTransform(h, l, n = 9) {
+  n = Math.max(2, Math.round(n));
+  const m = h.map((x, i) => (x + l[i]) / 2), fish = nulls(m.length), trig = nulls(m.length);
+  let val = 0, f = 0;
+  for (let i = n - 1; i < m.length; i++) {
+    let hi = -Infinity, lo = Infinity; for (let j = i - n + 1; j <= i; j++) { hi = Math.max(hi, m[j]); lo = Math.min(lo, m[j]); }
+    val = 0.66 * ((hi > lo ? (m[i] - lo) / (hi - lo) : 0.5) - 0.5) + 0.67 * val;
+    val = Math.max(-0.999, Math.min(0.999, val));
+    const prev = f;
+    f = 0.5 * Math.log((1 + val) / (1 - val)) + 0.5 * f;
+    fish[i] = f; trig[i] = i > n - 1 ? prev : null;
+  }
+  return { fisher: fish, trigger: trig };
+}
+
+const swma = (x) => x.map((_, i) => (i >= 3 && [0, 1, 2, 3].every((k) => num(x[i - k])) ? (x[i - 3] + 2 * x[i - 2] + 2 * x[i - 1] + x[i]) / 6 : null));
+/** Relative Vigor Index (Dorsey): symmetric-weighted (close - open) over (high - low), summed over n; signal = symmetric average. */
+export function rvi(o, h, l, c, n = 10) {
+  n = Math.max(1, Math.round(n));
+  const a = rsum(swma(c.map((x, i) => x - o[i])), n), b = rsum(swma(h.map((x, i) => x - l[i])), n);
+  const r = a.map((x, i) => (num(x) && num(b[i]) && b[i] !== 0 ? x / b[i] : null));
+  return { rvi: r, signal: swma(r) };
+}
+
+/** Klinger volume oscillator (TradingView form): EMA(fast) - EMA(slow) of volume signed by the change in typical price; signal = EMA. */
+export function klinger(h, l, c, v, fast = 34, slow = 55, signal = 13) {
+  const tp = c.map((x, i) => (h[i] + l[i] + x) / 3);
+  const sv = tp.map((x, i) => (i === 0 ? null : (x - tp[i - 1] >= 0 ? 1 : -1) * (v[i] || 0)));
+  const a = emaStrict(sv, Math.max(1, Math.round(fast))), b = emaStrict(sv, Math.max(1, Math.round(slow)));
+  const k = a.map((x, i) => (num(x) && num(b[i]) ? x - b[i] : null));
+  return { kvo: k, signal: emaStrict(k, Math.max(1, Math.round(signal))) };
+}
+
+/** Price Volume Trend: running sum of volume x % change of the close. */
+export function pvt(c, v) {
+  const out = nulls(c.length);
+  let s = 0;
+  for (let i = 0; i < c.length; i++) { if (i > 0 && c[i - 1]) s += ((c[i] - c[i - 1]) / c[i - 1]) * (v[i] || 0); out[i] = s; }
+  return out;
+}
+
+/** Balance of Power: (close - open) / (high - low), optionally smoothed by an n-bar SMA (n = 1: none). */
+export function balanceOfPower(o, h, l, c, n = 1) {
+  const raw = c.map((x, i) => (h[i] > l[i] ? (x - o[i]) / (h[i] - l[i]) : 0));
+  return Math.round(n) > 1 ? sma(raw, Math.round(n)) : raw;
+}
+
+/** Chandelier Exit (Le Beau): highest high - mult x ATR (long stop), lowest low + mult x ATR (short stop), over n. */
+export function chandelierExit(h, l, c, n = 22, mult = 3) {
+  n = Math.max(1, Math.round(n));
+  const a = atrW(h, l, c, n), { hh, ll } = hhll(h, l, n);
+  return { long: hh.map((x, i) => (num(x) && num(a[i]) ? x - mult * a[i] : null)), short: ll.map((x, i) => (num(x) && num(a[i]) ? x + mult * a[i] : null)) };
+}
+
+/** Smoothed moving average (= Wilder's RMA), as Bill Williams uses it. */
+export const smma = (x, n) => wilder(x, Math.max(1, Math.round(n)));
+
+/** Williams Alligator: SMMA of the median price for jaw / teeth / lips, each drawn `shift` bars ahead. */
+export function alligator(h, l, { jaw = 13, jawShift = 8, teeth = 8, teethShift = 5, lips = 5, lipsShift = 3 } = {}) {
+  const m = h.map((x, i) => (x + l[i]) / 2);
+  return { jaw: smma(m, jaw), teeth: smma(m, teeth), lips: smma(m, lips), shifts: { jaw: Math.round(jawShift), teeth: Math.round(teethShift), lips: Math.round(lipsShift) } };
+}
+
+/** ZigZag: swing points where price reversed by at least pct percent from the last extreme (the last leg is provisional). */
+export function zigzag(h, l, pct = 5) {
+  const pts = [], th = Math.max(0.01, pct) / 100;
+  if (h.length < 2) return pts;
+  let dir = 0, ext = 0, extP = h[0];
+  let lo = 0, hi = 0;
+  for (let i = 1; i < h.length; i++) {
+    if (dir === 0) {
+      if (h[i] > h[hi]) hi = i;
+      if (l[i] < l[lo]) lo = i;
+      if (h[hi] >= l[lo] * (1 + th) && hi > lo) { pts.push({ i: lo, price: l[lo] }); dir = 1; ext = hi; extP = h[hi]; }
+      else if (l[lo] <= h[hi] * (1 - th) && lo > hi) { pts.push({ i: hi, price: h[hi] }); dir = -1; ext = lo; extP = l[lo]; }
+      continue;
+    }
+    if (dir === 1) {
+      if (h[i] >= extP) { ext = i; extP = h[i]; }
+      else if (l[i] <= extP * (1 - th)) { pts.push({ i: ext, price: extP }); dir = -1; ext = i; extP = l[i]; }
+    } else {
+      if (l[i] <= extP) { ext = i; extP = l[i]; }
+      else if (h[i] >= extP * (1 + th)) { pts.push({ i: ext, price: extP }); dir = 1; ext = i; extP = h[i]; }
+    }
+  }
+  if (dir !== 0) pts.push({ i: ext, price: extP, provisional: true });
+  return pts;
+}
+
+/** Studies built on one price series: the UI offers a "source" (close, open, high, low, hl2, hlc3, ohlc4). */
+export const SOURCE_STUDIES = new Set(["bb", "bbpct", "trix", "cmo", "ppo", "dpo", "coppock", "stochRsi", "momentum", "tsi", "hv", "stddev", "linreg", "lrslope", "envelope", "ulcer", "roc", "kst", "kama"]);
+export const SOURCES = ["close", "open", "high", "low", "hl2", "hlc3", "ohlc4"];
+
 /** Catalogue for the UI: key, label, where it is drawn, default parameters. */
 export const STUDIES = [
-  { key: "ichimoku", label: "Ichimoku cloud", pane: "price", params: { tenkan: 9, kijun: 26, spanB: 52 } },
+  { key: "ichimoku", label: "Ichimoku cloud", pane: "price", params: { tenkan: 9, kijun: 26, spanB: 52, shift: 26 } },
   { key: "psar", label: "Parabolic SAR", pane: "price", params: { step: 0.02, max: 0.2 } },
   { key: "supertrend", label: "Supertrend", pane: "price", params: { n: 10, m: 3 } },
   { key: "pivots", label: "Pivot points", pane: "price", params: { kind: "standard" } },
-  { key: "vwap", label: "VWAP (monthly session)", pane: "price", params: {} },
+  { key: "vwap", label: "VWAP", pane: "price", params: { session: "Auto" } },
   { key: "avwap", label: "Anchored VWAP ± bands", pane: "price", params: { anchor: null } },
   { key: "stoch", label: "Stochastic (slow)", pane: "own", params: { k: 14, d: 3, smooth: 3, hi: 80, lo: 20 } },
   { key: "stochFast", label: "Stochastic (fast)", pane: "own", params: { k: 14, d: 3, hi: 80, lo: 20 } },
@@ -583,7 +702,7 @@ export const STUDIES = [
   { key: "eom", label: "Ease of Movement", pane: "own", params: { n: 14, scale: 100000000 } },
   { key: "chaikinOsc", label: "Chaikin Oscillator", pane: "own", params: { fast: 3, slow: 10 } },
   { key: "ppo", label: "PPO (Percentage Price Oscillator)", pane: "own", params: { fast: 12, slow: 26, signal: 9 } },
-  { key: "dpo", label: "DPO (Detrended Price Oscillator)", pane: "own", params: { n: 20 } },
+  { key: "dpo", label: "DPO (Detrended Price Oscillator)", pane: "own", params: { n: 20, centered: 0 } },
   { key: "vortex", label: "Vortex", pane: "own", params: { n: 14 } },
   { key: "mass", label: "Mass Index", pane: "own", params: { n: 9, sum: 25, bulge: 27, trigger: 26.5 } },
   { key: "coppock", label: "Coppock Curve", pane: "own", params: { roc1: 14, roc2: 11, wma: 10 } },
@@ -599,4 +718,13 @@ export const STUDIES = [
   { key: "lrslope", label: "Linear regression slope and R²", pane: "own", params: { n: 50 } },
   { key: "chop", label: "Choppiness Index", pane: "own", params: { n: 14, hi: 61.8, lo: 38.2 } },
   { key: "ulcer", label: "Ulcer Index", pane: "own", params: { n: 14 } },
+  { key: "kama", label: "KAMA (Kaufman adaptive MA)", pane: "price", params: { n: 10, fast: 2, slow: 30 } },
+  { key: "alligator", label: "Williams Alligator", pane: "price", params: { jaw: 13, jawShift: 8, teeth: 8, teethShift: 5, lips: 5, lipsShift: 3 } },
+  { key: "chandelier", label: "Chandelier Exit", pane: "price", params: { n: 22, mult: 3 } },
+  { key: "zigzag", label: "ZigZag", pane: "price", params: { pct: 5 } },
+  { key: "fisher", label: "Fisher Transform", pane: "own", params: { n: 9, hi: 1.5, lo: -1.5 } },
+  { key: "rvi", label: "RVI (Relative Vigor Index)", pane: "own", params: { n: 10 } },
+  { key: "klinger", label: "Klinger Oscillator", pane: "own", params: { fast: 34, slow: 55, signal: 13 } },
+  { key: "pvt", label: "Price Volume Trend", pane: "own", params: {} },
+  { key: "bop", label: "Balance of Power", pane: "own", params: { n: 14 } },
 ];

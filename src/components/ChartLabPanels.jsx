@@ -3,7 +3,7 @@
 // seasonality and market profile. They only edit settings; every number comes from engine/.
 import { useMemo, useState } from "react";
 import { Check, Badge, Seg } from "./ui.jsx";
-import { STUDIES, MA_KINDS } from "../../engine/studies.js";
+import { STUDIES, MA_KINDS, SOURCE_STUDIES, SOURCES } from "../../engine/studies.js";
 import { DRAW_TOOLS, alertLevels } from "../../engine/drawings.js";
 import { FORMULA_HELP, parseFormula, isCondition, importFormulas, exportFormulas } from "../../engine/formula.js";
 import { confluenceAcross } from "../../engine/confluence.js";
@@ -32,8 +32,18 @@ export function StudiesPanel({ studies = {}, onChange }) {
               <Check checked={!!st.on} onChange={(on) => set(s.key, { on })}>{s.label}</Check>
               {Object.entries(params).map(([k, val]) => k === "kind"
                 ? <select key={k} className="input sm" value={val} onChange={(e) => set(s.key, { params: { ...params, kind: e.target.value } })}>{(s.key === "pivots" ? ["standard", "fibonacci", "camarilla", "woodie", "demark"] : MA_KINDS).map((x) => <option key={x}>{x}</option>)}</select>
-                : <label key={k} className="small muted">{k} <input className="input sm" style={{ width: 52 }} value={val ?? ""} onChange={(e) => set(s.key, { params: { ...params, [k]: e.target.value } })} /></label>)}
-              {!["psar", "supertrend", "ichimoku", "pivots"].includes(s.key) && <input type="color" value={st.color || "#38bdf8"} onChange={(e) => set(s.key, { color: e.target.value })} title="Colour" />}
+                : k === "session"
+                  ? <label key={k} className="small muted">session <select className="input sm" value={val} onChange={(e) => set(s.key, { params: { ...params, session: e.target.value } })}>{[["Auto", "auto"], ["D", "day"], ["W", "week"], ["M", "month"], ["Q", "quarter"], ["Y", "year"]].map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select></label>
+                  : k === "centered"
+                    ? <Check key={k} checked={!!+val} onChange={(on) => set(s.key, { params: { ...params, centered: on ? 1 : 0 } })}>centred</Check>
+                    : <label key={k} className="small muted">{k} <input className="input sm" style={{ width: 52 }} value={val ?? ""} onChange={(e) => set(s.key, { params: { ...params, [k]: e.target.value } })} /></label>)}
+              {SOURCE_STUDIES.has(s.key) && <label className="small muted">source <select className="input sm" value={params.source || "close"} onChange={(e) => set(s.key, { params: { ...params, source: e.target.value } })}>{SOURCES.map((x) => <option key={x}>{x}</option>)}</select></label>}
+              {s.key !== "pivots" && <label className="small muted" title="Line width">width <select className="input sm" value={st.width || ""} onChange={(e) => set(s.key, { width: e.target.value })}><option value="">auto</option>{[1, 2, 3, 4].map((x) => <option key={x}>{x}</option>)}</select></label>}
+              {!["psar", "supertrend", "pivots"].includes(s.key) && <input type="color" value={st.color || "#38bdf8"} onChange={(e) => set(s.key, { color: e.target.value })} title="Colour of the main line" />}
+              {["psar", "supertrend"].includes(s.key) && <>
+                <label className="small muted">up <input type="color" value={st.upColor || "#16a34a"} onChange={(e) => set(s.key, { upColor: e.target.value })} /></label>
+                <label className="small muted">down <input type="color" value={st.downColor || "#dc2626"} onChange={(e) => set(s.key, { downColor: e.target.value })} /></label></>}
+              {(st.color || st.width || st.params || st.upColor || st.downColor) && <button className="btn sm" title="Back to the starting values" onClick={() => set(s.key, { color: undefined, width: undefined, params: undefined, upColor: undefined, downColor: undefined })}>↺</button>}
             </div>
           );
         })}

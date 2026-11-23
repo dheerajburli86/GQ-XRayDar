@@ -152,8 +152,10 @@ test("TRIX, PPO, DPO, Coppock, Mass Index, UO, Elder, Force, EOM, Chaikin oscill
   assert.ok(close(S.trix(flat, 15, 9).trix.at(-1), 0));
   const p = S.ppo(c, 12, 26, 9);
   assert.ok(p.ppo.at(-1) != null && close(p.hist.at(-1), p.ppo.at(-1) - p.signal.at(-1)));
-  const d = S.dpo(c, 20), k = 11, m = c.slice(-20).reduce((a, b) => a + b, 0) / 20;
-  assert.ok(close(d.at(-1), c[c.length - 1 - k] - m, 1e-6));
+  // TradingView default: close - SMA(20) of 11 bars ago; centred: close 11 bars ago - SMA now
+  const k = 11, n = c.length, m = c.slice(-20).reduce((a, b) => a + b, 0) / 20, mk = c.slice(n - 20 - k, n - k).reduce((a, b) => a + b, 0) / 20;
+  assert.ok(close(S.dpo(c, 20).at(-1), c[n - 1] - mk, 1e-6));
+  assert.ok(close(S.dpo(c, 20, true).at(-1), c[n - 1 - k] - m, 1e-6));
   assert.ok(S.coppock(c, 14, 11, 10).at(-1) != null);
   const mi = S.massIndex(h.map(() => 2), l.map(() => 1), 9, 25);
   assert.ok(close(mi.at(-1), 25)); // constant range: every ratio is 1
