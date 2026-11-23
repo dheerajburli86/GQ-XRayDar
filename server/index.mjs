@@ -28,7 +28,7 @@ import { runExtra } from "../cli/extraJob.mjs";
 import { runEtfInfo } from "../cli/etfInfoJob.mjs";
 import { RULES, DEFAULT_PARAMS, normalizeParams, describeRule, evaluateRule } from "../engine/rules.js";
 import { ALERT_TEMPLATES } from "../engine/alerts.js";
-import { FIELD } from "../engine/fields.js";
+import { FIELD, FIELDS, FIELD_GROUPS } from "../engine/fields.js";
 import { createAudit } from "./lib/audit.mjs";
 import { createTokens, API_SCOPES } from "./lib/tokens.mjs";
 import { createChannels, webhookAllowed } from "./lib/channels.mjs";
@@ -284,6 +284,20 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
   r.post("/api/push/test", async (req) => { const u = await auth.web(req); return push.notify(u.id, { title: "GQ XRayDar", body: "Notifications are working on this device.", url: "/#/alerts" }); });
 
   // ------------------------------------------------------------- analysis (web + agent)
+  // The screenable fields (keys, labels, types, allowed values): the GQ agent looks keys up here before a screen.
+  r.get("/api/fields", async (req, _, url) => {
+    await auth.any(req);
+    const words = String(q(url, "search", "") || "").toLowerCase().split(/\s+/).filter(Boolean);
+    const group = String(q(url, "group", "") || "").toLowerCase();
+    const hit = FIELDS.filter((f) => (!group || f.group.toLowerCase().includes(group)) && words.every((w) => `${f.key} ${f.label} ${f.group}`.toLowerCase().includes(w)));
+    return {
+      groups: FIELD_GROUPS, total: hit.length,
+      timeframes: "per-timeframe keys end in D (daily), W (weekly), M (monthly), Q (quarterly), N (9 months) or Y (yearly)",
+      ops: [">", ">=", "<", "<=", "between", "is", "is not", "in", "contains", "is true", "is false", "is set"],
+      fields: hit.slice(0, 150).map((f) => ({ key: f.key, label: f.label, group: f.group, type: f.type, ...(f.values ? { values: f.values } : {}) })),
+      ...(hit.length > 150 ? { note: `showing 150 of ${hit.length}; add a search word or a group` } : {}),
+    };
+  });
   r.get("/api/resolve", async (req, _, url) => { await auth.any(req); return (await data.resolve(q(url, "q"))).map((x) => ({ id: x.id, symbol: x.symbol, name: x.name, country: x.country, exchange: x.exchange, assetClass: x.assetClass })); });
   r.get("/api/stock/:ref", async (req, { ref }) => { await auth.any(req); return analysis.stock(ref); });
   r.get("/api/chart-read/:id", async (req, { id }, url) => {

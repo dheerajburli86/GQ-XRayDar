@@ -25,9 +25,19 @@ export function createAgentProxy({ cfg, data, fetchImpl = fetch, log = console.l
     return { source: "built-in", blocks: out.blocks };
   }
 
+  // What is on the person's screen, with the instrument named (the agent cannot look ids up).
+  async function enrich(context) {
+    if (!context || typeof context !== "object") return null;
+    const c = { page: context.page || null, tf: context.tf || null, view: context.view || null, symbol: context.symbol || null, name: context.name || null, country: null };
+    if (context.instrumentId) {
+      try { const s = (await data.facade()).secById.get(context.instrumentId); if (s) Object.assign(c, { symbol: s.symbol, name: s.name, country: s.country }); } catch { /* the bare context is still useful */ }
+    }
+    return c;
+  }
+
   async function chat(args) {
     if (cfg.agentUrl && cfg.agentSecret) {
-      try { return await viaAgent(args); }
+      try { return await viaAgent({ ...args, context: await enrich(args.context) }); }
       catch (e) { log(`[agent] GQ agent unavailable (${e.message}); answering with the built-in assistant`); const b = await viaBuiltin(args); return { ...b, notice: "The GQ agent did not answer, so this reply comes from the built-in assistant (stored data only)." }; }
     }
     return viaBuiltin(args);

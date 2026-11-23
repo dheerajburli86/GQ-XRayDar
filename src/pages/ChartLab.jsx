@@ -44,6 +44,9 @@ import { evalFormula } from "../../engine/formula.js";
 import { seasonality, seasonalOverlay } from "../../engine/seasonality.js";
 import { rsc } from "../../engine/indicators.js";
 import { alignCurrency } from "../lib/series.js";
+import { useIndSettings, linesLabel, listLabel } from "../lib/indSettings.js";
+import { IndicatorSettingsButton } from "../components/IndicatorSettings.jsx";
+import { movingAverage } from "../../engine/studies.js";
 
 const UP = "#16a34a", DOWN = "#dc2626";
 const STYLES = [["candles", "Candles"], ["ha", "Heikin-Ashi"], ["line", "Line"], ["bar", "Bars"], ["renko", "Renko"], ["kagi", "Kagi"], ["pnf", "Point & Figure"], ["tpo", "Market profile"]];
@@ -75,6 +78,7 @@ export default function ChartLab({ route }) {
   useEffect(() => { if (id && lastInst !== `s:${id}`) setLastInst(`s:${id}`); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
   const [picking, setPicking] = useState(null);
   const [view, setView] = usePersistent("chartlab", DEFAULT_VIEW);
+  const [ind] = useIndSettings();
   const v = { ...DEFAULT_VIEW, ...view };
   const set = (patch) => setView({ ...v, ...patch });
   useChartKeys({ onTf: (tf) => set({ tf }), onSearch: (ch) => setPicking({ initial: ch }) });
@@ -96,10 +100,10 @@ export default function ChartLab({ route }) {
   // relative strength vs the "Compare with" series on these candles (formula name: rsc)
   const fullBars = useMemo(() => {
     if (!fullBars0 || !data?.aligned || !data?.cmp) return fullBars0;
-    const r = rsc(data.inst.time, data.aligned.a, data.cmp.time, data.aligned.b, v.tf, 100);
+    const r = rsc(data.inst.time, data.aligned.a, data.cmp.time, data.aligned.b, v.tf, ind.rscBase);
     const m = new Map(r.time.map((t, i) => [t, r.value[i]]));
     return { ...fullBars0, rsc: fullBars0.time.map((t) => m.get(t) ?? null) };
-  }, [fullBars0, data, v.tf]);
+  }, [fullBars0, data, v.tf, ind.rscBase]);
   // bar replay: everything after the replay point is hidden
   const [replay, setReplay] = useState(null);
   useEffect(() => { setReplay(null); }, [id, v.tf]);
@@ -139,9 +143,9 @@ export default function ChartLab({ route }) {
     const markers = [...dw.markers, ...fo.markers, ...evMarks, ...(replay?.trades || []).map((t) => ({ time: t.date, position: t.side === "buy" ? "belowBar" : "aboveBar", shape: t.side === "buy" ? "arrowUp" : "arrowDown", color: t.side === "buy" ? "#16a34a" : "#dc2626", text: `${t.side} ${t.price.toFixed(2)}` }))];
     return { price, panes: [...so.panes, ...fo.panes], markers, levels: [...so.levels, ...dw.levels, ...pj.levels], notes: [...so.notes, ...dw.notes], errors: fo.errors, projections: pj.results };
   }, [bars, v.style, v.studies, v.tf, drawings, customs, projs, seasonOn, data, replay?.trades, events, everyEvents]);
-  const levels = useMemo(() => (bars && v.sr ? supportResistance(bars, { lookback: v.tf === "D" ? 250 : 150 }) : []), [bars, v.sr, v.tf]);
+  const levels = useMemo(() => (bars && v.sr ? supportResistance(bars, { lookback: ind.srLookback || (v.tf === "D" ? 250 : 150) }) : []), [bars, v.sr, v.tf, ind.srLookback]);
   const lastPatterns = useMemo(() => (bars ? candlePatternsAt(bars, bars.time.length - 1).map((p) => CANDLE_PATTERNS[p]) : []), [bars]);
-  const fib = useMemo(() => (bars && v.fib ? fibonacci(bars, { lookback: v.tf === "D" ? 250 : 120 }) : null), [bars, v.fib, v.tf]);
+  const fib = useMemo(() => (bars && v.fib ? fibonacci(bars, { lookback: ind.fibLookback || (v.tf === "D" ? 250 : 120), ratios: ind.fibRatios }) : null), [bars, v.fib, v.tf, ind.fibLookback, ind.fibRatios]);
   const patterns = useMemo(() => (bars && v.pat ? chartPatterns(bars) : []), [bars, v.pat]);
   const und = foUnderlying(sec);
   const foStats = useAsync(async () => { if (!und || !v.fo) return null; const h = await getDerivApi().history(und); return h?.at(-1) || null; }, [und, v.fo]);
@@ -216,8 +220,8 @@ export default function ChartLab({ route }) {
           <TfPicker value={v.tf} onChange={(tf) => set({ tf })} />
           <Seg value={v.style} options={STYLES.map(([value, label]) => ({ value, label }))} onChange={(style) => set({ style })} />
           <span className="sep" />
-          <Check checked={v.ema} onChange={(x) => set({ ema: x })}>EMA 20/50/200</Check>
-          <Check checked={v.mma} onChange={(x) => set({ mma: x })}>MMA groups</Check>
+          <Check checked={v.ema} onChange={(x) => set({ ema: x })}>{linesLabel(ind.lines.filter((l) => !l.off))}</Check>
+          <Check checked={v.mma} onChange={(x) => set({ mma: x })}>MMA {listLabel(ind.mmaShort)} | {listLabel(ind.mmaLong)}</Check>
           <Check checked={v.sr} onChange={(x) => set({ sr: x })}>Key levels</Check>
           <Check checked={v.vp} onChange={(x) => set({ vp: x })}>Volume profile (visible range)</Check>
           <Check checked={v.fib} onChange={(x) => set({ fib: x })}>Fibonacci</Check>
@@ -227,6 +231,7 @@ export default function ChartLab({ route }) {
           <Check checked={v.vol} onChange={(x) => set({ vol: x })}>Volume</Check>
           <Check checked={v.rsi} onChange={(x) => set({ rsi: x })}>RSI</Check>
           <Check checked={v.macd} onChange={(x) => set({ macd: x })}>MACD</Check>
+          <IndicatorSettingsButton />
         </div>
         <div className="row" style={{ flexWrap: "wrap", gap: 8, marginTop: 8 }}>
           <span className="small muted">Compare with</span>
@@ -305,6 +310,7 @@ export default function ChartLab({ route }) {
 
 /** The chart itself. Re-created when the instrument or style changes; series are rebuilt on option changes. */
 function ChartCanvas({ name = "", bars, v, levels, extraLines = [], patterns = [], cmp, drawings, tool, onDraw, onChart, extra = null }) {
+  const [ind] = useIndSettings();
   const el = useRef(null), chartRef = useRef(null), mainRef = useRef(null), seriesRef = useRef([]), pending = useRef([]);
   const toolRef = useRef(tool), onDrawRef = useRef(onDraw), srcRef = useRef(null);
   const src = useMemo(() => ({ name, tf: v.tf, bars }), [name, v.tf, bars]);
@@ -374,8 +380,8 @@ function ChartCanvas({ name = "", bars, v, levels, extraLines = [], patterns = [
         ? add(LineSeries, priceSeries(t, bars, "line").data, { color: "#e5e7eb", lineWidth: 2, lastValueVisible: true })
         : v.style === "bar" ? add(BarSeries, t.map((x, i) => ({ time: x, open: src.open[i], high: src.high[i], low: src.low[i], close: src.close[i] })), { upColor: UP, downColor: DOWN, lastValueVisible: true })
         : add(CandlestickSeries, t.map((x, i) => ({ time: x, open: src.open[i], high: src.high[i], low: src.low[i], close: src.close[i] })), { upColor: UP, downColor: DOWN, borderVisible: false, wickUpColor: UP, wickDownColor: DOWN, lastValueVisible: true });
-      if (v.ema) [[20, "#22d3ee"], [50, "#14a44d"], [200, "#d97706"]].forEach(([n, c]) => add(LineSeries, L(t, emaStrict(bars.close, n)), { color: c, lineWidth: 1, title: `EMA${n}` }));
-      if (v.mma) { [3, 5, 8, 10, 12, 15].forEach((n) => add(LineSeries, L(t, emaStrict(bars.close, n)), { color: "#facc15", lineWidth: 1 })); [30, 35, 40, 45, 50, 60].forEach((n) => add(LineSeries, L(t, emaStrict(bars.close, n)), { color: "#ef4444", lineWidth: 1 })); }
+      if (v.ema) ind.lines.filter((l) => !l.off).forEach((l) => add(LineSeries, L(t, movingAverage(l.kind, bars.close, l.n)), { color: l.color, lineWidth: 1, title: `${l.kind}${l.n}` }));
+      if (v.mma) { ind.mmaShort.forEach((n) => add(LineSeries, L(t, emaStrict(bars.close, n)), { color: "#facc15", lineWidth: 1 })); ind.mmaLong.forEach((n) => add(LineSeries, L(t, emaStrict(bars.close, n)), { color: "#ef4444", lineWidth: 1 })); }
       if (cmp?.close?.length) {
         const idx = new Map(cmp.time.map((x, i) => [x, i]));
         const cb = aggregate({ time: cmp.time, open: cmp.close, high: cmp.close, low: cmp.close, close: cmp.close, volume: cmp.close.map(() => 0) }, v.tf);
@@ -423,30 +429,30 @@ function ChartCanvas({ name = "", bars, v, levels, extraLines = [], patterns = [
       // non-time styles: one point per brick / swing / column on a sequence axis
       const seq = (i) => i + 1;
       if (v.style === "renko") {
-        const r = renko(bars);
+        const r = ind.renkoBox ? renko(bars, ind.renkoBox) : renko(bars);
         main = add(CandlestickSeries, r.bricks.map((b, i) => ({ time: seq(i), open: b.open, high: b.high, low: b.low, close: b.close })), { upColor: UP, downColor: DOWN, borderVisible: false, wickVisible: false, lastValueVisible: true, title: `Renko box ${r.box}` });
       } else if (v.style === "kagi") {
-        const k = kagi(bars, 4);
-        main = add(LineSeries, k.map((p, i) => ({ time: seq(i), value: p.price, color: p.yang === false ? DOWN : UP })), { lineWidth: 2, lineType: 1, lastValueVisible: true, title: "Kagi 4%" });
+        const k = kagi(bars, ind.kagiPct);
+        main = add(LineSeries, k.map((p, i) => ({ time: seq(i), value: p.price, color: p.yang === false ? DOWN : UP })), { lineWidth: 2, lineType: 1, lastValueVisible: true, title: `Kagi ${ind.kagiPct}%` });
       } else {
-        const p = pointFigure(bars);
+        const p = ind.pfBox ? pointFigure(bars, ind.pfBox, ind.pfRev) : pointFigure(bars, undefined, ind.pfRev);
         main = add(CandlestickSeries, p.cols.map((c, i) => ({ time: seq(i), open: c.kind === "X" ? c.from : c.from, close: c.to, high: Math.max(c.from, c.to), low: Math.min(c.from, c.to) })), { upColor: UP, downColor: DOWN, borderVisible: true, borderUpColor: UP, borderDownColor: DOWN, wickVisible: false, lastValueVisible: true, title: `P&F box ${p.box} × ${p.rev}` });
       }
     }
     mainRef.current = main;
     if (v.rsi) {
       pane++;
-      const r = rsi(bars.close, 14), rr = rsi(r.map((x) => (x == null ? null : x)), 14);
+      const r = rsi(bars.close, ind.rsi), rr = rsi(r.map((x) => (x == null ? null : x)), ind.rsiNested);
       const series = timeStyle ? (vals) => L(t, vals) : null;
       if (series) {
-        const s = add(LineSeries, series(r), { color: "#a78bfa", lineWidth: 2, title: "RSI 14", lastValueVisible: true }, pane);
-        add(LineSeries, series(rr), { color: "#64748b", lineWidth: 1, title: "RSI of RSI" }, pane);
-        s?.createPriceLine({ price: 70, color: DOWN, lineStyle: LineStyle.Dashed, lineWidth: 1 }); s?.createPriceLine({ price: 30, color: UP, lineStyle: LineStyle.Dashed, lineWidth: 1 });
+        const s = add(LineSeries, series(r), { color: "#a78bfa", lineWidth: 2, title: `RSI ${ind.rsi}`, lastValueVisible: true }, pane);
+        add(LineSeries, series(rr), { color: "#64748b", lineWidth: 1, title: `RSI ${ind.rsiNested} of RSI` }, pane);
+        s?.createPriceLine({ price: ind.rsiHigh, color: DOWN, lineStyle: LineStyle.Dashed, lineWidth: 1 }); s?.createPriceLine({ price: ind.rsiLow, color: UP, lineStyle: LineStyle.Dashed, lineWidth: 1 });
       } else pane--;
     }
     if (v.macd && timeStyle) {
       pane++;
-      const m = macd(bars.close);
+      const m = macd(bars.close, ind.macdFast, ind.macdSlow, ind.macdSignal);
       add(HistogramSeries, L(t, m.hist).map((x) => ({ ...x, color: x.value >= 0 ? UP : DOWN })), { title: "MACD hist" }, pane);
       add(LineSeries, L(t, m.line), { color: "#14a44d", lineWidth: 2, title: "MACD" }, pane);
       add(LineSeries, L(t, m.signal), { color: "#d97706", lineWidth: 1, title: "signal" }, pane);
@@ -469,7 +475,7 @@ function ChartCanvas({ name = "", bars, v, levels, extraLines = [], patterns = [
     const fit = () => { if (chartRef.current !== chart) return; try { if (nPts > show) chart.timeScale().setVisibleLogicalRange({ from: nPts - show, to: nPts + 5 }); else chart.timeScale().fitContent(); } catch { /* chart removed */ } };
     fit(); setTimeout(fit, 60);
     } catch (e) { console.warn(`[chart lab] drawing failed: ${e.message}`); }
-  }, [bars, v.ema, v.mma, v.vol, v.rsi, v.macd, v.style, levels, extraLines, patterns, cmp, drawings, timeStyle, v.tf, extra]);
+  }, [bars, v.ema, v.mma, v.vol, v.rsi, v.macd, v.style, levels, extraLines, patterns, cmp, drawings, timeStyle, v.tf, extra, ind]);
 
   // callouts: text boxes pinned to a candle and a price, kept in place while the chart moves
   useEffect(() => {
@@ -501,9 +507,9 @@ function ChartCanvas({ name = "", bars, v, levels, extraLines = [], patterns = [
       if (!r || !mainRef.current) return;
       const from = Math.max(0, Math.floor(r.from)), to = Math.min(bars.time.length - 1, Math.ceil(r.to));
       const sub = { time: bars.time.slice(from, to + 1), open: bars.open.slice(from, to + 1), high: bars.high.slice(from, to + 1), low: bars.low.slice(from, to + 1), close: bars.close.slice(from, to + 1), volume: bars.volume.slice(from, to + 1) };
-      const vp = volumeProfile(sub, { bins: 28 });
+      const vp = volumeProfile(sub, { bins: ind.vpBins });
       const max = Math.max(...vp.bins.map((b) => b.volume), 1);
-      const va = valueArea(vp);
+      const va = valueArea(vp, ind.vpValueArea / 100);
       setVpBars(vp.bins.map((b) => {
         const y1 = mainRef.current.priceToCoordinate(b.hi), y2 = mainRef.current.priceToCoordinate(b.lo);
         return y1 == null || y2 == null ? null : { top: Math.min(y1, y2), h: Math.max(1, Math.abs(y2 - y1) - 1), w: (b.volume / max) * 100, poc: b === vp.poc,
@@ -514,7 +520,7 @@ function ChartCanvas({ name = "", bars, v, levels, extraLines = [], patterns = [
     draw();
     chart.timeScale().subscribeVisibleLogicalRangeChange(draw);
     return () => { try { chart.timeScale().unsubscribeVisibleLogicalRangeChange(draw); } catch { /* removed */ } };
-  }, [v.vp, bars, timeStyle, v.style, v.vol, v.rsi, v.macd]);
+  }, [v.vp, bars, timeStyle, v.style, v.vol, v.rsi, v.macd, ind.vpBins, ind.vpValueArea]);
 
   return (
     <div style={{ position: "relative" }}>

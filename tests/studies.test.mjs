@@ -93,3 +93,135 @@ test("KST matches a hand computation of Pring's formula and takes every paramete
   assert.deepEqual(kst(c, { roc1: "" }).params, KST_PARAMS);
   assert.ok(kst([1, 2, 3]).kst.every((v) => v === null));
 });
+
+import * as S from "../engine/studies.js";
+const close = (a, b, tol = 1e-9) => Math.abs(a - b) < tol;
+const series = (n = 160) => {
+  const c = Array.from({ length: n }, (_, i) => 100 + 8 * Math.sin(i / 6) + i * 0.2);
+  return { c, h: c.map((x, i) => x + 1 + (i % 3) * 0.2), l: c.map((x, i) => x - 1 - (i % 4) * 0.15), v: c.map((_, i) => 1000 + (i % 7) * 100) };
+};
+
+test("moving averages: WMA, Hull, DEMA, TEMA and the by-name switch", () => {
+  assert.deepEqual(S.wma([1, 2, 3, 4], 3).map((x) => x && +x.toFixed(6)), [null, null, 14 / 6, 20 / 6].map((x) => x && +x.toFixed(6)));
+  const flat = Array(60).fill(50);
+  for (const k of S.MA_KINDS) { const m = S.movingAverage(k, flat, 10); assert.ok(close(m.at(-1), 50), k); }
+  // on a straight line DEMA and TEMA remove the EMA lag; Hull follows it closely
+  const ln = Array.from({ length: 200 }, (_, i) => i);
+  assert.ok(Math.abs(S.tema(ln, 10).at(-1) - 199) < 0.01 && Math.abs(S.dema(ln, 10).at(-1) - 199) < 0.3 && close(S.hma(ln, 16).at(-1), 199 - 2 / 3, 1e-9));
+  assert.equal(S.movingAverage("SMA", [1, 2, 3], 2)[2], 2.5);
+});
+
+test("Bollinger: mid = SMA, bands = mid +/- k population SD, %B and width", () => {
+  const c = [1, 2, 3, 4, 5], b = S.bollinger(c, 5, 2), sd = Math.sqrt(2);
+  assert.ok(close(b.mid[4], 3) && close(b.upper[4], 3 + 2 * sd) && close(b.lower[4], 3 - 2 * sd));
+  assert.ok(close(b.pctB[4], (5 - b.lower[4]) / (4 * sd)) && close(b.width[4], (4 * sd / 3) * 100));
+  assert.equal(b.mid[3], null);
+});
+
+test("CCI, Williams %R, MFI, CMO stay in their published ranges and match hand cases", () => {
+  const { c, h, l, v } = series();
+  const r = S.williamsR(h, l, c, 14).filter((x) => x != null);
+  assert.ok(r.length && r.every((x) => x <= 0 && x >= -100));
+  assert.ok(close(S.williamsR([10, 12, 11], [8, 9, 9], [9, 11, 10], 3)[2], ((12 - 10) / (12 - 8)) * -100));
+  const m = S.mfi(h, l, c, v, 14).filter((x) => x != null);
+  assert.ok(m.length && m.every((x) => x >= 0 && x <= 100));
+  assert.equal(S.mfi([2, 3, 4], [0, 1, 2], [1, 2, 3], [1, 1, 1], 2)[2], 100); // only up flows
+  const k = S.cmo(c, 9).filter((x) => x != null);
+  assert.ok(k.every((x) => x >= -100 && x <= 100));
+  assert.equal(S.cmo([1, 2, 3, 4], 3)[3], 100);
+  // CCI hand case: TP = close here (h = l = c)
+  const tp = [1, 2, 3, 4], cc = S.cci(tp, tp, tp, 4, 0.015);
+  assert.ok(close(cc[3], (4 - 2.5) / (0.015 * 1)));
+});
+
+test("Keltner, Donchian, Aroon, Vortex shapes", () => {
+  const { c, h, l } = series();
+  const kc = S.keltner(h, l, c, 20, 10, 2), i = 100;
+  assert.ok(kc.upper[i] > kc.mid[i] && kc.mid[i] > kc.lower[i] && close(kc.upper[i] - kc.mid[i], kc.mid[i] - kc.lower[i]));
+  const dc = S.donchian(h, l, 20);
+  assert.ok(close(dc.upper[i], Math.max(...h.slice(i - 19, i + 1))) && close(dc.lower[i], Math.min(...l.slice(i - 19, i + 1))));
+  const up = Array.from({ length: 40 }, (_, j) => j), ar = S.aroon(up, up, 25);
+  assert.equal(ar.up.at(-1), 100); assert.equal(ar.down.at(-1), 0); assert.equal(ar.osc.at(-1), 100);
+  const vx = S.vortex(h, l, c, 14);
+  assert.ok(vx.plus[i] > 0 && vx.minus[i] > 0);
+});
+
+test("TRIX, PPO, DPO, Coppock, Mass Index, UO, Elder, Force, EOM, Chaikin oscillator", () => {
+  const { c, h, l, v } = series(300);
+  const flat = Array(120).fill(10);
+  assert.ok(close(S.trix(flat, 15, 9).trix.at(-1), 0));
+  const p = S.ppo(c, 12, 26, 9);
+  assert.ok(p.ppo.at(-1) != null && close(p.hist.at(-1), p.ppo.at(-1) - p.signal.at(-1)));
+  const d = S.dpo(c, 20), k = 11, m = c.slice(-20).reduce((a, b) => a + b, 0) / 20;
+  assert.ok(close(d.at(-1), c[c.length - 1 - k] - m, 1e-6));
+  assert.ok(S.coppock(c, 14, 11, 10).at(-1) != null);
+  const mi = S.massIndex(h.map(() => 2), l.map(() => 1), 9, 25);
+  assert.ok(close(mi.at(-1), 25)); // constant range: every ratio is 1
+  const uo = S.ultimateOscillator(h, l, c).filter((x) => x != null);
+  assert.ok(uo.length && uo.every((x) => x >= 0 && x <= 100));
+  const er = S.elderRay(h, l, c, 13);
+  assert.ok(er.bull[200] > er.bear[200]);
+  assert.ok(close(S.forceIndex(flat, flat, 13).at(-1), 0));
+  assert.ok(S.easeOfMovement(h, l, v, 14).at(-1) != null);
+  assert.ok(S.chaikinOscillator(h, l, c, v, 3, 10).at(-1) != null);
+});
+
+test("every study in the catalogue draws, with its starting settings and with changed ones", async () => {
+  const { studyOverlays } = await import("../src/lib/chartOverlays.js");
+  const { c, h, l, v } = series(400);
+  const t = c.map((_, i) => `2020-${String(1 + Math.floor(i / 28) % 12).padStart(2, "0")}-${String(1 + (i % 28)).padStart(2, "0")}`);
+  const time = t.map((_, i) => new Date(Date.UTC(2015, 0, 1 + i)).toISOString().slice(0, 10));
+  const b = { time, open: c, high: h, low: l, close: c, volume: v };
+  for (const s of S.STUDIES.filter((x) => !["avwap", "pivots"].includes(x.key))) {
+    const o = studyOverlays(b, { [s.key]: { on: true } }, "D");
+    const specs = [...o.price, ...o.panes.flatMap((p) => p.specs)];
+    assert.ok(specs.length && specs.every((sp) => sp.data.length > 0), `${s.key} draws`);
+    const half = Object.fromEntries(Object.entries(s.params).map(([k, x]) => [k, typeof x === "number" ? (Number.isInteger(x) ? Math.max(1, Math.round(x / 2)) : x / 2) : x]));
+    const o2 = studyOverlays(b, { [s.key]: { on: true, params: half } }, "D");
+    assert.ok([...o2.price, ...o2.panes.flatMap((p) => p.specs)].length, `${s.key} with changed settings`);
+  }
+});
+
+test("studies: Stochastic RSI, Momentum, Awesome Oscillator, TSI, HV, std dev, linear regression, envelope, Choppiness, Ulcer", async () => {
+  const S = await import("../engine/studies.js");
+  const c = Array.from({ length: 120 }, (_, i) => 100 + 10 * Math.sin(i / 6) + i * 0.3);
+  const h = c.map((x) => x + 1), l = c.map((x) => x - 1);
+  // straight line: regression fits exactly, slope = step, R² = 1
+  const line = Array.from({ length: 60 }, (_, i) => 50 + 2 * i);
+  const lr = S.linearRegression(line, 20);
+  assert.ok(Math.abs(lr.value[59] - line[59]) < 1e-9 && Math.abs(lr.slope[59] - 2) < 1e-9 && Math.abs(lr.r2[59] - 1) < 1e-9);
+  assert.equal(lr.value[18], null);
+  // momentum = close - close n back
+  assert.equal(S.momentum(line, 10)[30], 20);
+  // constant close: no volatility, std dev 0, HV 0
+  const flat = Array(40).fill(10);
+  assert.equal(S.stdDev(flat, 20)[39], 0);
+  assert.equal(S.historicalVolatility(flat, 20)[39], 0);
+  // HV: alternating +/-1% log moves -> sd of returns x sqrt(252)
+  const alt = [100]; for (let i = 1; i < 41; i++) alt.push(alt[i - 1] * Math.exp(i % 2 ? 0.01 : -0.01));
+  const hv = S.historicalVolatility(alt, 20)[40];
+  assert.ok(Math.abs(hv - 0.01 * Math.sqrt(20 / 19) * Math.sqrt(252) * 100) < 1e-6, String(hv));
+  // envelope: bands exactly pct around the average
+  const env = S.envelope(line, 10, 5, "SMA");
+  assert.ok(Math.abs(env.upper[30] - env.mid[30] * 1.05) < 1e-9 && Math.abs(env.lower[30] - env.mid[30] * 0.95) < 1e-9);
+  // Stochastic RSI stays within 0-100, %D is the 3-average of %K
+  const sr = S.stochRsi(c, 14, 14, 3, 3);
+  const ks = sr.k.filter((x) => x != null);
+  assert.ok(ks.length > 50 && ks.every((x) => x >= 0 && x <= 100));
+  const i = 100; assert.ok(Math.abs(sr.d[i] - (sr.k[i] + sr.k[i - 1] + sr.k[i - 2]) / 3) < 1e-9);
+  // AO = SMA5 - SMA34 of the median price
+  const ao = S.awesomeOscillator(h, l, 5, 34);
+  const med = c; const avg = (a, n, j) => a.slice(j - n + 1, j + 1).reduce((x, y) => x + y, 0) / n;
+  assert.ok(Math.abs(ao[80] - (avg(med, 5, 80) - avg(med, 34, 80))) < 1e-9);
+  // TSI of a steadily rising series is +100
+  const t = S.tsi(line, 25, 13, 13);
+  assert.ok(Math.abs(t.tsi[59] - 100) < 1e-9);
+  // Choppiness: bounded 0-100 and higher for a sideways series than for a trend
+  const side = Array.from({ length: 60 }, (_, j) => 100 + (j % 2 ? 1 : -1));
+  const chS = S.choppiness(side.map((x) => x + 0.5), side.map((x) => x - 0.5), side, 14)[59];
+  const chT = S.choppiness(line.map((x) => x + 0.5), line.map((x) => x - 0.5), line, 14)[59];
+  assert.ok(chS > chT && chS <= 100 && chT >= 0, `${chS} ${chT}`);
+  // Ulcer: zero for a series that never draws down, positive after a fall
+  assert.equal(S.ulcerIndex(line, 14)[59], 0);
+  assert.ok(S.ulcerIndex([...line, ...Array.from({ length: 20 }, (_, j) => 168 - 3 * j)], 14).at(-1) > 0);
+});

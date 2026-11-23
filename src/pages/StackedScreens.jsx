@@ -11,7 +11,9 @@ import { useAsync } from "../lib/useAsync.js";
 import { navigate } from "../lib/router.js";
 import { Seg, Check, Badge, Loading, Empty, Tabs } from "../components/ui.jsx";
 import { ChartSync } from "../components/TvChart.jsx";
-import { Pane, StudyPane, YELLOW, RED, ACC_COLOR, PRESETS, DEFAULT_VIEW } from "../components/AnalystPane.jsx";
+import { Pane, StudyPane, YELLOW, RED, accColor, PRESETS, DEFAULT_VIEW } from "../components/AnalystPane.jsx";
+import { useIndSettings, listLabel } from "../lib/indSettings.js";
+import { IndicatorSettingsButton } from "../components/IndicatorSettings.jsx";
 import { StudiesPanel, FormulaPanel, ProjectionPanel } from "../components/ChartLabPanels.jsx";
 import { studyOverlays, formulaOverlays, projectionOverlays } from "../lib/chartOverlays.js";
 import { InstrumentPicker, TfPicker } from "../components/pickers.jsx";
@@ -24,7 +26,7 @@ import { usePersistent } from "../lib/storage.js";
 import { captureStack, savePng, savePdf } from "../lib/snapshot.js";
 import { tfLabel } from "../../engine/calendar.js";
 import { applyWhatIf, nextWeekday } from "../../engine/whatif.js";
-import { ANALYST_MODES, ACC_PERIODS, MMA_SHORT, buildAnalystColumn, analystDate } from "../../engine/analyst.js";
+import { ANALYST_MODES, buildAnalystColumn, analystDate } from "../../engine/analyst.js";
 
 const fmt = (v) => (v == null ? "—" : v.toFixed(2));
 
@@ -59,7 +61,8 @@ export default function StackedScreens({ route }) {
   const badRange = rg.from && rg.to && rg.from > rg.to;
   const from = badRange ? "" : rg.from, to = badRange ? "" : rg.to;
   const anchor = from && rg.anchor ? from : null;
-  const [rsiN, setRsiN] = usePersistent("analyst.rsiPeriod", null); // null = the methodology default (14)
+  const [rsiN, setRsiN] = usePersistent("analyst.rsiPeriod", null); // null = the RSI in Settings
+  const [ind] = useIndSettings();
   const [active, setActive] = useState(1);
   // switching screen inside full screen remounts the page; carry the full-screen choice over so it stays open
   const [focus, setFocus] = useState(() => { const f = carryFocus; carryFocus = null; return f; });
@@ -114,8 +117,8 @@ export default function StackedScreens({ route }) {
   useEffect(() => { setRangeKey((k) => k + 1); }, [instKey, mode, left, right, from, to, anchor]);
 
   const m0 = d.info.methodology.indicators;
-  const rsiPer = Number.isInteger(rsiN) && rsiN >= 2 && rsiN <= 200 ? rsiN : m0.rsiPeriod;
-  const m = useMemo(() => ({ ...m0, rsiPeriod: rsiPer }), [m0, rsiPer]);
+  const rsiPer = Number.isInteger(rsiN) && rsiN >= 2 && rsiN <= 200 ? rsiN : ind.rsi;
+  const m = useMemo(() => ({ ...m0, rsiPeriod: rsiPer, rscRebase: ind.rscBase, mmaShort: ind.mmaShort, mmaLong: ind.mmaLong, acc: ind.acc }), [m0, rsiPer, ind]);
   // one memo per side: changing the left timeframe does not rebuild (and redraw) the right column
   const wf = useMemo(() => (data?.inst && wiList.length ? applyWhatIf(data.inst, wiList, data.aligned?.a) : null), [data, wiList]);
   const wiOn = !!wf?.applied.length;
@@ -126,7 +129,7 @@ export default function StackedScreens({ route }) {
     return buildAnalystColumn({
       mode, tf, bars: hyp ? hyp.bars : inst, benchLabel,
       bench: bench && aligned ? { time: bench.time, close: aligned.b } : null, rscCloses: hyp ? hyp.rscCloses : aligned?.a,
-      rsiPeriod: m.rsiPeriod, rsiMethod: m.rsiMethod, rscBase: m.rscRebase, to: to || null, anchor,
+      rsiPeriod: m.rsiPeriod, rsiMethod: m.rsiMethod, rscBase: m.rscRebase, to: to || null, anchor, mmaShort: m.mmaShort, mmaLong: m.mmaLong, accPeriods: m.acc,
     });
   };
   /* eslint-disable react-hooks/exhaustive-deps */
@@ -221,13 +224,14 @@ export default function StackedScreens({ route }) {
         <button className={`btn sm ${v.avgOnly ? "primary" : ""}`} onClick={() => setV({ avgOnly: !v.avgOnly })} title="Hide every price / RSI / RSC line and keep only the averages">{v.avgOnly ? "Averages only: ON" : "Averages only"}</button>
         <Check checked={v.log} onChange={(x) => setV({ log: x })}>Log scale</Check>
         <span className="small muted">RSI period</span>
-        <input type="number" min="2" max="200" value={rsiPer} style={{ width: 56 }} title="RSI length in candles (default 14)"
+        <input type="number" min="2" max="200" value={rsiPer} style={{ width: 56 }} title="RSI length in candles (blank = the RSI in Settings)"
           onChange={(e) => { const n = parseInt(e.target.value, 10); setRsiN(Number.isFinite(n) ? n : null); }} />
-        {rsiPer !== m0.rsiPeriod && <button className="btn sm" onClick={() => setRsiN(null)}>Reset to {m0.rsiPeriod}</button>}
+        {rsiN != null && rsiPer !== ind.rsi && <button className="btn sm" onClick={() => setRsiN(null)}>Use Settings ({ind.rsi})</button>}
         {cfg.overlay === "mma" ? <>
-          <Check checked={v.short} onChange={(x) => setV({ short: x })} color={YELLOW}>Short EMA 3-15</Check>
-          <Check checked={v.long} onChange={(x) => setV({ long: x })} color={RED}>Long EMA 30-60</Check>
-        </> : ACC_PERIODS.map((p) => <Check key={p} checked={v.acc[p]} onChange={(x) => setV({ acc: { ...v.acc, [p]: x } })} color={ACC_COLOR[p]}>EMA {p}</Check>)}
+          <Check checked={v.short} onChange={(x) => setV({ short: x })} color={YELLOW}>Short EMA {listLabel(m.mmaShort)}</Check>
+          <Check checked={v.long} onChange={(x) => setV({ long: x })} color={RED}>Long EMA {listLabel(m.mmaLong)}</Check>
+        </> : m.acc.map((p, k) => <Check key={p} checked={v.acc?.[p] !== false} onChange={(x) => setV({ acc: { ...v.acc, [p]: x } })} color={accColor(k)}>EMA {p}</Check>)}
+        <IndicatorSettingsButton only={["groups", "osc"]} />
         <span className="small muted">From</span>
         <input type="date" value={rg.from} max={rg.to || undefined} onChange={(e) => setRg({ from: e.target.value })} title="Start date: the chart opens here" />
         <span className="small muted">To</span>

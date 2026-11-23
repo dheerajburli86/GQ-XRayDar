@@ -3,7 +3,7 @@
 // seasonality and market profile. They only edit settings; every number comes from engine/.
 import { useMemo, useState } from "react";
 import { Check, Badge, Seg } from "./ui.jsx";
-import { STUDIES } from "../../engine/studies.js";
+import { STUDIES, MA_KINDS } from "../../engine/studies.js";
 import { DRAW_TOOLS, alertLevels } from "../../engine/drawings.js";
 import { FORMULA_HELP, parseFormula, isCondition, importFormulas, exportFormulas } from "../../engine/formula.js";
 import { confluenceAcross } from "../../engine/confluence.js";
@@ -31,9 +31,9 @@ export function StudiesPanel({ studies = {}, onChange }) {
             <div key={s.key} className="row" style={{ gap: 6, flexWrap: "wrap", border: "1px solid var(--line)", borderRadius: 6, padding: "4px 6px" }}>
               <Check checked={!!st.on} onChange={(on) => set(s.key, { on })}>{s.label}</Check>
               {Object.entries(params).map(([k, val]) => k === "kind"
-                ? <select key={k} className="input sm" value={val} onChange={(e) => set(s.key, { params: { ...params, kind: e.target.value } })}>{["standard", "fibonacci", "camarilla", "woodie", "demark"].map((x) => <option key={x}>{x}</option>)}</select>
+                ? <select key={k} className="input sm" value={val} onChange={(e) => set(s.key, { params: { ...params, kind: e.target.value } })}>{(s.key === "pivots" ? ["standard", "fibonacci", "camarilla", "woodie", "demark"] : MA_KINDS).map((x) => <option key={x}>{x}</option>)}</select>
                 : <label key={k} className="small muted">{k} <input className="input sm" style={{ width: 52 }} value={val ?? ""} onChange={(e) => set(s.key, { params: { ...params, [k]: e.target.value } })} /></label>)}
-              {s.key === "vwap" && <input type="color" value={st.color || "#f59e0b"} onChange={(e) => set(s.key, { color: e.target.value })} title="Colour" />}
+              {!["psar", "supertrend", "ichimoku", "pivots"].includes(s.key) && <input type="color" value={st.color || "#38bdf8"} onChange={(e) => set(s.key, { color: e.target.value })} title="Colour" />}
             </div>
           );
         })}

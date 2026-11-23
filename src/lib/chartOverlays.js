@@ -2,7 +2,7 @@
 // projections, the seasonal path, anchored VWAP / volume profile) into series specs:
 //   { price: [spec], panes: [{ key, title, specs: [spec] }], notes: [string] }
 // spec = { type: "line"|"histogram", data, options, priceLines?, markers? }. All maths is in engine/.
-import { ichimoku, parabolicSar, supertrend, pivots, vwap, stochastic, adx, atrW, obv, cmf, adLine, volumeOscillator, roc, kst } from "../../engine/studies.js";
+import { ichimoku, parabolicSar, supertrend, pivots, vwap, stochastic, adx, atrW, obv, cmf, adLine, volumeOscillator, roc, kst, bollinger, keltner, donchian, cci, williamsR, mfi, aroon, trix, cmo, ultimateOscillator, elderRay, forceIndex, easeOfMovement, chaikinOscillator, ppo, dpo, vortex, massIndex, coppock, stochRsi, momentum, awesomeOscillator, tsi, historicalVolatility, stdDev, linearRegression, envelope, choppiness, ulcerIndex } from "../../engine/studies.js";
 import { geometry } from "../../engine/drawings.js";
 import { evalFormula, isCondition } from "../../engine/formula.js";
 import { computeProjection } from "../../engine/projection.js";
@@ -49,14 +49,47 @@ export function studyOverlays(b, studies = {}, tf = "D") {
     out.notes.push(`Pivot points (${P("pivots").kind || "standard"}) for the next candle, from the last completed one.`);
   }
   if (on("vwap")) { const w = vwap(t, h, l, c, v, { session: tf === "D" ? "M" : "Y" }); out.price.push(line(L(t, w.vwap), col("vwap", "#f59e0b"), { title: "VWAP", lineWidth: 2 })); }
-  const pane = (key, title, specs) => out.panes.push({ key, title, specs });
-  if (on("stoch") || on("stochFast")) {
-    const s = stochastic(h, l, c, +P("stoch").k || 14, +P("stoch").d || 3, +P("stoch").smooth || 3);
-    const lv = [{ price: 80, color: "#dc2626" }, { price: 20, color: "#16a34a" }];
-    if (on("stoch")) pane("stoch", "Stochastic slow", [{ ...line(L(t, s.slowK), "#38bdf8", { title: "%K", lineWidth: 2 }), priceLines: lv }, line(L(t, s.slowD), "#f59e0b", { title: "%D" })]);
-    if (on("stochFast")) pane("stochFast", "Stochastic fast", [{ ...line(L(t, s.fastK), "#38bdf8", { title: "%K", lineWidth: 2 }), priceLines: lv }, line(L(t, s.fastD), "#f59e0b", { title: "%D" })]);
+  // price-pane channels; every number comes from the study's own boxes
+  const N = (k, f, d) => { const x = +P(k)[f]; return P(k)[f] !== "" && P(k)[f] != null && Number.isFinite(x) ? x : d; };
+  if (on("bb")) { const x = bollinger(c, N("bb", "n", 20), N("bb", "k", 2)); out.price.push(line(L(t, x.upper), col("bb", "#a78bfa"), { title: "BB upper" }), line(L(t, x.mid), col("bb", "#a78bfa"), { title: "BB mid", lineStyle: 2 }), line(L(t, x.lower), col("bb", "#a78bfa"), { title: "BB lower" })); }
+  if (on("keltner")) { const x = keltner(h, l, c, N("keltner", "n", 20), N("keltner", "atr", 10), N("keltner", "mult", 2)); out.price.push(line(L(t, x.upper), col("keltner", "#f472b6"), { title: "KC upper" }), line(L(t, x.mid), col("keltner", "#f472b6"), { title: "KC mid", lineStyle: 2 }), line(L(t, x.lower), col("keltner", "#f472b6"), { title: "KC lower" })); }
+  if (on("donchian")) { const x = donchian(h, l, N("donchian", "n", 20)); out.price.push(line(L(t, x.upper), col("donchian", "#2dd4bf"), { title: "DC upper" }), line(L(t, x.mid), col("donchian", "#2dd4bf"), { title: "DC mid", lineStyle: 2 }), line(L(t, x.lower), col("donchian", "#2dd4bf"), { title: "DC lower" })); }
+  // a colour picked for the study recolours its main line
+  const pane = (key, title, specs, sk = key) => {
+    const c0 = studies[sk]?.color, s0 = c0 && specs.find((x) => x.type === "line");
+    if (s0) s0.options = { ...s0.options, color: c0 };
+    out.panes.push({ key, title, specs });
+  };
+  const lv = (k, hi, lo) => [{ price: N(k, "hi", hi), color: "#dc2626" }, { price: N(k, "lo", lo), color: "#16a34a" }];
+  const zero = [{ price: 0, color: "#6b7280" }];
+  const hist = (vals, title) => ({ type: "histogram", data: L(t, vals).map((x) => ({ ...x, color: x.value >= 0 ? "#16a34a" : "#dc2626" })), options: { title } });
+  const main = (vals, color, title, priceLines) => ({ ...line(L(t, vals), color, { title, lineWidth: 2 }), ...(priceLines ? { priceLines } : {}) });
+  if (on("bbpct")) { const x = bollinger(c, N("bbpct", "n", 20), N("bbpct", "k", 2)); pane("bbpct", "Bollinger %B", [main(x.pctB, "#a78bfa", "%B", [{ price: 1, color: "#dc2626" }, { price: 0, color: "#16a34a" }])]); pane("bbw", "Bollinger bandwidth %", [main(x.width, "#a78bfa", "Width %")]); }
+  if (on("cci")) pane("cci", "CCI", [main(cci(h, l, c, N("cci", "n", 20), N("cci", "constant", 0.015)), "#38bdf8", "CCI", lv("cci", 100, -100))]);
+  if (on("willr")) pane("willr", "Williams %R", [main(williamsR(h, l, c, N("willr", "n", 14)), "#38bdf8", "%R", lv("willr", -20, -80))]);
+  if (on("mfi")) pane("mfi", "MFI", [main(mfi(h, l, c, v, N("mfi", "n", 14)), "#f59e0b", "MFI", lv("mfi", 80, 20))]);
+  if (on("aroon")) { const x = aroon(h, l, N("aroon", "n", 25)); pane("aroon", "Aroon", [main(x.up, "#16a34a", "Up"), line(L(t, x.down), "#dc2626", { title: "Down", lineWidth: 2 })]); pane("aroonOsc", "Aroon oscillator", [main(x.osc, "#38bdf8", "Osc", zero)]); }
+  if (on("trix")) { const x = trix(c, N("trix", "n", 15), N("trix", "signal", 9)); pane("trix", "TRIX", [main(x.trix, "#38bdf8", "TRIX", zero), line(L(t, x.signal), "#f59e0b", { title: "Signal" })]); }
+  if (on("cmo")) pane("cmo", "CMO", [main(cmo(c, N("cmo", "n", 9)), "#38bdf8", "CMO", lv("cmo", 50, -50))]);
+  if (on("uo")) pane("uo", "Ultimate Oscillator", [main(ultimateOscillator(h, l, c, N("uo", "short", 7), N("uo", "mid", 14), N("uo", "long", 28), N("uo", "wShort", 4), N("uo", "wMid", 2), N("uo", "wLong", 1)), "#38bdf8", "UO", lv("uo", 70, 30))]);
+  if (on("elder")) { const x = elderRay(h, l, c, N("elder", "n", 13)); pane("elderBull", "Elder Ray bull power", [hist(x.bull, "Bull")]); pane("elderBear", "Elder Ray bear power", [hist(x.bear, "Bear")]); }
+  if (on("force")) pane("force", "Force Index", [hist(forceIndex(c, v, N("force", "n", 13)), "Force")]);
+  if (on("eom")) pane("eom", "Ease of Movement", [main(easeOfMovement(h, l, v, N("eom", "n", 14), N("eom", "scale", 1e8)), "#38bdf8", "EOM", zero)]);
+  if (on("chaikinOsc")) pane("chaikinOsc", "Chaikin Oscillator", [hist(chaikinOscillator(h, l, c, v, N("chaikinOsc", "fast", 3), N("chaikinOsc", "slow", 10)), "Chaikin")]);
+  if (on("ppo")) { const x = ppo(c, N("ppo", "fast", 12), N("ppo", "slow", 26), N("ppo", "signal", 9)); pane("ppo", "PPO", [hist(x.hist, "Hist"), main(x.ppo, "#14a44d", "PPO"), line(L(t, x.signal), "#d97706", { title: "Signal" })]); }
+  if (on("dpo")) pane("dpo", "DPO", [main(dpo(c, N("dpo", "n", 20)), "#38bdf8", "DPO", zero)]);
+  if (on("vortex")) { const x = vortex(h, l, c, N("vortex", "n", 14)); pane("vortex", "Vortex", [main(x.plus, "#16a34a", "VI+"), line(L(t, x.minus), "#dc2626", { title: "VI-", lineWidth: 2 })]); }
+  if (on("mass")) pane("mass", "Mass Index", [main(massIndex(h, l, N("mass", "n", 9), N("mass", "sum", 25)), "#38bdf8", "Mass", [{ price: N("mass", "bulge", 27), color: "#dc2626" }, { price: N("mass", "trigger", 26.5), color: "#f59e0b" }])]);
+  if (on("coppock")) pane("coppock", "Coppock Curve", [hist(coppock(c, N("coppock", "roc1", 14), N("coppock", "roc2", 11), N("coppock", "wma", 10)), "Coppock")]);
+  if (on("stoch")) {
+    const s = stochastic(h, l, c, N("stoch", "k", 14), N("stoch", "d", 3), N("stoch", "smooth", 3));
+    pane("stoch", "Stochastic slow", [main(s.slowK, "#38bdf8", "%K", lv("stoch", 80, 20)), line(L(t, s.slowD), "#f59e0b", { title: "%D" })]);
   }
-  if (on("adx")) { const a = adx(h, l, c, +P("adx").n || 14); pane("adx", "ADX", [{ ...line(L(t, a.adx), "#e5e7eb", { title: "ADX", lineWidth: 2 }), priceLines: [{ price: 25, color: "#6b7280" }] }, line(L(t, a.plusDI), "#16a34a", { title: "+DI" }), line(L(t, a.minusDI), "#dc2626", { title: "-DI" })]); }
+  if (on("stochFast")) {
+    const s = stochastic(h, l, c, N("stochFast", "k", 14), N("stochFast", "d", 3), 1);
+    pane("stochFast", "Stochastic fast", [main(s.fastK, "#38bdf8", "%K", lv("stochFast", 80, 20)), line(L(t, s.fastD), "#f59e0b", { title: "%D" })]);
+  }
+  if (on("adx")) { const a = adx(h, l, c, N("adx", "n", 14)); pane("adx", "ADX", [main(a.adx, "#e5e7eb", "ADX", [{ price: N("adx", "level", 25), color: "#6b7280" }]), line(L(t, a.plusDI), "#16a34a", { title: "+DI" }), line(L(t, a.minusDI), "#dc2626", { title: "-DI" })]); }
   if (on("atr")) pane("atr", "ATR", [line(L(t, atrW(h, l, c, +P("atr").n || 14)), "#a78bfa", { title: "ATR", lineWidth: 2 })]);
   if (on("roc")) pane("roc", "ROC", [{ ...line(L(t, roc(c, +P("roc").n || 12)), "#22d3ee", { title: "ROC %", lineWidth: 2 }), priceLines: [{ price: 0, color: "#6b7280" }] }]);
   if (on("kst")) { const k = kst(c, P("kst")); pane("kst", "KST", [{ ...line(L(t, k.kst), "#22d3ee", { title: "KST", lineWidth: 2 }), priceLines: [{ price: 0, color: "#6b7280" }] }, line(L(t, k.signal), "#f59e0b", { title: "Signal" })]); }
@@ -64,6 +97,17 @@ export function studyOverlays(b, studies = {}, tf = "D") {
   if (on("cmf")) pane("cmf", "CMF", [{ type: "histogram", data: L(t, cmf(h, l, c, v, +P("cmf").n || 20)).map((x) => ({ ...x, color: x.value >= 0 ? "#16a34a" : "#dc2626" })), options: { title: "CMF" } }]);
   if (on("ad")) pane("ad", "A/D line", [line(L(t, adLine(h, l, c, v)), "#f59e0b", { title: "A/D", lineWidth: 2, priceFormat: { type: "volume" } })]);
   if (on("volosc")) pane("volosc", "Volume oscillator", [{ type: "histogram", data: L(t, volumeOscillator(v, +P("volosc").fast || 5, +P("volosc").slow || 10)).map((x) => ({ ...x, color: x.value >= 0 ? "#16a34a" : "#dc2626" })), options: { title: "Vol osc %" } }]);
+  if (on("envelope")) { const x = envelope(c, N("envelope", "n", 20), N("envelope", "pct", 2.5), P("envelope").kind || "SMA"); out.price.push(line(L(t, x.upper), col("envelope", "#fb923c"), { title: "Env upper" }), line(L(t, x.mid), col("envelope", "#fb923c"), { title: "Env mid", lineStyle: 2 }), line(L(t, x.lower), col("envelope", "#fb923c"), { title: "Env lower" })); }
+  if (on("linreg")) { const x = linearRegression(c, N("linreg", "n", 50)); out.price.push(line(L(t, x.value), col("linreg", "#e879f9"), { title: "Lin reg", lineWidth: 2 })); }
+  if (on("stochRsi")) { const x = stochRsi(c, N("stochRsi", "rsi", 14), N("stochRsi", "n", 14), N("stochRsi", "k", 3), N("stochRsi", "d", 3)); pane("stochRsi", "Stochastic RSI", [main(x.k, "#38bdf8", "%K", lv("stochRsi", 80, 20)), line(L(t, x.d), "#f59e0b", { title: "%D" })]); }
+  if (on("momentum")) pane("momentum", "Momentum", [main(momentum(c, N("momentum", "n", 10)), "#22d3ee", "Mom", zero)]);
+  if (on("ao")) pane("ao", "Awesome Oscillator", [hist(awesomeOscillator(h, l, N("ao", "fast", 5), N("ao", "slow", 34)), "AO")]);
+  if (on("tsi")) { const x = tsi(c, N("tsi", "long", 25), N("tsi", "short", 13), N("tsi", "signal", 13)); pane("tsi", "TSI", [main(x.tsi, "#38bdf8", "TSI", [...lv("tsi", 25, -25), ...zero]), line(L(t, x.signal), "#f59e0b", { title: "Signal" })]); }
+  if (on("hv")) pane("hv", "Historical volatility %", [main(historicalVolatility(c, N("hv", "n", 20), { D: 252, W: 52, M: 12, Q: 4, Y: 1 }[tf] || 252), "#a78bfa", "HV %")]);
+  if (on("stddev")) pane("stddev", "Standard deviation", [main(stdDev(c, N("stddev", "n", 20)), "#a78bfa", "StdDev")]);
+  if (on("lrslope")) { const x = linearRegression(c, N("lrslope", "n", 50)); pane("lrslope", "Linear regression slope", [main(x.slope, "#e879f9", "Slope", zero)]); pane("lrr2", "Linear regression R²", [main(x.r2, "#94a3b8", "R²")], "lrslope"); }
+  if (on("chop")) pane("chop", "Choppiness Index", [main(choppiness(h, l, c, N("chop", "n", 14)), "#38bdf8", "CHOP", lv("chop", 61.8, 38.2))]);
+  if (on("ulcer")) pane("ulcer", "Ulcer Index", [main(ulcerIndex(c, N("ulcer", "n", 14)), "#f87171", "Ulcer")]);
   return out;
 }
 

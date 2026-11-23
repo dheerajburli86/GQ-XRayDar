@@ -1,6 +1,7 @@
 // OHLCV legend (top-left of a chart) and the floating Data window (Ctrl+D, draggable), as in the Analyst software.
 import { useEffect, useRef, useState } from "react";
-import { useDw, toggleDw, barIndex, barInfo, emasOf, EMA_SHORT, EMA_LONG, dayName, dmy, fmtPx, fmtVol } from "../lib/dataWindow.js";
+import { useDw, toggleDw, barIndex, barInfo, emasOf, dayName, dmy, fmtPx, fmtVol } from "../lib/dataWindow.js";
+import { useIndSettings } from "../lib/indSettings.js";
 
 /** One line of real OHLCV for the candle under the cursor (the last candle when the cursor is elsewhere). */
 export function OhlcvLegend({ src }) {
@@ -28,6 +29,7 @@ function loadPos() { try { const p = JSON.parse(localStorage.getItem(POS_KEY)); 
 /** Mounted once in the app shell. Ctrl+D opens and closes it; drag the title bar to move it. */
 export function DataWindow() {
   const dw = useDw();
+  const [ind] = useIndSettings();
   const [pos, setPos] = useState(loadPos);
   const drag = useRef(null);
   useEffect(() => {
@@ -42,7 +44,7 @@ export function DataWindow() {
   const src = dw.src;
   const i = src ? barIndex(src.bars, dw.time) : -1;
   const info = src ? barInfo(src.bars, i) : null;
-  const ema = src && info ? emasOf(src.bars) : null;
+  const ema = src && info ? emasOf(src.bars, [...ind.mmaShort, ...ind.mmaLong]) : null;
   return (
     <div className="data-window" style={{ left: pos.x, top: pos.y }} role="dialog" aria-label="Data window">
       <div className="dw-title" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
@@ -55,8 +57,8 @@ export function DataWindow() {
           {!(info.open === info.high && info.high === info.low && info.low === info.close) && <><Row k="Open" v={fmtPx(info.open)} /><Row k="High" v={fmtPx(info.high)} /><Row k="Low" v={fmtPx(info.low)} /></>}<Row k={info.open === info.low && info.high === info.low ? "Value" : "Close"} v={fmtPx(info.close)} />
           <Row k="% Change" v={info.chg == null ? "—" : info.chg.toFixed(4)} c={info.chg == null ? null : info.chg >= 0 ? "#00ff7f" : "#ff5050"} />
           {info.volume != null && <Row k="Volume" v={fmtVol(info.volume)} />}
-          {EMA_SHORT.map((n) => <Row key={n} k={`${n}E:C`} v={fmtPx(ema[n][i])} c="#ffff00" />)}
-          {EMA_LONG.map((n) => <Row key={n} k={`${n}E:C`} v={fmtPx(ema[n][i])} c="#ff4040" />)}
+          {ind.mmaShort.map((n) => <Row key={n} k={`${n}E:C`} v={fmtPx(ema[n][i])} c="#ffff00" />)}
+          {ind.mmaLong.map((n) => <Row key={n} k={`${n}E:C`} v={fmtPx(ema[n][i])} c="#ff4040" />)}
         </div>
       )}
     </div>

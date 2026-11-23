@@ -25,6 +25,7 @@ import { rankedByTurnover } from "../../engine/turnover.js";
 import { buildAnalystColumn, analystDate } from "../../engine/analyst.js";
 import { tfLabel } from "../../engine/calendar.js";
 import { fmtMoney } from "../lib/format.js";
+import { useIndSettings } from "../lib/indSettings.js";
 
 const TFS = ["D", "W", "M", "Q", "H", "Y"];
 const EXAMPLE = "Show us the Semiconductor sector in US, top 8 market cap companies relative to the semiconductor sector index, daily charts in MMA format";
@@ -149,6 +150,7 @@ export default function Tiles({ route }) {
 }
 
 function Tile({ r, i, bench, mode, tf, v, rsiPane, full, height, sync, maximised, marked, onMax, onChange, onRemove }) {
+  const [ind] = useIndSettings();
   const d = useData();
   const sec = r.kind === "sec" ? d.secById.get(r.id) : null;
   const { data, loading, error } = useAsync(async () => {
@@ -162,8 +164,8 @@ function Tile({ r, i, bench, mode, tf, v, rsiPane, full, height, sync, maximised
   const col = useMemo(() => {
     if (!data?.bars) return null;
     return buildAnalystColumn({ mode, tf, bars: data.bars, benchLabel: bench?.label?.split(" · ")[0] || "", bench: data.b && data.aligned ? { time: data.b.time, close: data.aligned.b } : null, rscCloses: data.aligned?.a,
-      rsiPeriod: m0.rsiPeriod, rsiMethod: m0.rsiMethod, rscBase: m0.rscRebase });
-  }, [data, mode, tf, bench?.label, m0]);
+      rsiPeriod: ind.rsi, rsiMethod: m0.rsiMethod, rscBase: ind.rscBase, mmaShort: ind.mmaShort, mmaLong: ind.mmaLong, accPeriods: ind.acc });
+  }, [data, mode, tf, bench?.label, m0, ind]);
   const relative = mode.startsWith("RSC");
   const mainIdx = relative ? 1 : 0;
   // a maximised tile shows its whole Analyst column; a small one its main pane (+ RSI if asked)

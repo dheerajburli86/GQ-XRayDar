@@ -49,7 +49,7 @@ export const analystDate = (d) => (d ? `${d.slice(8, 10)}-${ISO_MON[+d.slice(5, 
  * Bars before the start date still feed the RSIs and averages, so they are warmed up when the window opens.
  * Returns { tf, header, rows: [{ kind, depth, label, time, base, avgs: [{ period, group, values }] }] }.
  */
-export function buildAnalystColumn({ mode, tf, bars, bench = null, rscCloses = null, benchLabel = "", rsiPeriod = 14, rsiMethod = "house", rscBase = 100, to = null, anchor = null }) {
+export function buildAnalystColumn({ mode, tf, bars, bench = null, rscCloses = null, benchLabel = "", rsiPeriod = 14, rsiMethod = "house", rscBase = 100, to = null, anchor = null, mmaShort = MMA_SHORT, mmaLong = MMA_LONG, accPeriods = ACC_PERIODS }) {
   const m = ANALYST_MODES[mode];
   if (to) {
     let k = bars.time.length;
@@ -69,7 +69,8 @@ export function buildAnalystColumn({ mode, tf, bars, bench = null, rscCloses = n
   } : null;
   let rel = null;
   if (m.base === "rsc" && bench) rel = rsc(bars.time, rscCloses || bars.close, bench.time, bench.close, tf, rscBase, anchor);
-  const periods = m.overlay === "mma" ? [...MMA_SHORT, ...MMA_LONG] : ACC_PERIODS;
+  // the overlay periods are the caller's (user settings); MMA_SHORT / MMA_LONG / ACC_PERIODS are only the starting values
+  const periods = m.overlay === "mma" ? [...mmaShort.map((p) => [p, "short"]), ...mmaLong.map((p) => [p, "long"])] : accPeriods.map((p) => [p, "acc"]);
   const rows = analystRows(mode).map((row) => {
     let time, base;
     let ohlc = null;
@@ -82,7 +83,7 @@ export function buildAnalystColumn({ mode, tf, bars, bench = null, rscCloses = n
       time = agg.time; base = agg.close;
       for (let k = 0; k < row.depth; k++) base = rsi(base, rsiPeriod, rsiMethod);
     }
-    const avgs = periods.map((p) => ({ period: p, group: m.overlay === "acc" ? "acc" : MMA_SHORT.includes(p) ? "short" : "long", values: emaStrict(base, p) }));
+    const avgs = periods.map(([p, group], idx) => ({ period: p, group, idx, values: emaStrict(base, p) }));
     return { ...row, label: rowLabel(row, tf, rsiPeriod, benchLabel), time, base, avgs, ...(ohlc ? { ohlc } : {}) };
   });
   return { tf, header, rows };

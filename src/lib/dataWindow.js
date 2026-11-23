@@ -53,9 +53,11 @@ export function rowBars(row) {
 
 const emaCache = new WeakMap();
 export const EMA_SHORT = [3, 5, 8, 10, 12, 15], EMA_LONG = [30, 35, 40, 45, 50, 60];
-export function emasOf(bars) {
+/** EMAs of the close for the periods asked (the user's MMA groups); cached per bar set and period. */
+export function emasOf(bars, periods = [...EMA_SHORT, ...EMA_LONG]) {
   let m = emaCache.get(bars);
-  if (!m) { m = {}; for (const n of [...EMA_SHORT, ...EMA_LONG]) m[n] = emaStrict(bars.close, n); emaCache.set(bars, m); }
+  if (!m) { m = {}; emaCache.set(bars, m); }
+  for (const n of periods) if (!m[n]) m[n] = emaStrict(bars.close, n);
   return m;
 }
 

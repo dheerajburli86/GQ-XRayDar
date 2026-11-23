@@ -9,7 +9,10 @@ import { href } from "../lib/router.js";
 import { PageHead, Badge, Pct, Loading, Seg, Select, STAGE_BADGE, TREND_BADGE, Kpi } from "../components/ui.jsx";
 import { TvChart, ChartSync, lineData } from "../components/TvChart.jsx";
 import { loadInstrument } from "../lib/series.js";
-import { aggregate, emaStrict } from "../../engine/indicators.js";
+import { aggregate } from "../../engine/indicators.js";
+import { movingAverage } from "../../engine/studies.js";
+import { useIndSettings, linesLabel } from "../lib/indSettings.js";
+import { IndicatorSettingsButton } from "../components/IndicatorSettings.jsx";
 import { EVENT_LABEL } from "../../engine/signals.js";
 import { WW_TREND_LABEL } from "../../engine/weightWatcher.js";
 import { Explain } from "./Scores.jsx";
@@ -26,6 +29,7 @@ export default function Stock({ route }) {
   const sec = d.secById.get(id);
   useEffect(() => { if (sec) setAgentContext({ page: "stock", instrumentId: id, symbol: sec.symbol, name: sec.name }); return () => setAgentContext(null); }, [id, sec]);
   const [tf, setTf] = useState("D");
+  const [ind] = useIndSettings();
   const [wls, setWls] = usePersistent("watchlists", {});
   const [sync] = useState(() => new ChartSync());
   const { data, loading } = useAsync(async () => {
@@ -48,13 +52,11 @@ export default function Stock({ route }) {
       bars: b,
       price: [
         { type: "candles", data: b.time.map((t, i) => ({ time: t, open: b.open[i], high: b.high[i], low: b.low[i], close: b.close[i] })), options: { upColor: "#16a34a", downColor: "#dc2626", borderVisible: false, wickUpColor: "#16a34a", wickDownColor: "#dc2626" }, markers },
-        { type: "line", data: lineData(b.time, emaStrict(b.close, 20)), options: { color: "#22d3ee", lineWidth: 1, lastValueVisible: false } },
-        { type: "line", data: lineData(b.time, emaStrict(b.close, 50)), options: { color: "#14a44d", lineWidth: 1, lastValueVisible: false } },
-        { type: "line", data: lineData(b.time, emaStrict(b.close, 200)), options: { color: "#d97706", lineWidth: 1, lastValueVisible: false } },
+        ...ind.lines.filter((l) => !l.off).map((l) => ({ type: "line", data: lineData(b.time, movingAverage(l.kind, b.close, l.n)), options: { color: l.color, lineWidth: 1, lastValueVisible: false, title: `${l.kind}${l.n}` } })),
       ],
       vol: [{ type: "histogram", data: b.time.map((t, i) => ({ time: t, value: b.volume[i], color: i && b.close[i] >= b.close[i - 1] ? "rgba(22,163,74,.6)" : "rgba(220,38,38,.6)" })), options: { priceFormat: { type: "volume" } } }],
     };
-  }, [data, tf]);
+  }, [data, tf, ind]);
   const wwChild = data?.ww?.children.find((c) => c.key === id);
 
   if (!sec) return <div className="empty">Unknown security</div>;
@@ -82,7 +84,7 @@ export default function Stock({ route }) {
           </div>
           {sec.assetClass === "ETF" && <EtfDetails sec={sec} />}
           <div className="card tight">
-            <div className="row between" style={{ padding: "0 4px 4px" }}><span className="small muted">EMA 20 / 50 / 200 · purple dots = results filed (revenue YoY){data.inst.adjustments?.length ? " · split-adjusted" : ""}</span><Seg value={tf} options={CHART_TFS} onChange={setTf} /></div>
+            <div className="row between" style={{ padding: "0 4px 4px" }}><span className="small muted">{linesLabel(ind.lines.filter((l) => !l.off))} · purple dots = results filed (revenue YoY){data.inst.adjustments?.length ? " · split-adjusted" : ""}</span><span className="row" style={{ gap: 6 }}><IndicatorSettingsButton only={["lines"]} /><Seg value={tf} options={CHART_TFS} onChange={setTf} /></span></div>
             <TvChart height={330} series={charts.price} sync={sync} ohlcv={{ name: sec?.symbol || "", tf, bars: charts.bars }} legend />
             <TvChart height={90} series={charts.vol} sync={sync} ohlcv={{ name: sec?.symbol || "", tf, bars: charts.bars }} />
           </div>

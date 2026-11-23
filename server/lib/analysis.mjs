@@ -73,7 +73,7 @@ export function createAnalysis(data, cfg) {
     return { asOf: x.asOf, left: pick(x), right: pick(y), note: "Side-by-side stored metrics; not a recommendation." };
   }
 
-  async function screen({ query, conditions, scope = {}, sort, limit = 25 }) {
+  async function screen({ query, conditions, scope = {}, sort, limit = 25, columns = [] }) {
     const st = await data.get();
     let conds = conditions || [], sc = scope, so = sort, lim = limit, understood = [];
     if (query) { const c = parseCommand(query, { securities: st.secs, countries: st.countries }); conds = [...conds, ...c.conditions]; sc = { ...c.scope, ...scope }; so = sort || c.sort; lim = c.limit || limit; understood = c.understood; }
@@ -82,8 +82,10 @@ export function createAnalysis(data, cfg) {
     const sf = so?.field || "score";
     rows = [...rows].sort((p, q) => { const u = FIELD[sf]?.get(p), v = FIELD[sf]?.get(q); if (u == null) return 1; if (v == null) return -1; return so?.dir === "asc" ? u - v : v - u; });
     return {
-      asOf: st.info.asOf, understood, total: rows.length, sortedBy: sf,
-      results: rows.slice(0, Math.min(lim || 25, 100)).map((r) => ({ id: r.id, symbol: r.sec.symbol, name: r.sec.name, country: r.sec.country, sector: r.sec.sector, [sf]: FIELD[sf]?.get(r) ?? null, ret3M: r.flat.ret3M, weeklyMma: r.flat.mmaW, score: r.flat.score, stage: r.flat.stage })),
+      asOf: st.info.asOf, understood, conditions: conds, total: rows.length, sortedBy: sf,
+      results: rows.slice(0, Math.min(lim || 25, 100)).map((r) => ({ id: r.id, symbol: r.sec.symbol, name: r.sec.name, country: r.sec.country, sector: r.sec.sector, [sf]: FIELD[sf]?.get(r) ?? null, ret3M: r.flat.ret3M, weeklyMma: r.flat.mmaW, score: r.flat.score, stage: r.flat.stage,
+        ...Object.fromEntries((Array.isArray(columns) ? columns : []).slice(0, 20).filter((k) => FIELD[k]).map((k) => [k, FIELD[k].get(r) ?? null])),
+        ...Object.fromEntries(conds.filter((c) => c.field && FIELD[c.field]).map((c) => [c.field, FIELD[c.field].get(r) ?? null])) })),
       link: query ? link(`screener?q=${encodeURIComponent(query)}`) : null,
     };
   }

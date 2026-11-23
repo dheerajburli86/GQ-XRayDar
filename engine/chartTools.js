@@ -120,13 +120,13 @@ export function volumeProfile(b, { bins = 24, from = 0 } = {}) {
  * last: after a rise, retracements are measured down from the high.
  */
 export const FIB_RATIOS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1, 1.272, 1.618];
-export function fibonacci(b, { lookback = 250 } = {}) {
+export function fibonacci(b, { lookback = 250, ratios = FIB_RATIOS } = {}) {
   const n = b.close.length;
   if (n < 10) return null;
   let hi = -Infinity, lo = Infinity, hiI = -1, loI = -1;
   for (let i = Math.max(0, n - lookback); i < n; i++) { if (b.high[i] > hi) { hi = b.high[i]; hiI = i; } if (b.low[i] < lo) { lo = b.low[i]; loI = i; } }
   const up = hiI > loI, range = hi - lo;
-  const levels = FIB_RATIOS.map((r) => ({ ratio: r, price: up ? hi - r * range : lo + r * range, kind: r > 1 ? "extension" : "retracement" }));
+  const levels = ratios.map((r) => ({ ratio: r, price: up ? hi - r * range : lo + r * range, kind: r > 1 ? "extension" : "retracement" }));
   return { up, high: hi, low: lo, highTime: b.time[hiI], lowTime: b.time[loI], levels, note: `Measured ${up ? "down from the high after the rise" : "up from the low after the fall"} over the last ${Math.min(lookback, n)} candles.` };
 }
 

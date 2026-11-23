@@ -3,11 +3,13 @@
 import { useMemo } from "react";
 import { TvChart } from "./TvChart.jsx";
 import { tfMonths } from "../../engine/calendar.js";
-import { MMA_SHORT } from "../../engine/analyst.js";
 import { priceSeries } from "../lib/chartStyle.js";
 
 export const YELLOW = "#ffff00", RED = "#e00000", GREEN = "#00ff00", CYAN = "#00ffff", WHITE = "#ffffff", MAGENTA = "#ff00ff";
 export const ACC_COLOR = { 4: CYAN, 14: RED, 26: WHITE, 39: YELLOW };
+// colours of the ACC averages by position (the first four keep the Analyst colours whatever their periods)
+export const ACC_CYCLE = [CYAN, RED, WHITE, YELLOW, MAGENTA, GREEN, "#ff8800", "#8888ff"];
+export const accColor = (i) => ACC_CYCLE[i % ACC_CYCLE.length];
 // raw-line colour per row in the ACC screens, as in the reference screenshots
 export const ACC_BASE = { RSIACC: [GREEN, GREEN, YELLOW, MAGENTA], RSCACC: [GREEN, YELLOW, GREEN, CYAN, MAGENTA] };
 export const PRESETS = [["D", "W"], ["M", "Q"], ["H", "N"], ["Y", "24M"]];
@@ -53,10 +55,10 @@ export function Pane({ row, ri, last, mode, overlay, v, tf, from, height, sync, 
       : [{ id: "base", type: "line", data: line(row.base), priceLines: lvl,
         options: { color: v.avgOnly ? "rgba(0,0,0,0)" : baseColor, lineWidth: 1, lastValueVisible: false, crosshairMarkerVisible: !v.avgOnly } }];
     for (const a of row.avgs) {
-      if (overlay === "mma" ? !(a.group === "short" ? v.short : v.long) : !v.acc[a.period]) continue;
-      let color = overlay === "mma" ? (MMA_SHORT.includes(a.period) ? YELLOW : RED) : ACC_COLOR[a.period];
+      if (overlay === "mma" ? !(a.group === "short" ? v.short : v.long) : v.acc?.[a.period] === false) continue;
+      let color = overlay === "mma" ? (a.group === "short" ? YELLOW : RED) : accColor(a.idx ?? 0);
       if (overlay === "acc" && color === baseColor) color = GREEN;
-      series.push({ id: `e${a.period}`, type: "line", data: line(a.values), options: { color, lineWidth: 1, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false } });
+      series.push({ id: `e${a.group}${a.period}`, type: "line", data: line(a.values), options: { color, lineWidth: 1, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false } });
     }
     // studies, formulas and projections laid over the price row (specs built by lib/chartOverlays.js)
     if (row.kind === "price" && extra) {

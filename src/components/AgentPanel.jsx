@@ -64,15 +64,39 @@ function Blocks({ blocks }) {
       : <a key={k} className="btn sm" href={href(b.to.split("?")[0], Object.fromEntries(new URLSearchParams(b.to.split("?")[1] || "")))}>{b.label} →</a>);
 }
 
+const inline = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+  .replace(/`([^`]+)`/g, "<code>$1</code>")
+  .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>')
+  .replace(/(^|\s)(https?:\/\/[^\s<]+)/g, '$1<a href="$2" target="_blank" rel="noreferrer">$2</a>');
+const cells = (line) => line.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+
 function Rich({ text }) {
-  // the agent writes light markdown: **bold**, bullets and links
-  const parts = String(text || "").split("\n");
-  return parts.map((line, i) => {
-    const html = line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
-      .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>')
-      .replace(/(^|\s)(https?:\/\/[^\s<]+)/g, '$1<a href="$2" target="_blank" rel="noreferrer">$2</a>');
-    return <p key={i} style={{ margin: line.trim() ? "3px 0" : "8px 0" }} dangerouslySetInnerHTML={{ __html: html.replace(/^\s*[-•*]\s+/, "• ") }} />;
-  });
+  // the agent writes markdown: **bold**, `code`, links, bullets, numbered lists, ### headings, tables, code fences
+  const lines = String(text || "").split("\n");
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^\s*```/.test(line)) {
+      const code = [];
+      while (++i < lines.length && !/^\s*```/.test(lines[i])) code.push(lines[i]);
+      out.push(<pre key={i} className="small" style={{ whiteSpace: "pre-wrap", margin: "6px 0" }}>{code.join("\n")}</pre>);
+      continue;
+    }
+    if (/^\s*\|.*\|\s*$/.test(line) && /^\s*\|?\s*:?-{2,}/.test(lines[i + 1] || "")) {
+      const head = cells(line); const rows = [];
+      i += 2;
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) rows.push(cells(lines[i++]));
+      i--;
+      out.push(<div key={i} style={{ overflowX: "auto", margin: "6px 0" }}><table className="tbl small"><thead><tr>{head.map((h, j) => <th key={j} dangerouslySetInnerHTML={{ __html: inline(h) }} />)}</tr></thead>
+        <tbody>{rows.map((r, k) => <tr key={k}>{r.map((c, j) => <td key={j} dangerouslySetInnerHTML={{ __html: inline(c) }} />)}</tr>)}</tbody></table></div>);
+      continue;
+    }
+    const h = /^\s*#{1,6}\s+(.*)$/.exec(line);
+    if (h) { out.push(<p key={i} style={{ margin: "8px 0 3px" }}><b dangerouslySetInnerHTML={{ __html: inline(h[1]) }} /></p>); continue; }
+    const html = inline(line).replace(/^\s*[-•*]\s+/, "• ");
+    out.push(<p key={i} style={{ margin: line.trim() ? "3px 0" : "8px 0" }} dangerouslySetInnerHTML={{ __html: html }} />);
+  }
+  return out;
 }
 
 export function AgentPanel() {
@@ -93,7 +117,11 @@ export function AgentPanel() {
       const local = await chartAction(text, ctx || pageContext, d).catch((e) => [{ kind: "text", text: `Could not do that: ${e.message}` }]);
       // screens ("US stocks with market cap above $10B and technical score above 60") and "explain <ticker>" are
       // answered exactly from the stored data, here, instead of being paraphrased by the chat agent
-      const cmd = local ? null : parseCommand(text, { securities: d.secs, countries: d.countries });
+      // Without the GQ agent, screens and "explain <ticker>" are answered from the stored data here. With the
+      // agent connected, every question goes to it: it reads the same calculations through the app's server
+      // (the xraydar tool) and understands the whole sentence, which the keyword parser cannot.
+      const agentOn = !!acct.me?.agentConnected;
+      const cmd = local || agentOn ? null : parseCommand(text, { securities: d.secs, countries: d.countries });
       const exact = cmd && ((cmd.intent === "screen" && cmd.conditions.length) || (cmd.intent === "explain" && cmd.securityId));
       if (local) { entry.blocks = local; entry.source = "built-in"; }
       else if (exact || !viaAgent) {
@@ -101,7 +129,7 @@ export function AgentPanel() {
         entry.blocks = r.blocks; entry.source = "built-in";
       } else if (viaAgent) {
         const history = (fresh ? [] : hist).slice(-5).flatMap((h) => [{ role: "user", content: h.q }, { role: "assistant", content: h.text || (h.blocks || []).map((b) => b.text || (b.items || []).join("; ")).join("\n") }]);
-        const r = await api("POST", "/api/agent/chat", { message: text, history, context: ctx });
+        const r = await api("POST", "/api/agent/chat", { message: text, history, context: ctx || pageContext });
         entry.source = r.source; entry.notice = r.notice;
         if (r.answer) entry.text = r.answer; else entry.blocks = r.blocks;
       }
