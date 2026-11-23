@@ -22,9 +22,21 @@ export function createData(pool, log = console.log) {
     if (!run) throw Object.assign(new Error("No successful calculation run yet: run the engine first (npm run engine)."), { status: 503 });
     if (state && state.run.run_id === run.run_id) return state;
     const t0 = Date.now();
-    const [secs, snaps, regimes] = await Promise.all([
-      pool.query(`select * from tas_security`), pool.query(`select id, flat, rs_rank from tas_snapshot`), pool.query(`select index_key, data from tas_regime`),
-    ]);
+    // Read in pages by id: one huge result can stall on a slow link and hit the statement timeout,
+    // while small pages each finish quickly (and only the needed columns are fetched).
+    const paged = async (sql, size = 2000) => {
+      const out = [];
+      let after = "";
+      for (;;) {
+        const { rows } = await pool.query(`${sql} where id > $1 order by id limit ${size}`, [after]);
+        out.push(...rows);
+        if (rows.length < size) return { rows: out };
+        after = rows[rows.length - 1].id;
+      }
+    };
+    const secs = await paged(`select id, symbol, name, universe, exchange, country, region, classification, currency, currency_major, currency_divisor, country_currency, sector, industry_group, industry, sub_industry, cap_segment, cap_usd_now, turnover_usd, active, asset_class from tas_security`, 5000);
+    const snaps = await paged(`select id, flat, rs_rank from tas_snapshot`, 2000);
+    const regimes = await pool.query(`select index_key, data from tas_regime`);
     const keys = run.stats?.screenKeys || SCREEN_KEYS;
     const sec = secs.rows.filter((r) => r.asset_class !== "Crypto").map((r) => ({
       id: r.id, symbol: r.symbol, name: r.name, universe: r.universe, exchange: r.exchange, country: r.country, region: r.region, classification: r.classification,
