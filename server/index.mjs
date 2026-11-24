@@ -35,6 +35,7 @@ import { createTokens, API_SCOPES } from "./lib/tokens.mjs";
 import { createChannels, webhookAllowed } from "./lib/channels.mjs";
 import { registerPublicApi, attachStream, API_ENDPOINTS } from "./lib/publicApi.mjs";
 import { ROLES, need, can } from "./lib/rbac.mjs";
+import { createCommunity, AGENT_SOURCES, SHARE_KINDS, normaliseAccess } from "./lib/community.mjs";
 import { MODEL_VERSIONS, ENGINE_VERSION } from "../engine/versions.js";
 
 const log = (m) => console.log(`${new Date().toISOString().slice(0, 19)} ${m}`);
@@ -64,6 +65,8 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
   const tasks = createTasks({ pool, analysis, userdata, telegram, log });
   const scorecard = createScorecard({ data });
   const agentProxy = createAgentProxy({ cfg, data, fetchImpl, log });
+  const community = createCommunity({ pool, audit });
+  const signupLimiter = new RateLimiter(5, 3_600_000); // 5 new accounts an hour from one address
   const fo = deps.fo || createFo({ pool, log, fetchImpl, cfg: foConfig(cfg.env || process.env) });
   const limiter = new RateLimiter(cfg.rateLimitPerMin);
   const r = createRouter();
@@ -107,7 +110,10 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
     const u = await auth.web(req);
     if (!DOC_KEYS.test(key)) throw new HttpError(400, `unknown document ${key}`);
     const body = await readJson(req, 2_000_000);
-    return { key, value: await userdata.putDoc(u.id, key, body.value) };
+    const value = await userdata.putDoc(u.id, key, body.value);
+    // what this person shares from this document follows the saved version (an item they deleted stops being shared)
+    try { await community.refreshFromDoc(u.id, key, body.value); } catch (e) { log(`[share] refresh ${key}: ${e.message}`); }
+    return { key, value };
   });
   r.patch("/api/settings", async (req) => {
     const u = await auth.web(req);
@@ -328,12 +334,20 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
   r.get("/api/signal-stats", async (req) => { await auth.any(req); return data.api.backtestSummary(); });
   r.get("/api/brief", async (req, _, url) => { await auth.any(req); const p = q(url, "period", "daily"); return digests.briefText(["daily", "weekly"].includes(p) ? p : "daily"); });
   r.get("/api/agent/status", async () => ({ connected: agentProxy.connected(), open: cfg.agentPublic }));
+  // the GQ agent asks what a Telegram user's linked XRayDar account may read (null = not linked: team rules apply)
+  r.get("/api/agent/access", async (req) => {
+    const a = await auth.agent(req);
+    return { linked: !!a.user, access: a.user ? a.user.agentAccess : null };
+  });
   r.post("/api/agent/chat", async (req) => {
     // No login needed when agentPublic is on and no token was sent; a token that IS sent must still be valid.
     const guest = cfg.agentPublic && !req.headers.authorization;
     // A guest is identified to the agent by a hash of their IP (own rate limit and budget there, nothing stored here).
     const ip = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
     const u = guest ? { id: null, guest: true, guestId: crypto.createHash("sha256").update(`${ip}|${cfg.agentSecret}`).digest("hex").slice(0, 24), email: null, name: "Guest", telegramUserId: null } : await auth.web(req);
+    // per person: an admin decides whether this account has the agent and which sources it may read
+    if (!u.guest && !u.agentAccess?.enabled) throw new HttpError(403, "The GQ Agent is not switched on for your account yet. Ask an admin to enable it.");
+    if (!u.guest && !u.agentAccess.sources.length) throw new HttpError(403, "Your GQ Agent has no data sources switched on yet. Ask an admin to choose what it may read.");
     const b = await readJson(req, 200_000);
     if (!b.message) throw new HttpError(400, "message required");
     const t0 = Date.now();
@@ -385,7 +399,7 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
   });
 
   // ------------------------------------------------------------- admin: roles and operations
-  r.get("/api/admin/users", async (req) => { need(await auth.web(req), "admin"); const { rows } = await pool.query(`select id, email, name, role, created_at, last_seen_at, telegram_chat_id is not null as telegram from tas_user order by email`); return rows.map((x) => ({ ...x, role: cfg.adminEmails.includes(String(x.email).toLowerCase()) ? "admin" : x.role })); });
+  r.get("/api/admin/users", async (req) => { need(await auth.web(req), "admin"); const { rows } = await pool.query(`select id, email, name, display_name, role, created_at, created_via, last_seen_at, agent_access, telegram_chat_id is not null as telegram from tas_user order by created_at desc`); return rows.map((x) => { const role = cfg.adminEmails.includes(String(x.email).toLowerCase()) ? "admin" : x.role || "analyst"; return { ...x, role, agent_access: normaliseAccess(x.agent_access, { isAdmin: role === "admin" }) }; }); });
   r.patch("/api/admin/users/:id", async (req, { id }) => {
     const u = need(await auth.web(req), "admin");
     const b = await readJson(req);
@@ -393,6 +407,7 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
     if (id === u.id && b.role !== "admin") throw new HttpError(400, "you cannot remove your own admin role");
     const { rows } = await pool.query(`update tas_user set role = $2 where id = $1 returning id, email, role`, [id, b.role]);
     if (!rows[0]) throw new HttpError(404, "no such user");
+    auth.forgetUser(id);
     audit.event({ userId: u.id, actor: u.email, category: "admin", action: "set_role", detail: { target: rows[0].email, role: b.role } });
     return rows[0];
   });
@@ -435,6 +450,80 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
     return foTick();
   });
 
+  // ------------------------------------------------------------- accounts (open signup, owner 2026-11-24)
+  const clientIp = (req) => String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
+  r.post("/api/auth/signup", async (req) => {
+    if (!cfg.openSignup) throw new HttpError(403, "New accounts are closed. Ask an admin for an invitation.");
+    signupLimiter.check(`signup:${clientIp(req)}`);
+    const b = await readJson(req, 10_000);
+    return community.signup({ email: b.email, password: b.password, name: b.name });
+  });
+  r.patch("/api/me", async (req) => {
+    const u = await auth.web(req);
+    const b = await readJson(req, 10_000);
+    const out = await community.setDisplayName(u, b.displayName);
+    auth.forget?.(req);
+    return out;
+  });
+  r.get("/api/people", async (req, _, url) => community.people(await auth.web(req), q(url, "q", "")));
+
+  // ------------------------------------------------------------- admin: agent access per person
+  r.get("/api/admin/agent-sources", async (req) => { need(await auth.web(req), "admin"); return AGENT_SOURCES.map(([id, label]) => ({ id, label })); });
+  r.put("/api/admin/users/:id/agent", async (req, { id }) => {
+    const u = need(await auth.web(req), "admin");
+    const out = await community.setAgentAccess(u, id, await readJson(req, 10_000));
+    auth.forgetUser?.(id);
+    return out;
+  });
+  r.post("/api/admin/users/:id/password", async (req, { id }) => {
+    const u = need(await auth.web(req), "admin");
+    const b = await readJson(req, 10_000);
+    return community.setPassword(u, id, b.password);
+  });
+
+  // ------------------------------------------------------------- sharing levels
+  r.get("/api/shares/kinds", async () => SHARE_KINDS);
+  r.get("/api/shares/mine", async (req) => community.myShares(await auth.web(req)));
+  r.get("/api/shares", async (req, _, url) => community.library(await auth.web(req), { scope: q(url, "scope", "all"), kind: q(url, "kind", "") }));
+  r.get("/api/shares/:id", async (req, { id }) => community.getShare(await auth.web(req), id));
+  r.post("/api/shares", async (req) => community.shareItem(await auth.web(req), await readJson(req, 50_000)));
+  r.patch("/api/shares/:id", async (req, { id }) => community.updateShare(await auth.web(req), id, await readJson(req, 50_000)));
+  r.delete("/api/shares/:id", async (req, { id }) => community.removeShare(await auth.web(req), id));
+
+  // ------------------------------------------------------------- community: rooms, boards, groups, direct messages
+  r.get("/api/rooms", async (req) => community.myRooms(await auth.web(req)));
+  r.get("/api/rooms/public", async (req, _, url) => community.publicRooms(await auth.web(req), q(url, "kind", "")));
+  r.get("/api/unread", async (req) => community.unread(await auth.web(req)));
+  r.post("/api/rooms", async (req) => community.createRoom(await auth.web(req), await readJson(req, 50_000)));
+  r.post("/api/rooms/dm", async (req) => community.dm(await auth.web(req), (await readJson(req, 2_000)).userId));
+  r.get("/api/rooms/:id", async (req, { id }) => community.roomInfo(await auth.web(req), id));
+  r.patch("/api/rooms/:id", async (req, { id }) => community.updateRoom(await auth.web(req), id, await readJson(req, 10_000)));
+  r.delete("/api/rooms/:id", async (req, { id }) => community.deleteRoom(await auth.web(req), id));
+  r.post("/api/rooms/:id/join", async (req, { id }) => community.join(await auth.web(req), id));
+  r.post("/api/rooms/:id/members", async (req, { id }) => community.addMembers(await auth.web(req), id, (await readJson(req, 50_000)).userIds));
+  r.delete("/api/rooms/:id/members/:uid", async (req, { id, uid }) => community.removeMember(await auth.web(req), id, uid));
+  r.patch("/api/rooms/:id/members/:uid", async (req, { id, uid }) => community.setMemberRole(await auth.web(req), id, uid, (await readJson(req, 2_000)).role));
+  r.get("/api/rooms/:id/messages", async (req, { id }, url) => community.messages(await auth.web(req), id, {
+    after: q(url, "after", 0), before: q(url, "before", 0), parent: url.searchParams.get("parent"), threads: q(url, "threads", "") === "1", limit: q(url, "limit", 60) }));
+  r.post("/api/rooms/:id/messages", async (req, { id }) => community.post(await auth.web(req), id, await readJson(req, 400_000)));
+  r.post("/api/rooms/:id/read", async (req, { id }) => community.markRead(await auth.web(req), id, (await readJson(req, 2_000)).lastId));
+  r.patch("/api/messages/:id", async (req, { id }) => community.editMessage(await auth.web(req), id, await readJson(req, 50_000)));
+  r.delete("/api/messages/:id", async (req, { id }) => community.deleteMessage(await auth.web(req), id));
+  r.post("/api/rooms/:id/files", async (req, { id }, url) => {
+    const u = await auth.web(req);
+    const chunks = []; let size = 0;
+    for await (const c of req) { size += c.length; if (size > 10 * 1024 * 1024) throw new HttpError(413, "Files can be at most 10 MB."); chunks.push(c); }
+    return community.upload(u, id, { name: q(url, "name", "file"), mime: req.headers["content-type"], data: Buffer.concat(chunks) });
+  });
+  r.get("/api/files/:id", async (req, { id }) => {
+    const f = await community.download(await auth.web(req), id);
+    const inline = /^image\/|^application\/pdf$/.test(f.mime);
+    return { __raw: { status: 200, body: f.data, headers: {
+      "content-type": f.mime, "content-length": f.data.length, "cache-control": "private, max-age=3600", "x-content-type-options": "nosniff",
+      "content-security-policy": "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox",
+      "content-disposition": `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(f.name)}` } } };
+  });
+
   registerPublicApi({ r, pool, tokens, audit, analysis });
 
   // ------------------------------------------------------------- HTTP plumbing
@@ -457,7 +546,8 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
         const slow = /^\/api\/(agent|ask|assistant)/.test(url.pathname) ? 200_000 : HANDLER_TIMEOUT_MS;
         const out = await withTimeout(Promise.resolve().then(() => m.handler(req, m.params, url)), slow);
         st.n++; st.ms.push(Date.now() - t0); if (st.ms.length > 500) st.ms.shift();
-        send(res, 200, out ?? { ok: true }, req);
+        if (out && out.__raw) { if (!res.headersSent) { res.writeHead(out.__raw.status, out.__raw.headers); res.end(out.__raw.body); } }
+        else send(res, 200, out ?? { ok: true }, req);
       } catch (e) { st.n++; st.errors++; throw e; }
     } catch (e) {
       const status = Number.isInteger(e?.status) && e.status >= 400 && e.status < 600 ? e.status : 500;

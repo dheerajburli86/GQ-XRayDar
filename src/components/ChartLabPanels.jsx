@@ -20,6 +20,7 @@ const HIST_ONLY = new Set(["cmf", "elder", "force", "chaikinOsc", "coppock", "vo
 const UPDOWN = (s) => ["psar", "supertrend", "pivots", "ppo"].includes(s.key) || HIST_ONLY.has(s.key) || ("hi" in (s.params || {}));
 const UP_TITLE = (s) => (["psar", "supertrend"].includes(s.key) ? "Colour when the trend is up / down" : s.key === "pivots" ? "Support (S) / resistance (R) lines" : HIST_ONLY.has(s.key) || s.key === "ppo" ? "Bars above / below zero" : "Lower / upper level lines");
 import { indexAt } from "../lib/chartOverlays.js";
+import { ShareButton } from "./Share.jsx";
 
 const pct = (v, d = 2) => (v == null ? "—" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(d)}%`);
 
@@ -97,6 +98,7 @@ export function FormulaPanel({ list, setList, onScan }) {
           <span className="mono muted">{f.formula}</span>
           <Badge>{isCondition(f.formula) ? "condition: arrows where it starts" : f.pane === "price" ? "line on price" : "own pane"}</Badge>
           {isCondition(f.formula) && onScan && <button className="btn sm" onClick={() => onScan(f)}>Scan a watchlist</button>}
+          <ShareButton sourceKey="customIndicators" item={f.id} title={f.name} label="" />
           <button className="btn sm ghost" onClick={() => setList(list.filter((x) => x.id !== f.id))}>✕</button>
         </div>
       ))}
@@ -113,6 +115,7 @@ export function DrawingsPanel({ drawings, setDrawings, bars, sec, onAlert, notes
   const label = (t) => DRAW_TOOLS.find((x) => x.value === t)?.label || t;
   return (
     <div className="stack" style={{ gap: 4 }}>
+      {drawings.length > 0 && <div><ShareButton sourceKey="drawings" item={sec.id} title={`Drawings on ${sec.symbol}`} label="Share these drawings" /></div>}
       {!drawings.length && <div className="small muted">Nothing drawn on {sec.symbol} yet. Pick a tool under Draw and click on the chart. Drawings are saved for this instrument and come back next time.</div>}
       {drawings.map((dw) => {
         const lv = dw.type === "trend" || dw.type === "channel" ? "line" : alertLevels({ ...dw, a: dw.a && { i: indexAt(bars.time, dw.a.time), price: dw.a.price }, b: dw.b && { i: indexAt(bars.time, dw.b.time), price: dw.b.price }, c: dw.c && { i: indexAt(bars.time, dw.c.time), price: dw.c.price } }, bars.time.length - 1);
@@ -131,7 +134,7 @@ export function DrawingsPanel({ drawings, setDrawings, bars, sec, onAlert, notes
 }
 
 /** Conditional projections for this instrument. */
-export function ProjectionPanel({ list, setList, results, bars, tf, onAlert }) {
+export function ProjectionPanel({ list, setList, results, bars, tf, onAlert, shareId = null, shareTitle = "" }) {
   const blank = { name: "", side: "up", condition: "", targetKind: "price", targetValue: "", method: "atr", methodValue: "", horizon: 20, invalidate: "", onInvalid: "mark" };
   const [f, setF] = useState(blank);
   const [text, setText] = useState("");
@@ -165,6 +168,7 @@ export function ProjectionPanel({ list, setList, results, bars, tf, onAlert }) {
         <button className="btn sm primary" disabled={!!err} onClick={fromForm}>Add projection</button>
       </div>
       {err && <div className="note warn small">{err}</div>}
+      {shareId && list.length > 0 && <div><ShareButton sourceKey="projections" item={shareId} title={shareTitle || "Chart projections"} label="Share these projections" /></div>}
       {list.map((p) => { const r = res.get(p.id); return (
         <div key={p.id} className="row small" style={{ gap: 6, flexWrap: "wrap" }}>
           <Check checked={!p.hidden} onChange={(on) => setList(list.map((x) => (x.id === p.id ? { ...x, hidden: !on } : x)))}><b>{p.name}</b></Check>

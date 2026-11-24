@@ -66,16 +66,17 @@ export function withTimeout(promise, ms, what = "request") {
 
 /** Sliding one-minute window per key. Idle keys are dropped so the map cannot grow without bound. */
 export class RateLimiter {
-  constructor(perMin) { this.perMin = perMin; this.hits = new Map(); this.sweptAt = Date.now(); }
+  /** perMin requests per window (default one minute). */
+  constructor(perMin, windowMs = 60000) { this.perMin = perMin; this.windowMs = windowMs; this.hits = new Map(); this.sweptAt = Date.now(); }
   check(key) {
     const now = Date.now(), w = this.hits.get(key) || [];
-    const recent = w.filter((t) => now - t < 60000);
+    const recent = w.filter((t) => now - t < this.windowMs);
     if (now - this.sweptAt > 120000 || this.hits.size > 20000) this.sweep(now);
-    if (recent.length >= this.perMin) { this.hits.set(key, recent); throw new HttpError(429, "too many requests; slow down"); }
+    if (recent.length >= this.perMin) { this.hits.set(key, recent); throw new HttpError(429, this.windowMs > 60000 ? "too many attempts from this address; try again later" : "too many requests; slow down"); }
     recent.push(now); this.hits.set(key, recent);
   }
   sweep(now = Date.now()) {
     this.sweptAt = now;
-    for (const [k, w] of this.hits) if (!w.length || now - w[w.length - 1] >= 60000) this.hits.delete(k);
+    for (const [k, w] of this.hits) if (!w.length || now - w[w.length - 1] >= this.windowMs) this.hits.delete(k);
   }
 }

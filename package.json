@@ -18,7 +18,7 @@
     "fx": "node cli/fx-backfill.mjs",
     "trace": "node scripts/build-trace.mjs",
     "server": "node server/index.mjs",
-    "test:server": "TEST_DATABASE_URL=${TEST_DATABASE_URL:-postgres://postgres@localhost:5433/postgres} node --test tests/server.test.mjs"
+    "test:server": "TEST_DATABASE_URL=${TEST_DATABASE_URL:-postgres://postgres@localhost:5433/postgres} node --test tests/server.test.mjs tests/community.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.98.0",

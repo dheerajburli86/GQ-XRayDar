@@ -6,6 +6,7 @@ import { PageHead, Select, Badge, Pct } from "../components/ui.jsx";
 import { DataTable } from "../components/DataTable.jsx";
 import { InstrumentPicker, idColumns, fieldColumn } from "../components/pickers.jsx";
 import { usePersistent, uid } from "../lib/storage.js";
+import { ShareButton } from "../components/Share.jsx";
 
 export default function Watchlists() {
   const d = useData();
@@ -38,6 +39,7 @@ export default function Watchlists() {
         <Select label="List" value={cur} options={Object.entries(wls).map(([k, v]) => ({ value: k, label: `${v.name} (${v.ids.length})` }))} onChange={setCur} />
         <input placeholder="New list name" value={name} onChange={(e) => setName(e.target.value)} style={{ width: 150 }} />
         <button className="btn sm primary" disabled={!name} onClick={() => { const id = uid(); setWls({ ...wls, [id]: { name, ids: [], weights: {} } }); setCur(id); setName(""); }}>Create</button>
+        {wl && <ShareButton sourceKey="watchlists" item={cur} title={wl.name} />}
         {wl && <button className="btn sm" onClick={() => { if (confirm(`Delete "${wl.name}"?`)) { const n = { ...wls }; delete n[cur]; setWls(n); setCur(Object.keys(n)[0] || null); } }}>Delete list</button>}
       </PageHead>
       {!wl ? <div className="note">Create a list to start. Lists feed the alerts, the custom backtest and the workspace.</div> : (

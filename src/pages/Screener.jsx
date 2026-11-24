@@ -10,6 +10,7 @@ import { FIELDS, FIELD, FIELD_GROUPS, OPS, testCondition } from "../../engine/fi
 import { parseCommand } from "../../engine/nl.js";
 import { usePersistent, uid } from "../lib/storage.js";
 import { navigate } from "../lib/router.js";
+import { ShareButton } from "../components/Share.jsx";
 
 export const PRESETS = [
   { name: "New 52-week highs on volume", conditions: [{ field: "atHigh52", op: "is true" }, { field: "volRatio", op: ">=", value: 1.5 }] },
@@ -68,6 +69,11 @@ export default function Screener({ route }) {
         <Select label="Preset" value="" options={PRESETS.map((p, i) => ({ value: String(i), label: p.name }))} onChange={(v) => v != null && load(PRESETS[+v])} allowEmpty="—" />
         <Select label="Saved" value="" options={saved.map((s) => ({ value: s.id, label: s.name }))} onChange={(v) => { const s = saved.find((x) => x.id === v); if (s) load(s); }} allowEmpty="—" />
       </PageHead>
+      {saved.length > 0 && (
+        <div className="row wrap small" style={{ gap: 6 }}><span className="muted">My saved screens:</span>
+          {saved.map((s) => <span key={s.id} className="chip"><a style={{ cursor: "pointer" }} onClick={() => load(s)}>{s.name}</a><ShareButton sourceKey="screens" item={s.id} title={s.name} label="" /><button className="btn sm ghost" title="Delete" onClick={() => confirm(`Delete "${s.name}"?`) && setSaved(saved.filter((x) => x.id !== s.id))}>✕</button></span>)}
+        </div>
+      )}
       {understood && (
         <div className="note">Read "<b>{understood.raw}</b>" as: {understood.understood.length ? understood.understood.map((u) => <Badge key={u} kind="g">{u}</Badge>) : <i>nothing recognised</i>}
           {understood.intent === "unknown" && <span> — try the <a href="#/assistant">assistant</a>.</span>}</div>

@@ -325,6 +325,33 @@ At <= 760px the left menu is a slide-in drawer (☰ in the top bar, closes on na
 - Bar-only studies (CMF, Elder, Force, Chaikin osc, Coppock, volume osc, AO, BOP), studies with upper / lower lines and pivots
   take the study's up / down colours. `tests/studyOverlays.test.mjs` fails if any setting of any study changes nothing on the chart.
 
-## The dashboard GQ Agent works without a login (added 2026-11-24, owner)
+## Accounts, per-person agent access, sharing levels, community and chat (added 2026-11-24, owner + Shankar Sir)
+
+- **Whole site behind sign-in** (Vercel `VITE_REQUIRE_LOGIN=true`), **open signup** with email + password (`OPEN_SIGNUP`, on by
+  default; `0` returns to the domain list). The Supabase auth project is SHARED with the heatmap dashboard (it already allowed
+  public signUp), so one account works on both. Accounts are created by the server, already confirmed, through
+  `public.tas_create_account()` (SECURITY DEFINER, execute revoked from anon/authenticated; writes auth.users + auth.identities
+  in GoTrue's exact shape, `$2a$` bcrypt; verified live against /auth/v1/token). Reason: Supabase's built-in mailer only reaches
+  the project's own team, so confirmation emails would lock outsiders out. "Forgot password" uses resetPasswordForEmail, which
+  only works once custom SMTP is set in Supabase; until then admins set a temporary password (`tas_set_password`, People & access).
+- **Agent is per person** (`tas_user.agent_access {enabled, sources}`): OFF for every new account; admins (ADMIN_EMAILS / role
+  admin) always have everything. Sources: `xraydar` (market data), `web`, and the GQ agent's project ids (code + DB):
+  heatmap-dashboard, gq-xraydar, eti, gq-finxray-us, gdp-macro-dashboard, busybee. ta-server sends `user.access.sources` to
+  the GQ agent, whose `buildTools({allow})` drops every tool outside the list and whose prompt names what is allowed. A
+  Telegram account LINKED to an XRayDar account follows the same list (`GET /api/agent/access`); unlinked team Telegram users
+  keep the team rules. No personal mail access exists anywhere. The guest (no-login) agent path is OFF (`AGENT_PUBLIC=1` revives it).
+  The built-in fallback answers only for someone allowed `xraydar`.
+- **Sharing levels** (`tas_share`, `tas_share_member`): private / chosen people / everyone, for items of the synced documents
+  in `SHARE_KINDS` (watchlists, screens, customIndicators, alerts.rules, notes, workspaces, customIndices, deriv.screens,
+  drawings, projections, indSettings). The payload is taken from the owner's SAVED doc (never the request) and refreshed on
+  every `PUT /api/docs/:key`; deleting the item ends the share. `ShareButton` (components/Share.jsx) + Shared library page.
+- **Community** (`tas_room` kinds room / board / group / dm, `tas_room_member`, `tas_message`, `tas_file`): public rooms and
+  boards are readable by anyone signed in and posting joins them; groups and DMs are members-only. Polling (3 s open
+  conversation, 30 s unread badge), no websockets. Files are bytea, 10 MB, allow-listed types, served only after a membership
+  check with a sandbox CSP. Items sent in chat are COPIES; "💬 Send" in the top bar posts a picture of the screen + a link.
+  People see display names, never emails (exact email search finds a person). 30 messages/min per person; 5 signups/hour/IP.
+- Tests: `tests/community.test.mjs` (in `npm run test:server`; the local DB needs an `auth` schema stand-in, see the test).
+
+## The dashboard GQ Agent (history, 2026-11-24 morning)
 
 The site runs with `VITE_REQUIRE_LOGIN=false`, so the panel has no Supabase session. `POST /api/agent/chat` therefore accepts a request with NO Authorization header as a guest (`cfg.agentPublic`, env `AGENT_PUBLIC`, on by default, `AGENT_PUBLIC=0` turns it off; a token that is sent must still be valid). `GET /api/agent/status` (public) tells the panel whether the agent is connected. Guests are sent to the GQ agent as `{guest: true, guestId: sha256(ip|secret)}` (NOT an email: the agent refuses a non-email and the panel then fell back, 2026-11-24); the agent gives guests read-only access to every project's code and data EXCEPT BusyBee (staff tasks / payroll), plus the XRayDar tool and the web, and a "where the numbers live" map in its prompt (owner, 2026-11-24: the team has NO Indian market caps on any channel; the agent must say so and never quote the heatmap`s partial `market_cap_inr`). The panel shows the question at once with a working line (steps + seconds) until the answer replaces it. Rate-limited per IP and audited with a null user. The built-in fallback ranks "by market cap / biggest / largest" by `capUsd` (it used the AI score before). Before this the panel silently fell to the built-in keyword assistant (wrong answers such as "3341 stocks match" for "5 biggest US stocks"). Every other route still needs a login. The Google sign-in was removed the same day; the email-link `SignIn` stays for `VITE_REQUIRE_LOGIN` builds.

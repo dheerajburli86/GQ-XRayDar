@@ -9,6 +9,8 @@ export function loadConfig(e = process.env) {
     // Supabase Auth (the heatmap project's auth): used only to verify web logins
     supabaseUrl: (e.SUPABASE_URL || "").replace(/\/$/, ""),
     supabaseAnonKey: e.SUPABASE_ANON_KEY || "",
+    // Anyone may create an account and sign in (owner, 2026-11-24). OPEN_SIGNUP=0 goes back to the domain list.
+    openSignup: (e.OPEN_SIGNUP || "1") !== "0",
     allowedDomains: list(e.ALLOWED_EMAIL_DOMAINS || "gquants.com"),
     allowedEmails: list(e.ALLOWED_EMAILS),
     adminEmails: list(e.ADMIN_EMAILS),
@@ -17,8 +19,9 @@ export function loadConfig(e = process.env) {
     appUrl: (e.APP_URL || "").replace(/\/$/, ""),
     // Shared secret between this server and the GQ agent (both directions)
     agentSecret: e.TA_API_SECRET || "",
-    // The dashboard's GQ Agent panel may be used without a login (owner, 2026-11-24). AGENT_PUBLIC=0 turns that off.
-    agentPublic: (e.AGENT_PUBLIC || "1") !== "0",
+    // Guests (no login) using the agent: OFF. The whole site needs sign-in and the agent is per-person (owner,
+    // 2026-11-24, after the morning's open trial). AGENT_PUBLIC=1 turns the guest path back on.
+    agentPublic: (e.AGENT_PUBLIC || "0") === "1",
     agentUrl: (e.GQAGENT_URL || "").replace(/\/$/, ""),
     // Telegram: the SAME bot token the GQ agent uses. This server only SENDS
     // (sendMessage); it never polls, so it does not conflict with the agent.

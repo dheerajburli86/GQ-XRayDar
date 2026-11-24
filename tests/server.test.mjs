@@ -40,7 +40,7 @@ test("server: link, alerts, tasks, digests, agent fallback", { skip: !DB && "set
   const agent = { "x-ta-secret": "s3cret", "x-telegram-user": "777" };
   try {
     assert.equal((await call("GET", "/health")).json.db, true);
-    assert.equal((await call("GET", "/api/me", null, { "x-dev-email": "x@gmail.com" })).status, 403);
+    assert.equal((await call("GET", "/api/me", null, { "x-dev-email": "x@gmail.com" })).status, 200); // open signup (2026-11-24)
     assert.equal((await call("GET", "/api/me", null, web)).json.email, "tester@gquants.com");
     assert.equal((await call("GET", "/api/stock/AAA", null, { "x-ta-secret": "wrong" })).status, 401);
 
@@ -128,7 +128,9 @@ test("server: link, alerts, tasks, digests, agent fallback", { skip: !DB && "set
     await app.digests.tick(mon0830);
     assert.equal(sent.filter((m) => /market brief/.test(m.text)).length, 1);
 
-    // Agent panel falls back to the built-in assistant
+    // Agent panel: off until an admin switches it on for this person (2026-11-24), then the built-in fallback answers
+    assert.equal((await call("POST", "/api/agent/chat", { message: "hi" }, web)).status, 403);
+    await app.pool.query(`update tas_user set agent_access = '{"enabled": true, "sources": ["xraydar"]}' where email = 'tester@gquants.com'`);
     const ch = (await call("POST", "/api/agent/chat", { message: `explain ${stock.sec.symbol}` }, web)).json;
     assert.equal(ch.source, "built-in");
     assert.ok(ch.blocks.length > 0);

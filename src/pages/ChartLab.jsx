@@ -82,6 +82,8 @@ export default function ChartLab({ route }) {
   const v = { ...DEFAULT_VIEW, ...view };
   const set = (patch) => setView({ ...v, ...patch });
   useChartKeys({ onTf: (tf) => set({ tf }), onSearch: (ch) => setPicking({ initial: ch }) });
+  // a chart link shared in a chat opens on its own period (#/chart/<id>?tf=W)
+  useEffect(() => { const t = route.query?.tf; if (t && /^[0-9]*[DWMQHNY]$/i.test(t) && t !== v.tf) set({ tf: t.toUpperCase() }); }, [route.query?.tf]); // eslint-disable-line react-hooks/exhaustive-deps
   const [allDrawings, setAllDrawings] = usePersistent("drawings", {});
   const drawings = useMemo(() => allDrawings[id] || [], [allDrawings, id]);
   const setDrawings = (list) => setAllDrawings({ ...allDrawings, [id]: list });
@@ -293,7 +295,7 @@ export default function ChartLab({ route }) {
             {toolTab === "studies" && <StudiesPanel studies={v.studies} onChange={(studies) => set({ studies })} />}
             {toolTab === "formula" && <FormulaPanel list={customs} setList={setCustoms} onScan={(f) => setScan({ f })} />}
             {toolTab === "draw" && <DrawingsPanel drawings={drawings} setDrawings={setDrawings} bars={fullBars} sec={sec} notes={overlays?.notes || []} onAlert={alertFromDrawing} />}
-            {toolTab === "proj" && <ProjectionPanel list={projs} setList={setProjs} results={overlays?.projections} bars={fullBars} tf={v.tf} onAlert={alertFromDrawing} />}
+            {toolTab === "proj" && <ProjectionPanel list={projs} setList={setProjs} results={overlays?.projections} bars={fullBars} tf={v.tf} onAlert={alertFromDrawing} shareId={id} shareTitle={`Projections on ${sec?.symbol || id}`} />}
             {toolTab === "replay" && <ReplayPanel replay={replay} setReplay={setReplay} fullBars={fullBars} sec={sec} />}
             {toolTab === "conf" && <ConfluencePanel snap={data?.snap} />}
             {toolTab === "events" && !isHidden("chartEvents") && <EventsPanel list={events} setList={setEvents} />}

@@ -15,7 +15,7 @@ export const SERVER_ON = !!SERVER_URL;
 const SB_ON = !!(env.VITE_SUPABASE_URL && env.VITE_SUPABASE_ANON_KEY) && env.VITE_DATA_SOURCE !== "demo";
 export const LOGIN_REQUIRED = SB_ON && env.VITE_REQUIRE_LOGIN !== "false";
 export const ALLOWED_DOMAINS = String(env.VITE_ALLOWED_EMAIL_DOMAINS || "gquants.com").split(/[\s,]+/).filter(Boolean).map((x) => x.toLowerCase());
-export const SYNC_KEYS = /^(watchlists|alerts\.rules|alerts\.inbox|notes|screens|workspaces|workspace\.current|layout\.[A-Za-z]+|paper|settings|assistant\.history|agent\.history|navCollapsed|drawings|chartlab|scanners|customIndices|deriv\.positions|deriv\.journal|deriv\.screens|deriv\.events|deriv\.alerts|deriv\.risk|deriv\.coach)$/;
+export const SYNC_KEYS = /^(watchlists|alerts\.rules|alerts\.inbox|notes|screens|workspaces|workspace\.current|layout\.[A-Za-z]+|paper|settings|assistant\.history|agent\.history|navCollapsed|drawings|chartlab|scanners|customIndices|deriv\.positions|deriv\.journal|deriv\.screens|deriv\.events|deriv\.alerts|deriv\.risk|deriv\.coach|customIndicators|projections|indSettings|tiles\.shortcuts|analyst\.studies|events)$/;
 
 export const auth = SB_ON ? createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, storageKey: "gqta-auth", detectSessionInUrl: true } }).auth : null;
 
@@ -25,6 +25,12 @@ async function token() {
   if (!auth) return null;
   const { data } = await auth.getSession();
   return data.session?.access_token || null;
+}
+
+/** The login headers every call to the server carries (also used for file uploads / downloads). */
+export async function authHeaders() {
+  const t = await token();
+  return { ...(t ? { authorization: `Bearer ${t}` } : {}), ...(!t && env.VITE_DEV_EMAIL ? { "x-dev-email": env.VITE_DEV_EMAIL } : {}) };
 }
 
 export async function api(method, path, body) {

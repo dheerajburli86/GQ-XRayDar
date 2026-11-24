@@ -10,7 +10,8 @@ export function createAgentProxy({ cfg, data, fetchImpl = fetch, log = console.l
     const r = await fetchImpl(`${cfg.agentUrl}/api/chat`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-ta-secret": cfg.agentSecret },
-      body: JSON.stringify({ message, history: (history || []).slice(-10), context, user: user.guest ? { guest: true, guestId: user.guestId } : { email: user.email, name: user.name, telegramUserId: user.telegramUserId || null } }),
+      // access = what an admin allowed this person's agent to read (XRayDar decides; the agent obeys it)
+      body: JSON.stringify({ message, history: (history || []).slice(-10), context, user: user.guest ? { guest: true, guestId: user.guestId } : { email: user.email, name: user.displayName || user.name, telegramUserId: user.telegramUserId || null, access: { sources: user.agentAccess?.sources || [] } } }),
       signal: AbortSignal.timeout(170_000),
     });
     const j = await r.json().catch(() => ({}));
@@ -36,10 +37,17 @@ export function createAgentProxy({ cfg, data, fetchImpl = fetch, log = console.l
   }
 
   async function chat(args) {
+    // the built-in assistant reads XRayDar's stored data, so it may only stand in for someone allowed that source
+    const builtinOk = args.user?.guest || (args.user?.agentAccess?.sources || []).includes("xraydar");
     if (cfg.agentUrl && cfg.agentSecret) {
       try { return await viaAgent({ ...args, context: await enrich(args.context) }); }
-      catch (e) { log(`[agent] GQ agent unavailable (${e.message}); answering with the built-in assistant`); const b = await viaBuiltin(args); return { ...b, notice: "The GQ agent did not answer, so this reply comes from the built-in assistant (stored data only)." }; }
+      catch (e) {
+        log(`[agent] GQ agent unavailable (${e.message}); ${builtinOk ? "answering with the built-in assistant" : "no fallback for this person"}`);
+        if (!builtinOk) return { source: "none", answer: "The GQ agent did not answer just now. Try again in a minute.", markdown: true };
+        const b = await viaBuiltin(args); return { ...b, notice: "The GQ agent did not answer, so this reply comes from the built-in assistant (stored data only)." };
+      }
     }
+    if (!builtinOk) return { source: "none", answer: "The GQ agent is not connected right now.", markdown: true };
     return viaBuiltin(args);
   }
   return { chat, connected: () => !!(cfg.agentUrl && cfg.agentSecret) };

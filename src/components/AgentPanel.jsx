@@ -125,13 +125,14 @@ export function AgentPanel() {
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const endRef = useRef(null);
-  // No login: the server lets the panel talk to the GQ Agent as a guest (AGENT_PUBLIC). Asked once per visit.
-  const [agentStatus, setAgentStatus] = useState(null);
-  useEffect(() => { if (open && acct.serverOn && !agentStatus) api("GET", "/api/agent/status").then(setAgentStatus).catch(() => setAgentStatus({ connected: false })); }, [open, acct.serverOn, agentStatus]);
-  const viaAgent = acct.serverOn && !!(acct.me?.agentConnected || (agentStatus?.connected && (acct.me || agentStatus.open)));
+  // Per person (Shankar Sir, 2026-11-24): the agent works only for accounts an admin switched it on for, and reads
+  // only the sources chosen for them. With the server on, every question goes to it; the server decides.
+  const access = acct.me?.agentAccess;
+  const allowed = !acct.serverOn || !!(access?.enabled && access.sources?.length);
+  const viaAgent = acct.serverOn && !!acct.me && allowed;
 
   const ask = async (text, ctx = null, fresh = false) => {
-    if (!text.trim() || busy) return;
+    if (!text.trim() || busy || !allowed) return;
     setBusy(true); setQ("");
     const entry = { q: text, at: new Date().toISOString(), ctx: ctx?.symbol || null };
     // the question shows at once, with a "working on it" line, so nobody thinks the panel swallowed it
@@ -177,7 +178,7 @@ export function AgentPanel() {
       <div className="row" style={{ justifyContent: "space-between" }}>
         <b>✦ GQ Agent</b>
         <div className="row">
-          <span className="small muted" title={viaAgent ? "Same agent as on Telegram: stored analysis, news and the web" : "Built-in assistant: stored calculations only"}>{viaAgent ? "connected" : "stored data only"}</span>
+          <span className="small muted" title={viaAgent ? `Your agent may use: ${(access?.sources || []).join(", ")}` : "Built-in assistant: stored calculations only"}>{!allowed ? "not enabled" : viaAgent ? "connected" : "stored data only"}</span>
           <button className="btn sm ghost" onClick={() => setHist([])} title="Clear">⌫</button>
           <button className="btn sm ghost" onClick={() => setOpen(false)}>✕</button>
         </div>
@@ -196,10 +197,12 @@ export function AgentPanel() {
         ))}
         <div ref={endRef} />
       </div>
-      <div className="row">
+      {acct.serverOn && !acct.me ? <div className="note">Checking your access…</div> : !allowed ? (
+        <div className="note">The GQ Agent is not switched on for your account yet. An XRayDar admin can enable it and choose what it may read for you.</div>
+      ) : <div className="row">
         <input style={{ flex: 1 }} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ask(q)} disabled={busy} placeholder={busy ? "Working on your question…" : "Ask…"} />
         <button className="btn primary" onClick={() => ask(q)} disabled={busy}>{busy ? "…" : "Ask"}</button>
-      </div>
+      </div>}
     </aside>
   );
 }

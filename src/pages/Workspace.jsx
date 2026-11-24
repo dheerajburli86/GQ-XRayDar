@@ -18,6 +18,7 @@ import { studyOverlays, projectionOverlays } from "../lib/chartOverlays.js";
 import { usePersistent, uid } from "../lib/storage.js";
 import { useChartKeys } from "../lib/chartKeys.js";
 import { rowRankCmp } from "../../engine/turnover.js";
+import { ShareButton } from "../components/Share.jsx";
 
 const indicatorList = (ind) => [{ value: "price", label: `Price + ${linesLabel(ind.lines.filter((l) => !l.off))}` }, { value: "line", label: "Price line (green up / red down)" }, { value: "rsi", label: `RSI ${ind.rsi}` }, { value: "macd", label: `MACD ${ind.macdFast}/${ind.macdSlow}/${ind.macdSignal}` }, { value: "rsc", label: "RSC vs benchmark" }, { value: "volume", label: "Volume" }, { value: "mma", label: `Price + MMA ${listLabel(ind.mmaShort)} | ${listLabel(ind.mmaLong)}` },
   ...STUDIES.filter((x) => !["avwap", "pivots"].includes(x.key)).map((x) => ({ value: `st:${x.key}`, label: x.label }))];
@@ -27,6 +28,7 @@ export default function Workspace() {
   const d = useData();
   const top = useMemo(() => [...d.rows].sort(rowRankCmp).slice(0, 4), [d.rows]);
   const [layouts, setLayouts] = usePersistent("workspaces", {});
+  const [loaded, setLoaded] = useState(null); // the saved layout last loaded (what "Share" refers to)
   const [cur, setCur] = usePersistent("workspace.current", null);
   const panels = cur?.panels || top.map((r) => newPanel({ kind: "sec", id: r.id, label: `${r.sec.symbol} · ${r.sec.name}` }));
   const cols = cur?.cols || 2;
@@ -46,7 +48,8 @@ export default function Workspace() {
         <button className="btn sm" onClick={() => update({ panels: [...panels, newPanel(panels[0]?.inst || { kind: "index", key: "CW|USD|G", label: "Global CW (USD)" })] })}>+ Panel</button>
         <input placeholder="Layout name" value={name} onChange={(e) => setName(e.target.value)} style={{ width: 130 }} />
         <button className="btn sm" disabled={!name} onClick={() => { setLayouts({ ...layouts, [name]: { panels, cols, linked } }); setName(""); }}>Save</button>
-        <Select label="Load" value="" options={Object.keys(layouts)} onChange={(v) => v && setCur(layouts[v])} allowEmpty="—" />
+        <Select label="Load" value="" options={Object.keys(layouts)} onChange={(v) => { if (v) { setCur(layouts[v]); setLoaded(v); } }} allowEmpty="—" />
+        {loaded && layouts[loaded] && <ShareButton sourceKey="workspaces" item={loaded} title={loaded} label={`Share "${loaded}"`} />}
         <IndicatorSettingsButton />
       </PageHead>
       <div className="grid" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>

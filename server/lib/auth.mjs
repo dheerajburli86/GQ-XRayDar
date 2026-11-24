@@ -5,19 +5,23 @@
 //                The Telegram id maps to a web user once they linked Telegram.
 import crypto from "node:crypto";
 import { HttpError } from "./http.mjs";
+import { normaliseAccess } from "./community.mjs";
 
 export function createAuth(cfg, pool, fetchImpl = fetch) {
   const cache = new Map(); // token -> {user, until}
   const allowed = (email) => {
     const e = String(email || "").toLowerCase();
+    // open signup (owner, 2026-11-24): anyone with an account may sign in; admins can still disable a person
+    if (cfg.openSignup) return /^[^@\s]+@[^@\s]+$/.test(e);
     if (cfg.allowedEmails.includes(e)) return true;
     const dom = e.split("@")[1];
     return !!dom && cfg.allowedDomains.includes(dom);
   };
   async function upsertUser(id, email, name) {
     const { rows } = await pool.query(
-      `insert into tas_user (id, email, name, last_seen_at) values ($1, $2, $3, now())
-       on conflict (id) do update set email = excluded.email, name = coalesce(excluded.name, tas_user.name), last_seen_at = now()
+      `insert into tas_user (id, email, name, display_name, created_via, last_seen_at) values ($1, $2, $3, $3, 'login', now())
+       on conflict (id) do update set email = excluded.email, name = coalesce(excluded.name, tas_user.name),
+         display_name = coalesce(tas_user.display_name, excluded.name), last_seen_at = now()
        returning *`, [id, email, name || null]);
     return rows[0];
   }
@@ -25,7 +29,8 @@ export function createAuth(cfg, pool, fetchImpl = fetch) {
     const isAdmin = cfg.adminEmails.includes(String(u.email).toLowerCase()) || u.role === "admin";
     const role = cfg.adminEmails.includes(String(u.email).toLowerCase()) ? "admin" : u.role || "analyst";
     if (role === "disabled") throw new HttpError(403, "this account has been disabled by an administrator");
-    return { id: u.id, email: u.email, name: u.name, telegramLinked: !!u.telegram_chat_id, telegramName: u.telegram_name, telegramUserId: u.telegram_user_id || null, settings: u.settings || {}, isAdmin, role };
+    return { id: u.id, email: u.email, name: u.name, displayName: u.display_name || u.name || String(u.email).split("@")[0],
+      agentAccess: normaliseAccess(u.agent_access, { isAdmin: role === "admin" }), telegramLinked: !!u.telegram_chat_id, telegramName: u.telegram_name, telegramUserId: u.telegram_user_id || null, settings: u.settings || {}, isAdmin, role };
   };
 
   async function web(req) {
@@ -69,5 +74,8 @@ export function createAuth(cfg, pool, fetchImpl = fetch) {
     if (req.headers["x-ta-secret"]) return agent(req);
     return { user: await web(req), agent: false };
   }
-  return { web, agent, any, allowed };
+  /** Drop cached logins so a changed name / agent access / role takes effect on the next call. */
+  const forget = (req) => { const h = req?.headers?.authorization || ""; if (h.startsWith("Bearer ")) cache.delete(h.slice(7)); };
+  const forgetUser = (id) => { for (const [k, v] of cache) if (v.user?.id === id) cache.delete(k); };
+  return { web, agent, any, allowed, forget, forgetUser };
 }

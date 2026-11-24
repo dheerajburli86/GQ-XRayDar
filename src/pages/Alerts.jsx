@@ -24,6 +24,7 @@ import { enablePush, pushSupported, isIos, isStandalone } from "../lib/push.js";
 import { DERIV_ALERT_RULES, DERIV_ALERT_GROUPS, describeDerivRule, evaluateDerivRule, marketView } from "../../engine/deriv/alerts.js";
 import { getDerivApi } from "../data/derivApi.js";
 import { useAsync } from "../lib/useAsync.js";
+import { ShareButton } from "../components/Share.jsx";
 
 const TFL = { D: "daily", W: "weekly", M: "monthly" };
 
@@ -193,7 +194,7 @@ function IndicatorAlerts({ rules, all, setRules, wls }) {
                   <td>{r.target?.instrumentId ? <StockLink sec={d.secById.get(r.target.instrumentId)} /> : <span>☰ {wls[r.target?.watchlistId]?.name || r.target?.watchlistName || "deleted list"} ({ids(r).length})</span>}</td>
                   <td>{TFL[r.tf || "D"]}</td>
                   <td className="small">{!c ? <span className="muted">—</span> : fired.length ? <span className="pos">fired on the latest candle: {fired.map((x) => d.secById.get(x.id)?.symbol).join(", ")}</span> : holding.length ? <span>condition true for {holding.map((x) => d.secById.get(x.id)?.symbol).slice(0, 8).join(", ")}{holding.length > 8 ? "…" : ""}</span> : <span className="muted">not true now</span>}</td>
-                  <td><button className="btn sm ghost" onClick={() => setRules(all.filter((x) => x.id !== r.id))}>✕</button></td>
+                  <td><span className="row" style={{ gap: 4 }}><ShareButton sourceKey="alerts.rules" item={r.id} title={RULES[r.rule] ? describeRule(r.rule, r.params) : r.rule} label="" /><button className="btn sm ghost" onClick={() => setRules(all.filter((x) => x.id !== r.id))}>✕</button></span></td>
                 </tr>);
             })}
           </tbody></table>

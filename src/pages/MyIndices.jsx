@@ -14,6 +14,7 @@ import { majorCurrency } from "../../engine/fx.js";
 import { buildCustomIndex, seriesReturns } from "../../engine/customIndex.js";
 import { WW_TREND_LABEL } from "../../engine/weightWatcher.js";
 import { quarterLabel } from "../../engine/calendar.js";
+import { ShareButton } from "../components/Share.jsx";
 
 const METHODS = [{ value: "CW", label: "Market-cap weighted" }, { value: "EW", label: "Equal weighted" }, { value: "CUSTOM", label: "My own weights" }];
 const blank = () => ({ id: uid(), name: "My index", method: "CW", ccy: "USD", members: [] });
@@ -91,6 +92,7 @@ function Editor({ d, idx, update, remove }) {
           <Seg value={ccy} options={[{ value: "USD", label: "USD" }, { value: "LCL", label: "Local", title: "Only when every member trades in one currency" }]} onChange={(c) => update({ ccy: c })} />
           <div className="grow" />
           {res?.dates?.length ? <button className="btn sm" onClick={exportAll}>Excel</button> : null}
+          <ShareButton sourceKey="customIndices" item={idx.id} title={idx.name} />
           <button className="btn sm ghost" onClick={remove}>Delete</button>
         </div>
         <div className="row wrap" style={{ gap: 10, marginTop: 10 }}>

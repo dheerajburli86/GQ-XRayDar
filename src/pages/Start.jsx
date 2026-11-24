@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { PageHead } from "../components/ui.jsx";
 import { href } from "../lib/router.js";
 import { NAV } from "../lib/nav.js";
+import { useAccount } from "../components/Account.jsx";
 import { isHidden } from "../lib/features.js";
 
 const WHAT = {
@@ -52,6 +53,9 @@ const WHAT = {
   watchlists: "Your own stock lists and portfolio. Alerts and views can follow them.",
   paper: "Practice trading with no real money.",
   notes: "Your private research notes.",
+  admin: "Admins only: every account, its role, and whether its GQ Agent is on and what it may read.",
+  community: "Chat rooms, message boards, group chats and direct messages. Share charts, screens, watchlists and files with other XRayDar users.",
+  library: "What other people share with you or with everyone (watchlists, screens, formulas, notes, layouts). Save a copy, or choose who sees what you share.",
   data: "Run history, data health and issues: is the data fresh and complete?",
 };
 
@@ -63,6 +67,7 @@ const setBodyPoint = (p) => {
 };
 
 export default function Start() {
+  const acct = useAccount();
   const [pointed, setPointed] = useState(null);
   const point = (p) => { setBodyPoint(p); setPointed(p); };
   useEffect(() => () => setBodyPoint(null), []);
@@ -73,7 +78,7 @@ export default function Start() {
         {NAV.map(([group, items]) => (
           <div className="card" key={group}>
             <h3 style={{ marginTop: 0 }}>{group}</h3>
-            {items.filter(([p]) => !isHidden(p)).map(([p, ic, label]) => (
+            {items.filter(([p]) => !isHidden(p) && (p !== "admin" || acct.me?.isAdmin)).map(([p, ic, label]) => (
               <div key={p} className={`start-row ${pointed === p ? "on" : ""}`} onMouseEnter={() => point(p)} onMouseLeave={() => point(null)} onFocus={() => point(p)} onBlur={() => point(null)}>
                 <span className="ic" style={{ width: 20, textAlign: "center" }}>{ic}</span>
                 <div className="grow">

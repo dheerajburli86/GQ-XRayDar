@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { useIndSettings, START, COLOR_LABELS } from "../lib/indSettings.js";
 import { MA_KINDS } from "../../engine/studies.js";
+import { ShareButton } from "./Share.jsx";
 
 const PALETTE = ["#22d3ee", "#14a44d", "#d97706", "#a78bfa", "#f472b6", "#facc15", "#ef4444", "#e5e7eb"];
 
@@ -45,7 +46,7 @@ export function IndicatorSettingsPanel({ only = null }) {
   const setLine = (i, p) => patch({ lines: s.lines.map((l, j) => (j === i ? { ...l, ...p } : l)) });
   return (
     <div className="card tight stack" style={{ gap: 8 }}>
-      <div className="row between"><b>Indicator settings</b><span className="small muted">Every chart uses these. Change any number; nothing is fixed.</span></div>
+      <div className="row between"><b>Indicator settings</b><span className="row small muted" style={{ gap: 6 }}>Every chart uses these. Change any number; nothing is fixed.<ShareButton sourceKey="indSettings" item="*" title="My indicator settings" /></span></div>
       {show("lines") && <div className="stack" style={{ gap: 4 }}>
         <div className="small"><b>Price moving averages</b> <span className="muted">(any number of lines, any type, period and colour)</span></div>
         {s.lines.map((l, i) => (

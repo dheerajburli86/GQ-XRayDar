@@ -5,6 +5,7 @@ import { PageHead, Badge } from "../components/ui.jsx";
 import { answer } from "../lib/assistant.js";
 import { href } from "../lib/router.js";
 import { usePersistent } from "../lib/storage.js";
+import { useAccount } from "../components/Account.jsx";
 
 export default function Assistant({ route }) {
   const d = useData();
@@ -13,8 +14,11 @@ export default function Assistant({ route }) {
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
   const ran = useRef(null);
+  const acct = useAccount();
   const ask = async (text) => {
     if (!text.trim()) return;
+    // with the server on, questions go to the real GQ Agent (panel), which checks this person's access
+    if (acct.serverOn) { window.dispatchEvent(new CustomEvent("gqta-agent", { detail: { question: text } })); setQ(""); return; }
     setBusy(true);
     try {
       const a = await answer(text, d);
@@ -41,6 +45,7 @@ export default function Assistant({ route }) {
       <PageHead title="Research assistant" sub="Ask in plain English (typed or spoken). Every answer is computed from the stored calculations and carries its dates and links; nothing is invented.">
         <button className="btn sm" onClick={() => setHistory([])}>Clear</button>
       </PageHead>
+      {acct.serverOn && <div className="note">Questions here go to the GQ Agent: the answer opens in the agent panel on the right{acct.me?.agentAccess?.enabled ? "" : ". The agent is not switched on for your account yet; an admin can enable it"}.</div>}
       <div className="chat">
         {history.map((m, i) => (
           <div key={i} className="stack" style={{ gap: 6 }}>

@@ -7,7 +7,9 @@ import { parseCommand } from "../engine/nl.js";
 import { isTilesCommand } from "../engine/tiles.js";
 import { Loading } from "./components/ui.jsx";
 import { usePersistent } from "./lib/storage.js";
-import { AccountProvider, useAccount } from "./components/Account.jsx";
+import { AccountProvider, useAccount, AccountMenu } from "./components/Account.jsx";
+import { SendToChatButton } from "./components/SendToChat.jsx";
+import { onUnread } from "./lib/community.js";
 import { NAV } from "./lib/nav.js";
 import { AgentPanel } from "./components/AgentPanel.jsx";
 import { resolveTheme, watchSystemTheme } from "./lib/theme.js";
@@ -63,6 +65,9 @@ const pages = {
   alerts: page("alerts", () => import("./pages/Alerts.jsx")),
   watchlists: page("watchlists", () => import("./pages/Watchlists.jsx")),
   notes: page("notes", () => import("./pages/Notes.jsx")),
+  community: page("community", () => import("./pages/Community.jsx")),
+  library: page("library", () => import("./pages/Library.jsx")),
+  admin: page("admin", () => import("./pages/Admin.jsx")),
   data: page("data", () => import("./pages/DataCentre.jsx")),
   stock: page("stock", () => import("./pages/Stock.jsx")),
   chart: page("chart", () => import("./pages/ChartLab.jsx")),
@@ -190,12 +195,21 @@ function PageDownload({ route, asOf }) {
   );
 }
 
+// The menu label of the page on screen (used as the title of what is sent to a chat).
+function pageTitle(route) {
+  const key = route.page === "screens" ? `screens/${route.args[0] || "RSIMMA"}` : route.page;
+  for (const [, items] of NAV) for (const [p, , l] of items) if (p === key) return l;
+  return route.page === "stock" || route.page === "chart" ? `${route.page === "chart" ? "Chart" : "Stock"} ${route.args[0] || ""}`.trim() : "GQ XRayDar";
+}
+
 function Shell() {
   const d = useData();
   const route = useRoute();
   const [collapsed, setCollapsed] = usePersistent("navCollapsed", typeof window !== "undefined" && window.innerWidth < 760);
   const acct = useAccount();
   const [sideW, setSideW] = usePersistent("navWidth", 228);
+  const [unread, setUnread] = useState(0);
+  useEffect(() => (acct.me ? onUnread(setUnread) : undefined), [acct.me]);
   const [drawer, setDrawer] = useState(false); // phone: the menu is a slide-in drawer
   useEffect(() => { setDrawer(false); }, [route.path]);
   const [drag, setDrag] = useState(false);
@@ -253,10 +267,10 @@ function Shell() {
           <div className="logo">GQ</div>
           <div className="bt"><div className="t1">GQ XRayDar</div><div className="t2">Global market intelligence · {d.mode === "demo" ? "demo data" : "live data"}</div></div>
         </div>
-        {NAV.map(([g, all]) => [g, all.filter(([p]) => !isHidden(p))]).map(([g, items]) => (
+        {NAV.map(([g, all]) => [g, all.filter(([p]) => !isHidden(p) && (p !== "admin" || acct.me?.isAdmin))]).filter(([, items]) => items.length).map(([g, items]) => (
           <div className="navgroup" key={g}>
             <div className="g">{g}</div>
-            {items.map(([p, ic, l]) => <a key={p} href={href(p)} data-nav={p} className={`navitem ${activeKey === p ? "active" : ""}`} title={l}><span className="ic">{ic}</span><span className="lbl">{l}</span></a>)}
+            {items.map(([p, ic, l]) => <a key={p} href={href(p)} data-nav={p} className={`navitem ${activeKey === p ? "active" : ""}`} title={l}><span className="ic">{ic}</span><span className="lbl">{l}</span>{p === "community" && unread > 0 && <span className="unread" title={`${unread} unread`}>{unread > 99 ? "99+" : unread}</span>}</a>)}
           </div>
         ))}
       </nav>
@@ -274,7 +288,8 @@ function Shell() {
           <div className="seg theme-seg" title="Appearance">
             {[["light", "☀", "Light"], ["dark", "☾", "Dark"], ["system", "Auto", "Same as device"]].map(([k, ic, l]) => <button key={k} className={d.settings.theme === k ? "on" : ""} onClick={() => d.setSetting("theme", k)} title={l}>{ic}</button>)}
           </div>
-          {acct.email && <span className="small muted m-hide" title={acct.email}>{acct.email.split("@")[0]}{acct.session ? <a style={{ marginLeft: 6, cursor: "pointer" }} onClick={acct.signOut}>sign out</a> : null}</span>}
+          <SendToChatButton title={pageTitle(route)} />
+          <AccountMenu />
         </div>
         <DataWindow />
         <div className="content">

@@ -5,6 +5,7 @@ import { PageHead, Select } from "../components/ui.jsx";
 import { DataTable } from "../components/DataTable.jsx";
 import { usePersistent, uid } from "../lib/storage.js";
 import { href } from "../lib/router.js";
+import { ShareButton } from "../components/Share.jsx";
 
 export function useNotes() { return usePersistent("notes", []); }
 
@@ -14,7 +15,7 @@ export function NoteBox({ target, label }) {
   const mine = notes.filter((n) => n.target === target);
   return (
     <div className="stack" style={{ gap: 6 }}>
-      {mine.map((n) => <div key={n.id} className="note"><div className="small muted">{new Date(n.at).toLocaleString()}</div>{n.text}<button className="btn sm ghost" onClick={() => setNotes(notes.filter((x) => x.id !== n.id))}>✕</button></div>)}
+      {mine.map((n) => <div key={n.id} className="note"><div className="small muted">{new Date(n.at).toLocaleString()}</div>{n.text}<ShareButton sourceKey="notes" item={n.id} title={n.label ? `${n.label}: ${n.text.slice(0, 40)}` : n.text.slice(0, 50)} label="" /><button className="btn sm ghost" onClick={() => setNotes(notes.filter((x) => x.id !== n.id))}>✕</button></div>)}
       <textarea className="notes" placeholder={`Add an observation about ${label}…`} value={text} onChange={(e) => setText(e.target.value)} />
       <div><button className="btn sm primary" disabled={!text.trim()} onClick={() => { setNotes([{ id: uid(), target, label, text: text.trim(), at: new Date().toISOString() }, ...notes]); setText(""); }}>Save note</button></div>
     </div>
@@ -42,7 +43,7 @@ export default function Notes() {
       <DataTable exportName="research_notes" rows={rows} initialSort={{ key: "at", dir: "desc" }}
         columns={[{ key: "at", label: "When", value: (n) => n.at, render: (n) => new Date(n.at).toLocaleString() }, { key: "t", label: "About", value: (n) => n.label, render: (n) => (link(n) ? <a href={link(n)}>{n.label}</a> : n.label) },
           { key: "k", label: "Type", value: (n) => n.target.split(":")[0] }, { key: "x", label: "Note", value: (n) => n.text, render: (n) => <span style={{ whiteSpace: "normal" }}>{n.text}</span> },
-          { key: "del", label: "", value: () => null, export: false, render: (n) => <button className="btn sm ghost" onClick={() => setNotes(notes.filter((x) => x.id !== n.id))}>✕</button> }]} />
+          { key: "del", label: "", value: () => null, export: false, render: (n) => <span className="row" style={{ gap: 4 }}><ShareButton sourceKey="notes" item={n.id} title={n.label ? `${n.label}: ${n.text.slice(0, 40)}` : n.text.slice(0, 50)} label="" /><button className="btn sm ghost" onClick={() => setNotes(notes.filter((x) => x.id !== n.id))}>✕</button></span> }]} />
     </div>
   );
 }
