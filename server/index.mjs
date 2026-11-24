@@ -326,13 +326,16 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
   });
   r.get("/api/signal-stats", async (req) => { await auth.any(req); return data.api.backtestSummary(); });
   r.get("/api/brief", async (req, _, url) => { await auth.any(req); const p = q(url, "period", "daily"); return digests.briefText(["daily", "weekly"].includes(p) ? p : "daily"); });
+  r.get("/api/agent/status", async () => ({ connected: agentProxy.connected(), open: cfg.agentPublic }));
   r.post("/api/agent/chat", async (req) => {
-    const u = await auth.web(req);
+    // No login needed when agentPublic is on and no token was sent; a token that IS sent must still be valid.
+    const guest = cfg.agentPublic && !req.headers.authorization;
+    const u = guest ? { id: null, email: "guest", name: "Guest", telegramUserId: null } : await auth.web(req);
     const b = await readJson(req, 200_000);
     if (!b.message) throw new HttpError(400, "message required");
     const t0 = Date.now();
     const out = await agentProxy.chat({ message: String(b.message).slice(0, 4000), history: b.history, context: b.context, user: u });
-    audit.ai({ userId: u.id, kind: "agent_chat", source: out.source, modelKey: out.source === "built-in" ? "assistant" : null, modelVersion: out.source === "gq-agent" ? "gq-agent (remote)" : null, params: { context: b.context || null }, features: { message: String(b.message).slice(0, 4000) }, output: out.answer ? { answer: String(out.answer).slice(0, 8000) } : { blocks: out.blocks }, tookMs: Date.now() - t0 });
+    audit.ai({ userId: u.id || null, kind: "agent_chat", source: out.source, modelKey: out.source === "built-in" ? "assistant" : null, modelVersion: out.source === "gq-agent" ? "gq-agent (remote)" : null, params: { context: b.context || null }, features: { message: String(b.message).slice(0, 4000) }, output: out.answer ? { answer: String(out.answer).slice(0, 8000) } : { blocks: out.blocks }, tookMs: Date.now() - t0 });
     return out;
   });
 

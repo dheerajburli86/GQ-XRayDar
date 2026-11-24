@@ -4,8 +4,8 @@
 // The page the person is on is sent along, so "this chart" means that chart.
 import { useEffect, useRef, useState } from "react";
 import { useData } from "../data/store.jsx";
-import { useAccount, SignIn } from "./Account.jsx";
-import { api, auth } from "../lib/server.js";
+import { useAccount } from "./Account.jsx";
+import { api } from "../lib/server.js";
 import { answer } from "../../engine/assistant.js";
 import { parseCommand } from "../../engine/nl.js";
 import { href } from "../lib/router.js";
@@ -107,13 +107,13 @@ export function AgentPanel() {
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const endRef = useRef(null);
-  const viaAgent = acct.serverOn && acct.me;
-  // the server only answers a signed-in team member; without that the panel used to fall back to the keyword
-  // assistant without saying so, which is not the GQ Agent
-  const needsSignIn = acct.serverOn && !acct.me;
+  // No login: the server lets the panel talk to the GQ Agent as a guest (AGENT_PUBLIC). Asked once per visit.
+  const [agentStatus, setAgentStatus] = useState(null);
+  useEffect(() => { if (open && acct.serverOn && !agentStatus) api("GET", "/api/agent/status").then(setAgentStatus).catch(() => setAgentStatus({ connected: false })); }, [open, acct.serverOn, agentStatus]);
+  const viaAgent = acct.serverOn && !!(acct.me?.agentConnected || (agentStatus?.connected && (acct.me || agentStatus.open)));
 
   const ask = async (text, ctx = null, fresh = false) => {
-    if (!text.trim() || busy || needsSignIn) return;
+    if (!text.trim() || busy) return;
     setBusy(true); setQ("");
     const entry = { q: text, at: new Date().toISOString(), ctx: ctx?.symbol || null };
     try {
@@ -123,7 +123,7 @@ export function AgentPanel() {
       // Without the GQ agent, screens and "explain <ticker>" are answered from the stored data here. With the
       // agent connected, every question goes to it: it reads the same calculations through the app's server
       // (the xraydar tool) and understands the whole sentence, which the keyword parser cannot.
-      const agentOn = !!acct.me?.agentConnected;
+      const agentOn = viaAgent;
       const cmd = local || agentOn ? null : parseCommand(text, { securities: d.secs, countries: d.countries });
       const exact = cmd && ((cmd.intent === "screen" && cmd.conditions.length) || (cmd.intent === "explain" && cmd.securityId));
       if (local) { entry.blocks = local; entry.source = "built-in"; }
@@ -155,7 +155,7 @@ export function AgentPanel() {
       <div className="row" style={{ justifyContent: "space-between" }}>
         <b>✦ GQ Agent</b>
         <div className="row">
-          <span className="small muted" title={viaAgent ? "Same agent as on Telegram: stored analysis, news and the web" : "Built-in assistant: stored calculations only"}>{viaAgent ? "connected" : needsSignIn ? "sign in" : "stored data only"}</span>
+          <span className="small muted" title={viaAgent ? "Same agent as on Telegram: stored analysis, news and the web" : "Built-in assistant: stored calculations only"}>{viaAgent ? "connected" : "stored data only"}</span>
           <button className="btn sm ghost" onClick={() => setHist([])} title="Clear">⌫</button>
           <button className="btn sm ghost" onClick={() => setOpen(false)}>✕</button>
         </div>
@@ -175,15 +175,10 @@ export function AgentPanel() {
         {busy && <div className="msg bot muted">Thinking…</div>}
         <div ref={endRef} />
       </div>
-      {needsSignIn ? (
-        <div className="stack" style={{ gap: 8 }}>
-          {acct.meError && !/sign in required|session expired/i.test(acct.meError) && <div className="note warn">{acct.meError}</div>}
-          {acct.session || !auth ? <button className="btn" onClick={() => acct.refreshMe()}>Connect to the server</button> : <SignIn inline />}
-        </div>
-      ) : <div className="row">
+      <div className="row">
         <input style={{ flex: 1 }} value={q} placeholder="Ask…" onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ask(q)} disabled={busy} />
         <button className="btn primary" onClick={() => ask(q)} disabled={busy}>Ask</button>
-      </div>}
+      </div>
     </aside>
   );
 }

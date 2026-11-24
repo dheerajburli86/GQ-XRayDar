@@ -17,6 +17,8 @@ export function loadConfig(e = process.env) {
     appUrl: (e.APP_URL || "").replace(/\/$/, ""),
     // Shared secret between this server and the GQ agent (both directions)
     agentSecret: e.TA_API_SECRET || "",
+    // The dashboard's GQ Agent panel may be used without a login (owner, 2026-11-24). AGENT_PUBLIC=0 turns that off.
+    agentPublic: (e.AGENT_PUBLIC || "1") !== "0",
     agentUrl: (e.GQAGENT_URL || "").replace(/\/$/, ""),
     // Telegram: the SAME bot token the GQ agent uses. This server only SENDS
     // (sendMessage); it never polls, so it does not conflict with the agent.
