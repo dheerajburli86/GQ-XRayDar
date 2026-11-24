@@ -40,7 +40,7 @@ export function AccountProvider({ children }) {
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
-function SignIn({ blocked, onSignOut }) {
+export function SignIn({ blocked, onSignOut, inline = false }) {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [err, setErr] = useState(null);
@@ -52,10 +52,10 @@ function SignIn({ blocked, onSignOut }) {
     const { error } = await auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo, shouldCreateUser: true } });
     if (error) setErr(error.message); else setSent(true);
   };
-  return (
-    <div className="loading-screen">
-      <div className="box card stack" style={{ maxWidth: 420 }}>
-        <div className="brand"><div className="logo">GQ</div><div><div className="t1">GQ XRayDar</div><div className="t2">GQuants team sign-in</div></div></div>
+  const wrap = (children) => (inline ? <div className="stack" style={{ gap: 8 }}>{children}</div> : <div className="loading-screen"><div className="box card stack" style={{ maxWidth: 420 }}>{children}</div></div>);
+  return wrap(
+    <>
+        {inline ? <b>Sign in to use the GQ Agent</b> : <div className="brand"><div className="logo">GQ</div><div><div className="t1">GQ XRayDar</div><div className="t2">GQuants team sign-in</div></div></div>}
         {blocked ? (
           <>
             <div className="note warn">{blocked} is not allowed to use this app. Sign in with your @{ALLOWED_DOMAINS[0]} account.</div>
@@ -71,7 +71,6 @@ function SignIn({ blocked, onSignOut }) {
           </>
         )}
         {err && <div className="note warn">{err}</div>}
-      </div>
-    </div>
+    </>
   );
 }

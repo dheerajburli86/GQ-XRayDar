@@ -324,3 +324,7 @@ At <= 760px the left menu is a slide-in drawer (☰ in the top bar, closes on na
   1,000,000 froze the page before this.
 - Bar-only studies (CMF, Elder, Force, Chaikin osc, Coppock, volume osc, AO, BOP), studies with upper / lower lines and pivots
   take the study's up / down colours. `tests/studyOverlays.test.mjs` fails if any setting of any study changes nothing on the chart.
+
+## The dashboard GQ Agent needs a signed-in session (added 2026-11-24)
+
+ta-server serves `/api/agent/chat` only to signed-in @gquants.com users, and the site runs with `VITE_REQUIRE_LOGIN=false`, so the panel had no token, `/api/me` returned 401 and every question silently fell to the built-in keyword assistant (wrong answers such as "3341 stocks match" for "5 biggest US stocks"). `AgentPanel` now shows an inline sign-in (or "Connect to the server") instead of the ask box when the server is on and `/api/me` fails; the built-in assistant is used only when no server is configured at all. Supabase auth (Google / email link) must be enabled for @gquants.com for the panel to connect.

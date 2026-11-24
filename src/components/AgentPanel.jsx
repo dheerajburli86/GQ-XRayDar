@@ -4,8 +4,8 @@
 // The page the person is on is sent along, so "this chart" means that chart.
 import { useEffect, useRef, useState } from "react";
 import { useData } from "../data/store.jsx";
-import { useAccount } from "./Account.jsx";
-import { api } from "../lib/server.js";
+import { useAccount, SignIn } from "./Account.jsx";
+import { api, auth } from "../lib/server.js";
 import { answer } from "../../engine/assistant.js";
 import { parseCommand } from "../../engine/nl.js";
 import { href } from "../lib/router.js";
@@ -108,9 +108,12 @@ export function AgentPanel() {
   const [busy, setBusy] = useState(false);
   const endRef = useRef(null);
   const viaAgent = acct.serverOn && acct.me;
+  // the server only answers a signed-in team member; without that the panel used to fall back to the keyword
+  // assistant without saying so, which is not the GQ Agent
+  const needsSignIn = acct.serverOn && !acct.me;
 
   const ask = async (text, ctx = null, fresh = false) => {
-    if (!text.trim() || busy) return;
+    if (!text.trim() || busy || needsSignIn) return;
     setBusy(true); setQ("");
     const entry = { q: text, at: new Date().toISOString(), ctx: ctx?.symbol || null };
     try {
@@ -152,7 +155,7 @@ export function AgentPanel() {
       <div className="row" style={{ justifyContent: "space-between" }}>
         <b>✦ GQ Agent</b>
         <div className="row">
-          <span className="small muted" title={viaAgent ? "Same agent as on Telegram: stored analysis, news and the web" : "Built-in assistant: stored calculations only"}>{viaAgent ? "connected" : "stored data only"}</span>
+          <span className="small muted" title={viaAgent ? "Same agent as on Telegram: stored analysis, news and the web" : "Built-in assistant: stored calculations only"}>{viaAgent ? "connected" : needsSignIn ? "sign in" : "stored data only"}</span>
           <button className="btn sm ghost" onClick={() => setHist([])} title="Clear">⌫</button>
           <button className="btn sm ghost" onClick={() => setOpen(false)}>✕</button>
         </div>
@@ -172,10 +175,15 @@ export function AgentPanel() {
         {busy && <div className="msg bot muted">Thinking…</div>}
         <div ref={endRef} />
       </div>
-      <div className="row">
+      {needsSignIn ? (
+        <div className="stack" style={{ gap: 8 }}>
+          {acct.meError && !/sign in required|session expired/i.test(acct.meError) && <div className="note warn">{acct.meError}</div>}
+          {acct.session || !auth ? <button className="btn" onClick={() => acct.refreshMe()}>Connect to the server</button> : <SignIn inline />}
+        </div>
+      ) : <div className="row">
         <input style={{ flex: 1 }} value={q} placeholder="Ask…" onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ask(q)} disabled={busy} />
         <button className="btn primary" onClick={() => ask(q)} disabled={busy}>Ask</button>
-      </div>
+      </div>}
     </aside>
   );
 }
