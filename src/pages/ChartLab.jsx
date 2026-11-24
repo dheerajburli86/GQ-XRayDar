@@ -150,7 +150,7 @@ export default function ChartLab({ route }) {
   const und = foUnderlying(sec);
   const foStats = useAsync(async () => { if (!und || !v.fo) return null; const h = await getDerivApi().history(und); return h?.at(-1) || null; }, [und, v.fo]);
   const foLevels = useMemo(() => { const s = foStats.data; if (!s) return []; return [["Call OI wall", s.callWall, "#dc2626"], ["Put OI wall", s.putWall, "#16a34a"], ["Max pain", s.maxPain, "#a78bfa"], ["Gamma flip (est.)", s.gammaFlip, "#f59e0b"]].filter((x) => x[1] > 0).map(([title, price, color]) => ({ title, price, color, asOf: s.date })); }, [foStats.data]);
-  const extraLines = useMemo(() => [...(fib ? fib.levels.map((l) => ({ price: l.price, color: l.kind === "extension" ? "#94a3b8" : "#38bdf8", title: `Fib ${(l.ratio * 100).toFixed(1)}%` })) : []), ...foLevels], [fib, foLevels]);
+  const extraLines = useMemo(() => [...(fib ? fib.levels.map((l) => ({ price: l.price, color: l.kind === "extension" ? ind.colors.fibExtension : ind.colors.fibRetrace, title: `Fib ${(l.ratio * 100).toFixed(1)}%` })) : []), ...foLevels], [fib, foLevels, ind.colors.fibExtension, ind.colors.fibRetrace]);
 
   useEffect(() => { if (sec) setAgentContext({ page: "chart", instrumentId: id, symbol: sec.symbol, name: sec.name, tf: v.tf, view: STYLES.find((s) => s[0] === v.style)?.[1] }); return () => setAgentContext(null); }, [id, sec, v.tf, v.style]);
   useEffect(() => { setExplain(null); }, [id, v.tf]);
@@ -360,6 +360,7 @@ function ChartCanvas({ name = "", bars, v, levels, extraLines = [], patterns = [
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
+    const C = ind.colors, UP = C.up, DOWN = C.down;
     for (const s of seriesRef.current) { try { chart.removeSeries(s); } catch { /* gone */ } }
     seriesRef.current = [];
     try {
@@ -377,11 +378,11 @@ function ChartCanvas({ name = "", bars, v, levels, extraLines = [], patterns = [
     if (timeStyle) {
       const src = v.style === "ha" ? heikinAshi(bars) : bars;
       main = v.style === "line"
-        ? add(LineSeries, priceSeries(t, bars, "line").data, { color: "#e5e7eb", lineWidth: 2, lastValueVisible: true })
+        ? add(LineSeries, priceSeries(t, bars, "line", { up: UP, down: DOWN }).data, { color: C.priceLine, lineWidth: 2, lastValueVisible: true })
         : v.style === "bar" ? add(BarSeries, t.map((x, i) => ({ time: x, open: src.open[i], high: src.high[i], low: src.low[i], close: src.close[i] })), { upColor: UP, downColor: DOWN, lastValueVisible: true })
         : add(CandlestickSeries, t.map((x, i) => ({ time: x, open: src.open[i], high: src.high[i], low: src.low[i], close: src.close[i] })), { upColor: UP, downColor: DOWN, borderVisible: false, wickUpColor: UP, wickDownColor: DOWN, lastValueVisible: true });
       if (v.ema) ind.lines.filter((l) => !l.off).forEach((l) => add(LineSeries, L(t, movingAverage(l.kind, bars.close, l.n)), { color: l.color, lineWidth: 1, title: `${l.kind}${l.n}` }));
-      if (v.mma) { ind.mmaShort.forEach((n) => add(LineSeries, L(t, emaStrict(bars.close, n)), { color: "#facc15", lineWidth: 1 })); ind.mmaLong.forEach((n) => add(LineSeries, L(t, emaStrict(bars.close, n)), { color: "#ef4444", lineWidth: 1 })); }
+      if (v.mma) { ind.mmaShort.forEach((n) => add(LineSeries, L(t, emaStrict(bars.close, n)), { color: C.mmaShort, lineWidth: 1 })); ind.mmaLong.forEach((n) => add(LineSeries, L(t, emaStrict(bars.close, n)), { color: C.mmaLong, lineWidth: 1 })); }
       if (cmp?.close?.length) {
         const idx = new Map(cmp.time.map((x, i) => [x, i]));
         const cb = aggregate({ time: cmp.time, open: cmp.close, high: cmp.close, low: cmp.close, close: cmp.close, volume: cmp.close.map(() => 0) }, v.tf);
@@ -389,7 +390,7 @@ function ChartCanvas({ name = "", bars, v, levels, extraLines = [], patterns = [
         const firstT = t.find((x) => cm.has(x));
         if (firstT && idx) {
           const k = bars.close[t.indexOf(firstT)] / cm.get(firstT);
-          add(LineSeries, t.filter((x) => cm.has(x) && x >= firstT).map((x) => ({ time: x, value: cm.get(x) * k })), { color: "#60a5fa", lineWidth: 2, title: (cmp.label || "compare").split(" · ")[0] });
+          add(LineSeries, t.filter((x) => cm.has(x) && x >= firstT).map((x) => ({ time: x, value: cm.get(x) * k })), { color: C.compare, lineWidth: 2, title: (cmp.label || "compare").split(" · ")[0] });
         }
       }
       for (const l of levels) main?.createPriceLine({ price: l.price, color: l.kind === "support" ? UP : DOWN, lineStyle: LineStyle.Dotted, lineWidth: 1, axisLabelVisible: true, title: `${l.kind === "support" ? "S" : "R"} ${l.touches}×` });
@@ -403,11 +404,11 @@ function ChartCanvas({ name = "", bars, v, levels, extraLines = [], patterns = [
       // drawings
       const notes = [];
       for (const dw of drawings) {
-        if (dw.type === "hline") main?.createPriceLine({ price: dw.a.price, color: "#f59e0b", lineWidth: 1, lineStyle: LineStyle.Solid, axisLabelVisible: true, title: "" });
-        else if (dw.type === "note") notes.push({ time: dw.a.time, position: "aboveBar", shape: "square", color: "#f59e0b", text: dw.text });
+        if (dw.type === "hline") main?.createPriceLine({ price: dw.a.price, color: C.drawing, lineWidth: 1, lineStyle: LineStyle.Solid, axisLabelVisible: true, title: "" });
+        else if (dw.type === "note") notes.push({ time: dw.a.time, position: "aboveBar", shape: "square", color: C.drawing, text: dw.text });
         else if (dw.type === "trend" || dw.type === "channel") {
           const [a, b] = [dw.a, dw.b].sort((x, y) => (x.time < y.time ? -1 : 1));
-          const line = (off) => add(LineSeries, [{ time: a.time, value: a.price + off }, { time: b.time, value: b.price + off }], { color: "#f59e0b", lineWidth: 2, crosshairMarkerVisible: false });
+          const line = (off) => add(LineSeries, [{ time: a.time, value: a.price + off }, { time: b.time, value: b.price + off }], { color: C.drawing, lineWidth: 2, crosshairMarkerVisible: false });
           line(0);
           if (dw.type === "channel" && dw.c) {
             // offset of the third point from the line at its own time (linear in index space)
@@ -424,7 +425,7 @@ function ChartCanvas({ name = "", bars, v, levels, extraLines = [], patterns = [
         notes.push(...(extra.markers || []));
       }
       if (notes.length && main) createSeriesMarkers(main, notes.filter((m) => m.time >= t[0] && m.time <= t[t.length - 1]).sort((x, y) => (x.time < y.time ? -1 : 1)));
-      if (v.vol) { pane++; add(HistogramSeries, t.map((x, i) => ({ time: x, value: bars.volume[i] || 0, color: bars.close[i] >= bars.open[i] ? "rgba(22,163,74,.55)" : "rgba(220,38,38,.55)" })), { priceFormat: { type: "volume" }, title: "Volume" }, pane); }
+      if (v.vol) { pane++; add(HistogramSeries, t.map((x, i) => ({ time: x, value: bars.volume[i] || 0, color: (bars.close[i] >= bars.open[i] ? UP : DOWN) + "8c" })), { priceFormat: { type: "volume" }, title: "Volume" }, pane); }
     } else {
       // non-time styles: one point per brick / swing / column on a sequence axis
       const seq = (i) => i + 1;
@@ -445,17 +446,17 @@ function ChartCanvas({ name = "", bars, v, levels, extraLines = [], patterns = [
       const r = rsi(bars.close, ind.rsi), rr = rsi(r.map((x) => (x == null ? null : x)), ind.rsiNested);
       const series = timeStyle ? (vals) => L(t, vals) : null;
       if (series) {
-        const s = add(LineSeries, series(r), { color: "#a78bfa", lineWidth: 2, title: `RSI ${ind.rsi}`, lastValueVisible: true }, pane);
-        add(LineSeries, series(rr), { color: "#64748b", lineWidth: 1, title: `RSI ${ind.rsiNested} of RSI` }, pane);
-        s?.createPriceLine({ price: ind.rsiHigh, color: DOWN, lineStyle: LineStyle.Dashed, lineWidth: 1 }); s?.createPriceLine({ price: ind.rsiLow, color: UP, lineStyle: LineStyle.Dashed, lineWidth: 1 });
+        const s = add(LineSeries, series(r), { color: C.rsi, lineWidth: 2, title: `RSI ${ind.rsi}`, lastValueVisible: true }, pane);
+        add(LineSeries, series(rr), { color: C.rsiNested, lineWidth: 1, title: `RSI ${ind.rsiNested} of RSI` }, pane);
+        s?.createPriceLine({ price: ind.rsiHigh, color: C.rsiHighLine, lineStyle: LineStyle.Dashed, lineWidth: 1 }); s?.createPriceLine({ price: ind.rsiLow, color: C.rsiLowLine, lineStyle: LineStyle.Dashed, lineWidth: 1 });
       } else pane--;
     }
     if (v.macd && timeStyle) {
       pane++;
       const m = macd(bars.close, ind.macdFast, ind.macdSlow, ind.macdSignal);
-      add(HistogramSeries, L(t, m.hist).map((x) => ({ ...x, color: x.value >= 0 ? UP : DOWN })), { title: "MACD hist" }, pane);
-      add(LineSeries, L(t, m.line), { color: "#14a44d", lineWidth: 2, title: "MACD" }, pane);
-      add(LineSeries, L(t, m.signal), { color: "#d97706", lineWidth: 1, title: "signal" }, pane);
+      add(HistogramSeries, L(t, m.hist).map((x) => ({ ...x, color: x.value >= 0 ? C.histUp : C.histDown })), { title: "MACD hist" }, pane);
+      add(LineSeries, L(t, m.line), { color: C.macd, lineWidth: 2, title: "MACD" }, pane);
+      add(LineSeries, L(t, m.signal), { color: C.macdSignal, lineWidth: 1, title: "signal" }, pane);
     }
     if (extra?.panes?.length && timeStyle) {
       for (const pn of extra.panes) {

@@ -80,25 +80,26 @@ function ChartPanel({ p, onChange, onRemove, sync }) {
   const series = useMemo(() => {
     if (!data?.inst) return [];
     const b = aggregate({ ...data.inst, volume: data.inst.volume || data.inst.close.map(() => 0) }, p.tf);
+    const C = ind.colors;
     const L = (vals, color, w = 1, title) => ({ type: "line", data: lineData(b.time, vals), options: { color, lineWidth: w, title, lastValueVisible: false } });
-    if (p.ind === "rsi") return [{ ...L(rsi(b.close, ind.rsi), "#a78bfa", 2, `RSI ${ind.rsi}`), priceLines: [{ price: ind.rsiHigh, color: "#dc2626" }, { price: ind.rsiLow, color: "#16a34a" }] }];
-    if (p.ind === "macd") { const m = macd(b.close, ind.macdFast, ind.macdSlow, ind.macdSignal); return [{ type: "histogram", data: lineData(b.time, m.hist).map((x) => ({ ...x, color: x.value >= 0 ? "#16a34a" : "#dc2626" })) }, L(m.line, "#14a44d", 2, "MACD"), L(m.signal, "#d97706", 1, "signal")]; }
-    if (p.ind === "volume") return [{ type: "histogram", data: lineData(b.time, b.volume), options: { color: "#4b5563" } }];
-    if (p.ind === "rsc") { if (!data.aligned) return []; const r = rsc(data.inst.time, data.aligned.a, data.bench.time, data.aligned.b, p.tf, ind.rscBase); return [{ type: "line", data: lineData(r.time, r.value), options: { color: "#e5e7eb", lineWidth: 2, title: "RSC" } }, { type: "line", data: lineData(r.time, ema(r.value, ind.rscAvg)), options: { color: "#14a44d", lineWidth: 1, title: `EMA${ind.rscAvg}` } }]; }
+    if (p.ind === "rsi") return [{ ...L(rsi(b.close, ind.rsi), C.rsi, 2, `RSI ${ind.rsi}`), priceLines: [{ price: ind.rsiHigh, color: C.rsiHighLine }, { price: ind.rsiLow, color: C.rsiLowLine }] }];
+    if (p.ind === "macd") { const m = macd(b.close, ind.macdFast, ind.macdSlow, ind.macdSignal); return [{ type: "histogram", data: lineData(b.time, m.hist).map((x) => ({ ...x, color: x.value >= 0 ? C.histUp : C.histDown })) }, L(m.line, C.macd, 2, "MACD"), L(m.signal, C.macdSignal, 1, "signal")]; }
+    if (p.ind === "volume") return [{ type: "histogram", data: lineData(b.time, b.volume), options: { color: C.volume } }];
+    if (p.ind === "rsc") { if (!data.aligned) return []; const r = rsc(data.inst.time, data.aligned.a, data.bench.time, data.aligned.b, p.tf, ind.rscBase); return [{ type: "line", data: lineData(r.time, r.value), options: { color: C.rsc, lineWidth: 2, title: "RSC" } }, { type: "line", data: lineData(r.time, ema(r.value, ind.rscAvg)), options: { color: C.rscAvg, lineWidth: 1, title: `EMA${ind.rscAvg}` } }]; }
     const base = data.inst.kind === "sec"
-      ? { type: "candles", data: b.time.map((t, i) => ({ time: t, open: b.open[i], high: b.high[i], low: b.low[i], close: b.close[i] })), options: { upColor: "#16a34a", downColor: "#dc2626", borderVisible: false, wickUpColor: "#16a34a", wickDownColor: "#dc2626" } }
-      : L(b.close, "#e5e7eb", 2);
-    if (p.ind === "line") return [priceSeries(b.time, b, "line")];
+      ? { type: "candles", data: b.time.map((t, i) => ({ time: t, open: b.open[i], high: b.high[i], low: b.low[i], close: b.close[i] })), options: { upColor: C.up, downColor: C.down, borderVisible: false, wickUpColor: C.up, wickDownColor: C.down } }
+      : L(b.close, C.priceLine, 2);
+    if (p.ind === "line") return [priceSeries(b.time, b, "line", { up: C.up, down: C.down })];
     if (p.ind.startsWith("st:")) {
       // a study from the chart lab's library on this panel's candles: price studies over the price,
       // the others on their own
       const k = p.ind.slice(3), o = studyOverlays(b, { [k]: { ...(labStudies[k] || {}), on: true } }, p.tf);
       if (o.panes.length) return o.panes[0].specs;
-      return [{ type: "candles", data: b.time.map((t, i) => ({ time: t, open: b.open[i], high: b.high[i], low: b.low[i], close: b.close[i] })), options: { upColor: "#16a34a", downColor: "#dc2626", borderVisible: false, wickUpColor: "#16a34a", wickDownColor: "#dc2626" } }, ...o.price];
+      return [{ type: "candles", data: b.time.map((t, i) => ({ time: t, open: b.open[i], high: b.high[i], low: b.low[i], close: b.close[i] })), options: { upColor: C.up, downColor: C.down, borderVisible: false, wickUpColor: C.up, wickDownColor: C.down } }, ...o.price];
     }
     let proj = [];
     try { proj = projList.length ? projectionOverlays(b, projList, p.tf).price : []; } catch { proj = []; }
-    if (p.ind === "mma") return [base, ...ind.mmaShort.map((n) => L(emaStrict(b.close, n), "#facc15")), ...ind.mmaLong.map((n) => L(emaStrict(b.close, n), "#ef4444")), ...proj];
+    if (p.ind === "mma") return [base, ...ind.mmaShort.map((n) => L(emaStrict(b.close, n), C.mmaShort)), ...ind.mmaLong.map((n) => L(emaStrict(b.close, n), C.mmaLong)), ...proj];
     return [base, ...ind.lines.filter((l) => !l.off).map((l) => L(movingAverage(l.kind, b.close, l.n), l.color, 1, `${l.kind}${l.n}`)), ...proj];
   }, [data, p.tf, p.ind, projList, ind, labStudies]);
   const [big, setBig] = useState(false);

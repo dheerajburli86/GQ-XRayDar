@@ -13,6 +13,12 @@ import { seasonality } from "../../engine/seasonality.js";
 import { tpoProfiles } from "../../engine/chartTools.js";
 import { exportCsv } from "../lib/exporters.js";
 import { usePersistent, uid } from "../lib/storage.js";
+
+// studies drawn only as green / red bars: their colours are the up / down pair, not a line colour
+const HIST_ONLY = new Set(["cmf", "elder", "force", "chaikinOsc", "coppock", "volosc", "ao", "bop"]);
+// which studies have up / down colours (dots, bars, upper / lower level lines, pivot R / S lines)
+const UPDOWN = (s) => ["psar", "supertrend", "pivots", "ppo"].includes(s.key) || HIST_ONLY.has(s.key) || ("hi" in (s.params || {}));
+const UP_TITLE = (s) => (["psar", "supertrend"].includes(s.key) ? "Colour when the trend is up / down" : s.key === "pivots" ? "Support (S) / resistance (R) lines" : HIST_ONLY.has(s.key) || s.key === "ppo" ? "Bars above / below zero" : "Lower / upper level lines");
 import { indexAt } from "../lib/chartOverlays.js";
 
 const pct = (v, d = 2) => (v == null ? "—" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(d)}%`);
@@ -38,11 +44,11 @@ export function StudiesPanel({ studies = {}, onChange }) {
                     ? <Check key={k} checked={!!+val} onChange={(on) => set(s.key, { params: { ...params, centered: on ? 1 : 0 } })}>centred</Check>
                     : <label key={k} className="small muted">{k} <input className="input sm" style={{ width: 52 }} value={val ?? ""} onChange={(e) => set(s.key, { params: { ...params, [k]: e.target.value } })} /></label>)}
               {SOURCE_STUDIES.has(s.key) && <label className="small muted">source <select className="input sm" value={params.source || "close"} onChange={(e) => set(s.key, { params: { ...params, source: e.target.value } })}>{SOURCES.map((x) => <option key={x}>{x}</option>)}</select></label>}
-              {s.key !== "pivots" && <label className="small muted" title="Line width">width <select className="input sm" value={st.width || ""} onChange={(e) => set(s.key, { width: e.target.value })}><option value="">auto</option>{[1, 2, 3, 4].map((x) => <option key={x}>{x}</option>)}</select></label>}
-              {!["psar", "supertrend", "pivots"].includes(s.key) && <input type="color" value={st.color || "#38bdf8"} onChange={(e) => set(s.key, { color: e.target.value })} title="Colour of the main line" />}
-              {["psar", "supertrend"].includes(s.key) && <>
-                <label className="small muted">up <input type="color" value={st.upColor || "#16a34a"} onChange={(e) => set(s.key, { upColor: e.target.value })} /></label>
-                <label className="small muted">down <input type="color" value={st.downColor || "#dc2626"} onChange={(e) => set(s.key, { downColor: e.target.value })} /></label></>}
+              {!HIST_ONLY.has(s.key) && s.key !== "pivots" && <label className="small muted" title="Line width">width <select className="input sm" value={st.width || ""} onChange={(e) => set(s.key, { width: e.target.value })}><option value="">auto</option>{[1, 2, 3, 4].map((x) => <option key={x}>{x}</option>)}</select></label>}
+              {!["psar", "supertrend"].includes(s.key) && !HIST_ONLY.has(s.key) && <input type="color" value={st.color || (s.key === "pivots" ? "#e5e7eb" : "#38bdf8")} onChange={(e) => set(s.key, { color: e.target.value })} title={s.key === "pivots" ? "Colour of the pivot (P) line" : "Colour of the main line"} />}
+              {UPDOWN(s) && <>
+                <label className="small muted" title={UP_TITLE(s)}>up <input type="color" value={st.upColor || "#16a34a"} onChange={(e) => set(s.key, { upColor: e.target.value })} /></label>
+                <label className="small muted" title={UP_TITLE(s)}>down <input type="color" value={st.downColor || "#dc2626"} onChange={(e) => set(s.key, { downColor: e.target.value })} /></label></>}
               {(st.color || st.width || st.params || st.upColor || st.downColor) && <button className="btn sm" title="Back to the starting values" onClick={() => set(s.key, { color: undefined, width: undefined, params: undefined, upColor: undefined, downColor: undefined })}>↺</button>}
             </div>
           );

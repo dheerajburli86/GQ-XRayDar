@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { TvChart } from "./TvChart.jsx";
 import { tfMonths } from "../../engine/calendar.js";
 import { priceSeries } from "../lib/chartStyle.js";
+import { useIndSettings } from "../lib/indSettings.js";
 
 export const YELLOW = "#ffff00", RED = "#e00000", GREEN = "#00ff00", CYAN = "#00ffff", WHITE = "#ffffff", MAGENTA = "#ff00ff";
 export const ACC_COLOR = { 4: CYAN, 14: RED, 26: WHITE, 39: YELLOW };
@@ -37,27 +38,35 @@ export const DARK = {
   timeScale: { borderColor: "#3f3f3f" },
 };
 export const DARK_NO_AXIS = { ...DARK, timeScale: { ...DARK.timeScale, visible: false } };
+// the black look with the viewer's own background / text colours (Settings -> Colours)
+export function darkTheme(c, axis = true) {
+  const t = { ...DARK, layout: { ...DARK.layout, background: { color: c.aBackground }, textColor: c.aText } };
+  return axis ? t : { ...t, timeScale: { ...t.timeScale, visible: false } };
+}
 
 
 export function Pane({ row, ri, last, mode, overlay, v, tf, from, height, sync, rangeKey, extra = null, dw = null, timeline = null }) {
+  const [ind] = useIndSettings();
+  const c = ind.colors;
   const built = useMemo(() => {
     if (!row.time.length) return null;
     const keep = (x) => x != null && Number.isFinite(x) && (!v.log || x > 0);
     const line = (vals) => { const out = []; for (let i = 0; i < row.time.length; i++) if (keep(vals[i])) out.push({ time: row.time[i], value: vals[i] }); return out; };
-    const baseColor = overlay === "mma" ? YELLOW : (ACC_BASE[mode] || [])[ri] || GREEN;
-    const lvl = row.kind === "rsi" ? [30, 50, 70].map((p) => ({ price: p, color: "#bdbdbd", lineWidth: 1, lineStyle: 0, axisLabelVisible: false, title: "" })) : [];
+    const accBase = ((ACC_BASE[mode] || [])[ri] || GREEN);
+    const baseColor = overlay === "mma" ? c.aMmaBase : accBase === GREEN ? c.aBase : accBase;
+    const lvl = row.kind === "rsi" ? [ind.rsiLow, 50, ind.rsiHigh].map((p) => ({ price: p, color: c.aLevels, lineWidth: 1, lineStyle: 0, axisLabelVisible: false, title: "" })) : [];
     // the base line is the crosshair anchor and carries the 30 / 50 / 70 lines, so "averages only"
     // makes it transparent rather than removing it (the scale and the level lines stay put)
     // the price row follows the chosen style (line green up / red down, bars, candles); the
     // other rows keep the Analyst colours
     const series = row.kind === "price" && row.ohlc && !v.avgOnly
-      ? [priceSeries(row.time, row.ohlc, v.price || "line", { keep, id: "base", up: "#00e000", down: "#ff3030" })]
+      ? [priceSeries(row.time, row.ohlc, v.price || "line", { keep, id: "base", up: c.aUp, down: c.aDown })]
       : [{ id: "base", type: "line", data: line(row.base), priceLines: lvl,
         options: { color: v.avgOnly ? "rgba(0,0,0,0)" : baseColor, lineWidth: 1, lastValueVisible: false, crosshairMarkerVisible: !v.avgOnly } }];
     for (const a of row.avgs) {
       if (overlay === "mma" ? !(a.group === "short" ? v.short : v.long) : v.acc?.[a.period] === false) continue;
-      let color = overlay === "mma" ? (a.group === "short" ? YELLOW : RED) : accColor(a.idx ?? 0);
-      if (overlay === "acc" && color === baseColor) color = GREEN;
+      let color = overlay === "mma" ? (a.group === "short" ? c.aShort : c.aLong) : c.aAcc[(a.idx ?? 0) % c.aAcc.length];
+      if (overlay === "acc" && color === baseColor) color = c.aAcc.find((x) => x !== baseColor) || GREEN;
       series.push({ id: `e${a.group}${a.period}`, type: "line", data: line(a.values), options: { color, lineWidth: 1, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false } });
     }
     // studies, formulas and projections laid over the price row (specs built by lib/chartOverlays.js)
@@ -67,7 +76,7 @@ export function Pane({ row, ri, last, mode, overlay, v, tf, from, height, sync, 
       if (extra.levels?.length) series[0] = { ...series[0], priceLines: [...(series[0].priceLines || []), ...extra.levels.map((l) => ({ price: l.price, color: l.color, title: l.title || "" }))] };
     }
     return series;
-  }, [row, ri, mode, overlay, v, extra]);
+  }, [row, ri, mode, overlay, v, extra, c, ind.rsiLow, ind.rsiHigh]);
 
   // default window: about 2 years of daily candles, 10 years of weekly, everything from monthly up
   const visibleRange = useMemo(() => {
@@ -87,7 +96,7 @@ export function Pane({ row, ri, last, mode, overlay, v, tf, from, height, sync, 
   return (
     <div className="anl-pane">
       <div className="anl-label">{row.label}</div>
-      {built ? <TvChart height={height} series={built} sync={sync} logScale={v.log} visibleRange={visibleRange} rangeKey={rangeKey} fit theme={last ? DARK : DARK_NO_AXIS} ohlcv={dw} legend={row.kind === "price"} timeline={timeline} />
+      {built ? <TvChart height={height} series={built} sync={sync} logScale={v.log} visibleRange={visibleRange} rangeKey={rangeKey} fit theme={darkTheme(c, last)} ohlcv={dw} legend={row.kind === "price"} timeline={timeline} />
         : <div className="anl-empty" style={{ height }}>{row.missing || "no data"}</div>}
     </div>
   );
@@ -95,6 +104,7 @@ export function Pane({ row, ri, last, mode, overlay, v, tf, from, height, sync, 
 
 /** A study that needs its own pane (stochastic, ADX, ATR, OBV ...), drawn under the Analyst rows. */
 export function StudyPane({ pane, time, last, height, sync, rangeKey, tf, from, dw = null, timeline = null }) {
+  const [ind] = useIndSettings();
   const visibleRange = useMemo(() => {
     const n = time.length;
     if (!n) return null;
@@ -106,7 +116,7 @@ export function StudyPane({ pane, time, last, height, sync, rangeKey, tf, from, 
   return (
     <div className="anl-pane">
       <div className="anl-label">{pane.title}</div>
-      <TvChart height={height} series={series} sync={sync} visibleRange={visibleRange} rangeKey={rangeKey} fit theme={last ? DARK : DARK_NO_AXIS} ohlcv={dw} timeline={timeline || time} />
+      <TvChart height={height} series={series} sync={sync} visibleRange={visibleRange} rangeKey={rangeKey} fit theme={darkTheme(ind.colors, last)} ohlcv={dw} timeline={timeline || time} />
     </div>
   );
 }

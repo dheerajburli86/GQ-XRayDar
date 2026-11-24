@@ -11,7 +11,7 @@ import { useAsync } from "../lib/useAsync.js";
 import { navigate } from "../lib/router.js";
 import { Seg, Check, Badge, Loading, Empty, Tabs } from "../components/ui.jsx";
 import { ChartSync } from "../components/TvChart.jsx";
-import { Pane, StudyPane, YELLOW, RED, accColor, PRESETS, DEFAULT_VIEW } from "../components/AnalystPane.jsx";
+import { Pane, StudyPane, PRESETS, DEFAULT_VIEW } from "../components/AnalystPane.jsx";
 import { useIndSettings, listLabel } from "../lib/indSettings.js";
 import { IndicatorSettingsButton } from "../components/IndicatorSettings.jsx";
 import { StudiesPanel, FormulaPanel, ProjectionPanel } from "../components/ChartLabPanels.jsx";
@@ -228,10 +228,10 @@ export default function StackedScreens({ route }) {
           onChange={(e) => { const n = parseInt(e.target.value, 10); setRsiN(Number.isFinite(n) ? n : null); }} />
         {rsiN != null && rsiPer !== ind.rsi && <button className="btn sm" onClick={() => setRsiN(null)}>Use Settings ({ind.rsi})</button>}
         {cfg.overlay === "mma" ? <>
-          <Check checked={v.short} onChange={(x) => setV({ short: x })} color={YELLOW}>Short EMA {listLabel(m.mmaShort)}</Check>
-          <Check checked={v.long} onChange={(x) => setV({ long: x })} color={RED}>Long EMA {listLabel(m.mmaLong)}</Check>
-        </> : m.acc.map((p, k) => <Check key={p} checked={v.acc?.[p] !== false} onChange={(x) => setV({ acc: { ...v.acc, [p]: x } })} color={accColor(k)}>EMA {p}</Check>)}
-        <IndicatorSettingsButton only={["groups", "osc"]} />
+          <Check checked={v.short} onChange={(x) => setV({ short: x })} color={ind.colors.aShort}>Short EMA {listLabel(m.mmaShort)}</Check>
+          <Check checked={v.long} onChange={(x) => setV({ long: x })} color={ind.colors.aLong}>Long EMA {listLabel(m.mmaLong)}</Check>
+        </> : m.acc.map((p, k) => <Check key={p} checked={v.acc?.[p] !== false} onChange={(x) => setV({ acc: { ...v.acc, [p]: x } })} color={ind.colors.aAcc[k % ind.colors.aAcc.length]}>EMA {p}</Check>)}
+        <IndicatorSettingsButton only={["groups", "osc", "colors"]} />
         <span className="small muted">From</span>
         <input type="date" value={rg.from} max={rg.to || undefined} onChange={(e) => setRg({ from: e.target.value })} title="Start date: the chart opens here" />
         <span className="small muted">To</span>

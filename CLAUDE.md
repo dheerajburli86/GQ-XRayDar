@@ -312,3 +312,15 @@ At <= 760px the left menu is a slide-in drawer (☰ in the top bar, closes on na
 - DPO follows TradingView's default (close - SMA from n/2+1 bars ago); the old centred form is a `centered` option.
 - Added: KAMA, Williams Alligator (shifted forward), Chandelier Exit, ZigZag (last leg provisional), Fisher Transform, RVI, Klinger, Price Volume Trend, Balance of Power (56 studies). Woodie pivots gain R3/R4/S3/S4, Camarilla R5/S5; VWAP session is a choice (auto/day/week/month/quarter/year); Ichimoku displacement is editable.
 - Every study has Style controls in Chart lab → Indicators: line width, colour of the main line (up / down colours for PSAR and Supertrend), a price **source** (close, open, high, low, hl2, hlc3, ohlc4) for single-series studies (`SOURCE_STUDIES`), and ↺ to go back to the starting values.
+
+## Colours are settings too; study settings are cleaned before use (added 2026-11-24)
+
+- `indSettings.colors` (⚙ Settings → Colours): candles up / down, close line, comparison, volume, MMA groups, RSI and its
+  level lines, MACD and histogram, RSC and its average, drawings, Fibonacci, and the black look of the RSI / RSC screens and
+  multi-tile (`a*` keys: background, text, price up / down, short / long EMAs, ACC 1-8, RSI levels). Charts read them; do not
+  hard-code a chart colour in a page. `TvChart` re-applies `theme` when it changes.
+- `cleanParams` (lib/chartOverlays.js) turns what a viewer typed into usable numbers: blank / text -> the study's starting
+  value, periods held to 1 .. number of candles (max 2000), shifts 0-500, levels / multipliers / scale left free. A period of
+  1,000,000 froze the page before this.
+- Bar-only studies (CMF, Elder, Force, Chaikin osc, Coppock, volume osc, AO, BOP), studies with upper / lower lines and pivots
+  take the study's up / down colours. `tests/studyOverlays.test.mjs` fails if any setting of any study changes nothing on the chart.

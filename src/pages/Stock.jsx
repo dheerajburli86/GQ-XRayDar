@@ -51,10 +51,10 @@ export default function Stock({ route }) {
     return {
       bars: b,
       price: [
-        { type: "candles", data: b.time.map((t, i) => ({ time: t, open: b.open[i], high: b.high[i], low: b.low[i], close: b.close[i] })), options: { upColor: "#16a34a", downColor: "#dc2626", borderVisible: false, wickUpColor: "#16a34a", wickDownColor: "#dc2626" }, markers },
+        { type: "candles", data: b.time.map((t, i) => ({ time: t, open: b.open[i], high: b.high[i], low: b.low[i], close: b.close[i] })), options: { upColor: ind.colors.up, downColor: ind.colors.down, borderVisible: false, wickUpColor: ind.colors.up, wickDownColor: ind.colors.down }, markers },
         ...ind.lines.filter((l) => !l.off).map((l) => ({ type: "line", data: lineData(b.time, movingAverage(l.kind, b.close, l.n)), options: { color: l.color, lineWidth: 1, lastValueVisible: false, title: `${l.kind}${l.n}` } })),
       ],
-      vol: [{ type: "histogram", data: b.time.map((t, i) => ({ time: t, value: b.volume[i], color: i && b.close[i] >= b.close[i - 1] ? "rgba(22,163,74,.6)" : "rgba(220,38,38,.6)" })), options: { priceFormat: { type: "volume" } } }],
+      vol: [{ type: "histogram", data: b.time.map((t, i) => ({ time: t, value: b.volume[i], color: (i && b.close[i] >= b.close[i - 1] ? ind.colors.up : ind.colors.down) + "99" })), options: { priceFormat: { type: "volume" } } }],
     };
   }, [data, tf, ind]);
   const wwChild = data?.ww?.children.find((c) => c.key === id);
@@ -84,7 +84,7 @@ export default function Stock({ route }) {
           </div>
           {sec.assetClass === "ETF" && <EtfDetails sec={sec} />}
           <div className="card tight">
-            <div className="row between" style={{ padding: "0 4px 4px" }}><span className="small muted">{linesLabel(ind.lines.filter((l) => !l.off))} · purple dots = results filed (revenue YoY){data.inst.adjustments?.length ? " · split-adjusted" : ""}</span><span className="row" style={{ gap: 6 }}><IndicatorSettingsButton only={["lines"]} /><Seg value={tf} options={CHART_TFS} onChange={setTf} /></span></div>
+            <div className="row between" style={{ padding: "0 4px 4px" }}><span className="small muted">{linesLabel(ind.lines.filter((l) => !l.off))} · purple dots = results filed (revenue YoY){data.inst.adjustments?.length ? " · split-adjusted" : ""}</span><span className="row" style={{ gap: 6 }}><IndicatorSettingsButton only={["lines", "colors"]} /><Seg value={tf} options={CHART_TFS} onChange={setTf} /></span></div>
             <TvChart height={330} series={charts.price} sync={sync} ohlcv={{ name: sec?.symbol || "", tf, bars: charts.bars }} legend />
             <TvChart height={90} series={charts.vol} sync={sync} ohlcv={{ name: sec?.symbol || "", tf, bars: charts.bars }} />
           </div>

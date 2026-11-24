@@ -2,7 +2,7 @@
 // MACD, RSC, Renko / Kagi / P&F, key levels). Every chart reads the same settings (src/lib/indSettings.js),
 // so a change here shows everywhere at once. Opened from the "Settings" button on each chart page.
 import { useState } from "react";
-import { useIndSettings, START } from "../lib/indSettings.js";
+import { useIndSettings, START, COLOR_LABELS } from "../lib/indSettings.js";
 import { MA_KINDS } from "../../engine/studies.js";
 
 const PALETTE = ["#22d3ee", "#14a44d", "#d97706", "#a78bfa", "#f472b6", "#facc15", "#ef4444", "#e5e7eb"];
@@ -85,6 +85,25 @@ export function IndicatorSettingsPanel({ only = null }) {
         <FloatList label="Fibonacci ratios" value={s.fibRatios} onCommit={(xs) => patch({ fibRatios: xs })} />
         <Num label="Volume profile rows" value={s.vpBins} onCommit={(n) => patch({ vpBins: n })} />
         <Num label="Value area %" value={s.vpValueArea} onCommit={(n) => patch({ vpValueArea: n })} />
+      </div>}
+      {show("colors") && <div className="stack" style={{ gap: 4 }}>
+        <div className="small"><b>Colours</b> <span className="muted">(every line, candle and background the charts draw)</span></div>
+        {COLOR_LABELS.map(([group, keys]) => (
+          <div key={group} className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <span className="small muted" style={{ minWidth: 150 }}>{group}</span>
+            {keys.map(([k, label]) => (
+              <label key={k} className="small muted" style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>{label}
+                <input type="color" value={s.colors[k]} onChange={(e) => patch({ colors: { ...s.colors, [k]: e.target.value } })} />
+              </label>
+            ))}
+            {group.startsWith("RSI / RSC") && s.colors.aAcc.map((c, i) => (
+              <label key={`acc${i}`} className="small muted" style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>ACC {i + 1}
+                <input type="color" value={c} onChange={(e) => patch({ colors: { ...s.colors, aAcc: s.colors.aAcc.map((x, j) => (j === i ? e.target.value : x)) } })} />
+              </label>
+            ))}
+          </div>
+        ))}
+        <div><button className="btn sm ghost" onClick={() => patch({ colors: START.colors })}>Colours back to start</button></div>
       </div>}
       <div className="row" style={{ gap: 6 }}>
         <button className="btn sm ghost" onClick={() => { if (window.confirm("Put every setting back to the published starting values?")) reset(); }}>Start values</button>

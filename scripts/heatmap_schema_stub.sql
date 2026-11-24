@@ -17,3 +17,4 @@ create table if not exists glocom_latest (instrument_id uuid primary key, glocom
 grant usage on schema public to anon, authenticated;
 grant select on instruments, price_history to anon, authenticated;
 alter table instruments add column if not exists etf_category text;
+alter table fundamentals add column if not exists profile jsonb;

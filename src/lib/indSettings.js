@@ -34,7 +34,29 @@ export const START = {
   fibRatios: [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1, 1.272, 1.618],
   vpBins: 28,
   vpValueArea: 70,
+  // every colour the charts draw with (chart lab, stock page, workspace) and the black Analyst look of
+  // the stacked screens / multi-tile (the a* keys)
+  colors: {
+    up: "#16a34a", down: "#dc2626", priceLine: "#e5e7eb", compare: "#60a5fa",
+    mmaShort: "#facc15", mmaLong: "#ef4444",
+    rsi: "#a78bfa", rsiNested: "#64748b", rsiHighLine: "#dc2626", rsiLowLine: "#16a34a",
+    macd: "#14a44d", macdSignal: "#d97706", histUp: "#16a34a", histDown: "#dc2626",
+    rsc: "#38bdf8", rscAvg: "#facc15", volume: "#4b5563",
+    drawing: "#f59e0b", fibRetrace: "#38bdf8", fibExtension: "#94a3b8",
+    aBackground: "#000000", aText: "#d4d4d4", aUp: "#00e000", aDown: "#ff3030", aShort: "#ffff00", aLong: "#e00000",
+    aBase: "#00ff00", aMmaBase: "#ffff00", aLevels: "#bdbdbd",
+    aAcc: ["#00ffff", "#e00000", "#ffffff", "#ffff00", "#ff00ff", "#00ff00", "#ff8800", "#8888ff"],
+  },
 };
+
+export const COLOR_LABELS = [
+  ["Price charts", [["up", "Up candle / line"], ["down", "Down candle / line"], ["priceLine", "Close line"], ["compare", "Comparison line"], ["volume", "Volume"]]],
+  ["MMA and oscillators", [["mmaShort", "MMA short group"], ["mmaLong", "MMA long group"], ["rsi", "RSI"], ["rsiNested", "RSI of RSI"], ["rsiHighLine", "RSI upper line"], ["rsiLowLine", "RSI lower line"],
+    ["macd", "MACD"], ["macdSignal", "MACD signal"], ["histUp", "Histogram up"], ["histDown", "Histogram down"], ["rsc", "RSC"], ["rscAvg", "RSC average"]]],
+  ["Drawings and levels", [["drawing", "Drawings"], ["fibRetrace", "Fibonacci retracement"], ["fibExtension", "Fibonacci extension"]]],
+  ["RSI / RSC screens and multi-tile (black look)", [["aBackground", "Background"], ["aText", "Axis text"], ["aUp", "Price up"], ["aDown", "Price down"], ["aShort", "Short EMAs"], ["aLong", "Long EMAs"], ["aMmaBase", "Line under the MMAs"], ["aBase", "Line under the ACCs"], ["aLevels", "RSI level lines"]]],
+];
+const HEX = /^#[0-9a-fA-F]{6}$/;
 
 const int = (v, lo, hi) => { const n = Math.round(+v); return Number.isFinite(n) && n >= lo && n <= hi ? n : null; };
 const pos = (v) => { const n = +v; return v !== "" && v != null && Number.isFinite(n) && n > 0 ? n : null; };
@@ -67,7 +89,19 @@ export function normalise(s = {}) {
     fibRatios: Array.isArray(o.fibRatios) ? [...new Set(o.fibRatios.map(Number).filter((x) => Number.isFinite(x) && x >= 0 && x <= 10))].sort((a, b) => a - b) : START.fibRatios,
     vpBins: int(o.vpBins, 4, 200) ?? START.vpBins,
     vpValueArea: Math.min(99, Math.max(1, +o.vpValueArea || START.vpValueArea)),
+    colors: normColors(o.colors),
   };
+}
+
+function normColors(c) {
+  const out = { ...START.colors };
+  if (c && typeof c === "object") {
+    for (const k of Object.keys(START.colors)) {
+      if (k === "aAcc") { if (Array.isArray(c.aAcc)) out.aAcc = START.colors.aAcc.map((d, i) => (HEX.test(c.aAcc[i]) ? c.aAcc[i] : d)); }
+      else if (HEX.test(c[k])) out[k] = c[k];
+    }
+  }
+  return out;
 }
 
 /** [settings, patch] — patch merges into what is stored. */

@@ -8,6 +8,31 @@ import { evalFormula, isCondition } from "../../engine/formula.js";
 import { computeProjection } from "../../engine/projection.js";
 import { volumeProfile, valueArea } from "../../engine/chartTools.js";
 import { addSessions } from "../../engine/projection.js";
+import { STUDIES } from "../../engine/studies.js";
+
+// A study's settings as typed by the viewer -> usable numbers. Anything blank, not a number or out of
+// range falls back to the study's starting value or is held to a range, so a typo can never freeze the
+// page (a period of 1,000,000 once did) or draw nothing without saying why.
+const START_PARAMS = Object.fromEntries(STUDIES.map((x) => [x.key, x.params || {}]));
+const NOT_PERIOD = /^(hi|lo|level|bulge|trigger|scale|constant|pct|step|max|m|mult|w\d|wShort|wMid|wLong)$/;
+export function cleanParams(key, given, bars) {
+  const d = START_PARAMS[key] || {}, g = given && typeof given === "object" ? given : {}, out = { ...d };
+  const maxN = Math.max(2, Math.min(2000, bars || 2000));
+  for (const [k, v] of Object.entries(g)) {
+    const dv = d[k];
+    if (typeof v === "string" && (typeof dv === "string" || dv == null || k === "source")) { if (v) out[k] = v; continue; }
+    if (v === "" || v == null) continue;
+    const x = +v;
+    if (!Number.isFinite(x)) continue;
+    if (typeof dv !== "number") { out[k] = x; continue; }
+    const isMult = NOT_PERIOD.test(k) || ((key === "bb" || key === "bbpct") && k === "k");
+    if (k === "centered") out[k] = x ? 1 : 0;
+    else if (/shift$/i.test(k)) out[k] = Math.min(500, Math.max(0, Math.round(x)));
+    else if (isMult) out[k] = Math.min(1e12, Math.max(-1e12, x));
+    else out[k] = Math.min(maxN, Math.max(1, Math.round(x)));
+  }
+  return out;
+}
 
 const num = (v) => typeof v === "number" && Number.isFinite(v);
 const L = (time, vals, n = time.length) => { const out = []; for (let i = 0; i < n; i++) if (num(vals[i])) out.push({ time: time[i], value: vals[i] }); return out; };
@@ -22,10 +47,13 @@ export function indexAt(time, t) {
 
 export function studyOverlays(b, studies = {}, tf = "D") {
   const out = { price: [], panes: [], notes: [], levels: [] };
+  if (!b?.time?.length) return out;
   const t = b.time, { high: h, low: l, close: c, open: o } = b, v = b.volume || c.map(() => 0);
   const colored = (vals, dir, k) => { const up = studies[k]?.upColor || "#16a34a", dn = studies[k]?.downColor || "#dc2626"; const d = []; for (let i = 0; i < t.length; i++) if (num(vals[i])) d.push({ time: t[i], value: vals[i], color: dir[i] > 0 ? up : dn }); return d; };
-  const on = (k) => studies[k]?.on;
-  const P = (k) => studies[k]?.params || {};
+  let histKey = null; // the study being drawn, so its histograms take its up / down colours
+  const on = (k) => { const r = studies[k]?.on; if (r) histKey = k; return r; };
+  const cleaned = {};
+  const P = (k) => (cleaned[k] ??= cleanParams(k, studies[k]?.params, t.length));
   const col = (k, d) => studies[k]?.color || d;
   // every study's Style: line width for all its lines, colour for its main line (first line it draws)
   const style = (k, p0, q0) => {
@@ -55,7 +83,7 @@ export function studyOverlays(b, studies = {}, tf = "D") {
   } style("supertrend", p0, q0); }
   if (on("pivots")) { const p0 = out.price.length, q0 = out.panes.length; {
     const pv = pivots(h, l, c, o, P("pivots").kind || "standard").at(-1);
-    if (pv) out.levels.push(...Object.entries(pv).map(([k, val]) => ({ price: val, color: k === "P" ? "#e5e7eb" : k.startsWith("R") ? "#f87171" : "#4ade80", title: `${k} ${val.toFixed(2)}` })));
+    if (pv) out.levels.push(...Object.entries(pv).map(([k, val]) => ({ price: val, color: k === "P" ? col("pivots", "#e5e7eb") : k.startsWith("R") ? studies.pivots?.downColor || "#f87171" : studies.pivots?.upColor || "#4ade80", title: `${k} ${val.toFixed(2)}` })));
     out.notes.push(`Pivot points (${P("pivots").kind || "standard"}) for the next candle, from the last completed one.`);
   } style("pivots", p0, q0); }
   if (on("vwap")) { const p0 = out.price.length, q0 = out.panes.length; { const w = vwap(t, h, l, c, v, { session: P("vwap").session && P("vwap").session !== "Auto" ? P("vwap").session : tf === "D" ? "M" : "Y" }); out.price.push(line(L(t, w.vwap), col("vwap", "#f59e0b"), { title: "VWAP", lineWidth: 2 })); } style("vwap", p0, q0); }
@@ -70,9 +98,10 @@ export function studyOverlays(b, studies = {}, tf = "D") {
     if (s0) s0.options = { ...s0.options, color: c0 };
     out.panes.push({ key, title, specs });
   };
-  const lv = (k, hi, lo) => [{ price: N(k, "hi", hi), color: "#dc2626" }, { price: N(k, "lo", lo), color: "#16a34a" }];
+  const UPC = (k) => studies[k]?.upColor || "#16a34a", DNC = (k) => studies[k]?.downColor || "#dc2626";
+  const lv = (k, hi, lo) => [{ price: N(k, "hi", hi), color: DNC(k) }, { price: N(k, "lo", lo), color: UPC(k) }];
   const zero = [{ price: 0, color: "#6b7280" }];
-  const hist = (vals, title) => ({ type: "histogram", data: L(t, vals).map((x) => ({ ...x, color: x.value >= 0 ? "#16a34a" : "#dc2626" })), options: { title } });
+  const hist = (vals, title, k = histKey) => ({ type: "histogram", data: L(t, vals).map((x) => ({ ...x, color: x.value >= 0 ? UPC(k) : DNC(k) })), options: { title } });
   const main = (vals, color, title, priceLines) => ({ ...line(L(t, vals), color, { title, lineWidth: 2 }), ...(priceLines ? { priceLines } : {}) });
   if (on("bbpct")) { const p0 = out.price.length, q0 = out.panes.length; { const x = bollinger(S("bbpct"), N("bbpct", "n", 20), N("bbpct", "k", 2)); pane("bbpct", "Bollinger %B", [main(x.pctB, "#a78bfa", "%B", [{ price: 1, color: "#dc2626" }, { price: 0, color: "#16a34a" }])]); pane("bbw", "Bollinger bandwidth %", [main(x.width, "#a78bfa", "Width %")]); } style("bbpct", p0, q0); }
   if (on("cci")) { const p0 = out.price.length, q0 = out.panes.length; pane("cci", "CCI", [main(cci(h, l, c, N("cci", "n", 20), N("cci", "constant", 0.015)), "#38bdf8", "CCI", lv("cci", 100, -100))]); style("cci", p0, q0); }
@@ -104,9 +133,9 @@ export function studyOverlays(b, studies = {}, tf = "D") {
   if (on("roc")) { const p0 = out.price.length, q0 = out.panes.length; pane("roc", "ROC", [{ ...line(L(t, roc(S("roc"), +P("roc").n || 12)), "#22d3ee", { title: "ROC %", lineWidth: 2 }), priceLines: [{ price: 0, color: "#6b7280" }] }]); style("roc", p0, q0); }
   if (on("kst")) { const p0 = out.price.length, q0 = out.panes.length; { const k = kst(S("kst"), P("kst")); pane("kst", "KST", [{ ...line(L(t, k.kst), "#22d3ee", { title: "KST", lineWidth: 2 }), priceLines: [{ price: 0, color: "#6b7280" }] }, line(L(t, k.signal), "#f59e0b", { title: "Signal" })]); } style("kst", p0, q0); }
   if (on("obv")) { const p0 = out.price.length, q0 = out.panes.length; pane("obv", "OBV", [line(L(t, obv(c, v)), "#38bdf8", { title: "OBV", lineWidth: 2, priceFormat: { type: "volume" } })]); style("obv", p0, q0); }
-  if (on("cmf")) { const p0 = out.price.length, q0 = out.panes.length; pane("cmf", "CMF", [{ type: "histogram", data: L(t, cmf(h, l, c, v, +P("cmf").n || 20)).map((x) => ({ ...x, color: x.value >= 0 ? "#16a34a" : "#dc2626" })), options: { title: "CMF" } }]); style("cmf", p0, q0); }
+  if (on("cmf")) { const p0 = out.price.length, q0 = out.panes.length; pane("cmf", "CMF", [{ type: "histogram", data: L(t, cmf(h, l, c, v, +P("cmf").n || 20)).map((x) => ({ ...x, color: x.value >= 0 ? UPC("cmf") : DNC("cmf") })), options: { title: "CMF" } }]); style("cmf", p0, q0); }
   if (on("ad")) { const p0 = out.price.length, q0 = out.panes.length; pane("ad", "A/D line", [line(L(t, adLine(h, l, c, v)), "#f59e0b", { title: "A/D", lineWidth: 2, priceFormat: { type: "volume" } })]); style("ad", p0, q0); }
-  if (on("volosc")) { const p0 = out.price.length, q0 = out.panes.length; pane("volosc", "Volume oscillator", [{ type: "histogram", data: L(t, volumeOscillator(v, +P("volosc").fast || 5, +P("volosc").slow || 10)).map((x) => ({ ...x, color: x.value >= 0 ? "#16a34a" : "#dc2626" })), options: { title: "Vol osc %" } }]); style("volosc", p0, q0); }
+  if (on("volosc")) { const p0 = out.price.length, q0 = out.panes.length; pane("volosc", "Volume oscillator", [{ type: "histogram", data: L(t, volumeOscillator(v, +P("volosc").fast || 5, +P("volosc").slow || 10)).map((x) => ({ ...x, color: x.value >= 0 ? UPC("volosc") : DNC("volosc") })), options: { title: "Vol osc %" } }]); style("volosc", p0, q0); }
   if (on("envelope")) { const p0 = out.price.length, q0 = out.panes.length; { const x = envelope(S("envelope"), N("envelope", "n", 20), N("envelope", "pct", 2.5), P("envelope").kind || "SMA"); out.price.push(line(L(t, x.upper), col("envelope", "#fb923c"), { title: "Env upper" }), line(L(t, x.mid), col("envelope", "#fb923c"), { title: "Env mid", lineStyle: 2 }), line(L(t, x.lower), col("envelope", "#fb923c"), { title: "Env lower" })); } style("envelope", p0, q0); }
   if (on("linreg")) { const p0 = out.price.length, q0 = out.panes.length; { const x = linearRegression(S("linreg"), N("linreg", "n", 50)); out.price.push(line(L(t, x.value), col("linreg", "#e879f9"), { title: "Lin reg", lineWidth: 2 })); } style("linreg", p0, q0); }
   if (on("stochRsi")) { const p0 = out.price.length, q0 = out.panes.length; { const x = stochRsi(S("stochRsi"), N("stochRsi", "rsi", 14), N("stochRsi", "n", 14), N("stochRsi", "k", 3), N("stochRsi", "d", 3)); pane("stochRsi", "Stochastic RSI", [main(x.k, "#38bdf8", "%K", lv("stochRsi", 80, 20)), line(L(t, x.d), "#f59e0b", { title: "%D" })]); } style("stochRsi", p0, q0); }

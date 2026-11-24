@@ -182,6 +182,9 @@ export function TvChart({ series, height = 300, sync, onReady, logScale = false,
   }, [sync]);
 
   useEffect(() => { chartRef.current?.applyOptions({ height }); }, [height]);
+  // a theme changed after the chart was made (e.g. Settings -> Colours on the black screens)
+  const themeKey = theme ? JSON.stringify(theme, (k, v) => (typeof v === "function" ? undefined : v)) : "";
+  useEffect(() => { if (theme) try { chartRef.current?.applyOptions(withTheme(themeOptions(), theme)); } catch { /* removed */ } }, [themeKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const chart = chartRef.current;
