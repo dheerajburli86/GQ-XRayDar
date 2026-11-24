@@ -1,6 +1,6 @@
 // Connection to the TA backend server (VITE_TA_SERVER_URL) and the login.
 //
-//   Login     Supabase Auth on the heatmap project (Google or an email link).
+//   Login     Supabase Auth on the heatmap project (email link).
 //             Required whenever the app reads live data; the server checks the
 //             @gquants.com allow-list again on every call.
 //   Server    alerts on Telegram, tasks, the GQ agent, push notifications and

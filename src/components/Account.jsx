@@ -45,7 +45,6 @@ export function SignIn({ blocked, onSignOut, inline = false }) {
   const [sent, setSent] = useState(false);
   const [err, setErr] = useState(null);
   const redirectTo = window.location.origin + window.location.pathname;
-  const google = async () => { setErr(null); const { error } = await auth.signInWithOAuth({ provider: "google", options: { redirectTo, queryParams: { hd: ALLOWED_DOMAINS[0] } } }); if (error) setErr(error.message); };
   const link = async () => {
     setErr(null);
     if (!emailAllowed(email)) { setErr(`Use your @${ALLOWED_DOMAINS.join(" / @")} email.`); return; }
@@ -65,9 +64,8 @@ export function SignIn({ blocked, onSignOut, inline = false }) {
           <div className="note">Check {email}: we sent you a sign-in link. Open it on this device.</div>
         ) : (
           <>
-            <button className="btn primary" onClick={google}>Sign in with Google</button>
-            <div className="small muted" style={{ textAlign: "center" }}>or get a sign-in link by email</div>
-            <div className="row"><input style={{ flex: 1 }} type="email" placeholder={`you@${ALLOWED_DOMAINS[0]}`} value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && link()} /><button className="btn" onClick={link}>Send link</button></div>
+            <div className="small muted">Get a sign-in link by email</div>
+            <div className="row"><input style={{ flex: 1 }} type="email" placeholder={`you@${ALLOWED_DOMAINS[0]}`} value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && link()} /><button className="btn primary" onClick={link}>Send link</button></div>
           </>
         )}
         {err && <div className="note warn">{err}</div>}
