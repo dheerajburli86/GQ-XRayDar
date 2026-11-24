@@ -99,6 +99,24 @@ function Rich({ text }) {
   return out;
 }
 
+// What the agent is doing while a question is open: steps that match how it works, and a seconds counter,
+// so a 10-40 s answer reads as "busy" rather than "broken".
+const STEPS = ["Reading your question", "Looking up the data", "Checking the numbers", "Writing the answer"];
+function Working({ since, agent }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(t); }, []);
+  const secs = Math.max(0, Math.floor((now - Date.parse(since)) / 1000));
+  const step = agent ? STEPS[Math.min(STEPS.length - 1, Math.floor(secs / 5))] : "Looking up the stored data";
+  return (
+    <div className="msg bot agent-working" role="status" aria-live="polite">
+      <span className="agent-dots"><i /><i /><i /></span>
+      <span>{step}…</span>
+      <span className="small muted" style={{ marginLeft: "auto" }}>{secs}s</span>
+      {secs >= 20 && <div className="small muted" style={{ flexBasis: "100%" }}>Bigger questions can take up to a minute: the agent is reading the data and checking it.</div>}
+    </div>
+  );
+}
+
 export function AgentPanel() {
   const d = useData();
   const acct = useAccount();
@@ -116,6 +134,10 @@ export function AgentPanel() {
     if (!text.trim() || busy) return;
     setBusy(true); setQ("");
     const entry = { q: text, at: new Date().toISOString(), ctx: ctx?.symbol || null };
+    // the question shows at once, with a "working on it" line, so nobody thinks the panel swallowed it
+    const pendingId = `${Date.now()}-${Math.random()}`;
+    entry.id = pendingId;
+    setHist((h) => [...(fresh ? [] : h).slice(-40), { ...entry, pending: true }]);
     try {
       const local = await chartAction(text, ctx || pageContext, d).catch((e) => [{ kind: "text", text: `Could not do that: ${e.message}` }]);
       // screens ("US stocks with market cap above $10B and technical score above 60") and "explain <ticker>" are
@@ -131,13 +153,13 @@ export function AgentPanel() {
         const r = await answer(text, d);
         entry.blocks = r.blocks; entry.source = "built-in";
       } else if (viaAgent) {
-        const history = (fresh ? [] : hist).slice(-5).flatMap((h) => [{ role: "user", content: h.q }, { role: "assistant", content: h.text || (h.blocks || []).map((b) => b.text || (b.items || []).join("; ")).join("\n") }]);
+        const history = (fresh ? [] : hist).filter((h) => !h.pending).slice(-5).flatMap((h) => [{ role: "user", content: h.q }, { role: "assistant", content: h.text || (h.blocks || []).map((b) => b.text || (b.items || []).join("; ")).join("\n") }]);
         const r = await api("POST", "/api/agent/chat", { message: text, history, context: ctx || pageContext });
         entry.source = r.source; entry.notice = r.notice;
         if (r.answer) entry.text = r.answer; else entry.blocks = r.blocks;
       }
     } catch (e) { entry.blocks = [{ kind: "text", text: `Could not answer: ${e.message}` }]; }
-    setHist((h) => [...(fresh ? [] : h).slice(-40), entry]);
+    setHist((h) => h.map((m) => (m.id === pendingId ? entry : m)));
     setBusy(false);
   };
 
@@ -169,15 +191,14 @@ export function AgentPanel() {
         {hist.map((m, i) => (
           <div key={i} className="stack" style={{ gap: 4 }}>
             <div className="msg user">{m.q}{m.ctx ? <span className="small muted"> · {m.ctx}</span> : null}</div>
-            <div className="msg bot">{m.notice && <div className="small muted">{m.notice}</div>}{m.text ? <Rich text={m.text} /> : <Blocks blocks={m.blocks || []} />}</div>
+            {m.pending ? <Working since={m.at} agent={viaAgent} /> : <div className="msg bot">{m.notice && <div className="small muted">{m.notice}</div>}{m.text ? <Rich text={m.text} /> : <Blocks blocks={m.blocks || []} />}</div>}
           </div>
         ))}
-        {busy && <div className="msg bot muted">Thinking…</div>}
         <div ref={endRef} />
       </div>
       <div className="row">
-        <input style={{ flex: 1 }} value={q} placeholder="Ask…" onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ask(q)} disabled={busy} />
-        <button className="btn primary" onClick={() => ask(q)} disabled={busy}>Ask</button>
+        <input style={{ flex: 1 }} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ask(q)} disabled={busy} placeholder={busy ? "Working on your question…" : "Ask…"} />
+        <button className="btn primary" onClick={() => ask(q)} disabled={busy}>{busy ? "…" : "Ask"}</button>
       </div>
     </aside>
   );

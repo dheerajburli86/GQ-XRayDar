@@ -304,3 +304,12 @@ textarea.notes { width: 100%; min-height: 70px; }
   .topbar .theme-seg { flex: none; }
   .start-show { display: none !important; }
 }
+
+/* GQ Agent: "working on it" line shown under the question until the answer arrives */
+.agent-working { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--text); }
+.agent-dots { display: inline-flex; gap: 3px; }
+.agent-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--gq, #16a34a); opacity: .3; animation: agentDot 1.2s infinite ease-in-out; }
+.agent-dots i:nth-child(2) { animation-delay: .2s; }
+.agent-dots i:nth-child(3) { animation-delay: .4s; }
+@keyframes agentDot { 0%, 80%, 100% { opacity: .3; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .agent-dots i { animation: none; opacity: .8; } }
