@@ -55,11 +55,12 @@ export async function answer(text, d) {
     // sort: what was asked; otherwise the first numeric condition asked about (largest first), else the AI setup score
     const sf = cmd.sort?.field || cmd.conditions.find((c) => FIELD[c.field] && ["num", "pct", "money"].includes(FIELD[c.field].type))?.field || "score";
     const val = (r, f) => { const v = FIELD[f]?.get(r); return Number.isFinite(v) ? v : null; };
-    rows = [...rows].sort((a, b) => (val(b, sf) ?? -1e18) - (val(a, sf) ?? -1e18));
-    if (cmd.sort?.dir === "asc") rows.reverse();
+    // rows without a value always go last, in either direction (an empty cap is not "the smallest")
+    const sign = cmd.sort?.dir === "asc" ? -1 : 1;
+    rows = [...rows].sort((a, b) => { const x = val(a, sf), y = val(b, sf); if (x == null || y == null) return (x == null) - (y == null); return sign * (y - x); });
     const lim = cmd.limit || 25;
     const noun = cmd.scope.assetClass === "ETF" ? "ETFs" : cmd.scope.assetClass === "Stock" ? "stocks" : "instruments";
-    say(`${rows.length} ${noun} match: ${cmd.understood.join(" · ") || "no filters"}. Data as of ${d.info.asOf}.${rows.length > lim ? ` Showing the top ${lim}, by ${FIELD[sf]?.label || sf}:` : ""}`);
+    say(`${rows.length} ${noun} match: ${cmd.understood.join(" · ") || "no filters"}. Data as of ${d.info.asOf}.${rows.length > lim ? ` Showing ${cmd.sort?.dir === "asc" ? "the lowest" : "the top"} ${lim}, by ${FIELD[sf]?.label || sf}:` : ""}`);
     if (!rows.length) say("Nothing passes every condition. Loosen one of them (for example a lower score or a smaller market cap) and ask again.");
     // every value the question asked about, per row, so the answer can be checked at a glance
     const shownF = [...new Set([...cmd.conditions.map((c) => c.field), sf])].filter((f) => FIELD[f]).slice(0, 5);

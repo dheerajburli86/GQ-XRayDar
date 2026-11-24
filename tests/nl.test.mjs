@@ -46,3 +46,16 @@ test("owner's screen question with typos: no ticker picked from a number, every 
   const r = parseCommand("US stocks mcap > 5bn with 3m return above 20%", { securities: [], countries: ["United States"] });
   assert.deepEqual(r.conditions, [{ field: "capUsd", op: ">", value: 5e9 }, { field: "ret3M", op: ">", value: 20 }]);
 });
+
+test("ranking by size: 'by / based on market cap', 'biggest', 'largest' sort by cap, not the AI score", () => {
+  const p = (q) => parseCommand(q, { securities: [], countries: ["United States", "Japan"] });
+  for (const q of ["list down the top 5 US stocks based on market cap", "What are the 5 biggest US stocks by market cap?", "largest 5 stocks in the United States"]) {
+    const r = p(q);
+    assert.deepEqual(r.sort, { field: "capUsd", dir: "desc" }, q);
+    assert.equal(r.limit, 5, q);
+    assert.equal(r.scope.country, "United States", q);
+  }
+  assert.deepEqual(p("smallest US stocks by market cap").sort, { field: "capUsd", dir: "asc" });
+  assert.deepEqual(p("top 10 US stocks by 1 month return").sort, { field: "ret1M", dir: "desc" });
+  assert.equal(p("top 10 US stocks").sort.field, "score");
+});

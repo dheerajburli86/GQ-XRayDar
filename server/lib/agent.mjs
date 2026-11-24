@@ -10,7 +10,7 @@ export function createAgentProxy({ cfg, data, fetchImpl = fetch, log = console.l
     const r = await fetchImpl(`${cfg.agentUrl}/api/chat`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-ta-secret": cfg.agentSecret },
-      body: JSON.stringify({ message, history: (history || []).slice(-10), context, user: { email: user.email, name: user.name, telegramUserId: user.telegramUserId || null } }),
+      body: JSON.stringify({ message, history: (history || []).slice(-10), context, user: user.guest ? { guest: true, guestId: user.guestId } : { email: user.email, name: user.name, telegramUserId: user.telegramUserId || null } }),
       signal: AbortSignal.timeout(170_000),
     });
     const j = await r.json().catch(() => ({}));

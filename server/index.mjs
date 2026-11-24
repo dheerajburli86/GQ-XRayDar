@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 // GQ Technical Analysis server (Railway, ONE replica is enough; two are safe).
 //
 //   Web app      /api/*  with a Supabase login (gquants.com allow-list)
@@ -330,7 +331,9 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
   r.post("/api/agent/chat", async (req) => {
     // No login needed when agentPublic is on and no token was sent; a token that IS sent must still be valid.
     const guest = cfg.agentPublic && !req.headers.authorization;
-    const u = guest ? { id: null, email: "guest", name: "Guest", telegramUserId: null } : await auth.web(req);
+    // A guest is identified to the agent by a hash of their IP (own rate limit and budget there, nothing stored here).
+    const ip = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
+    const u = guest ? { id: null, guest: true, guestId: crypto.createHash("sha256").update(`${ip}|${cfg.agentSecret}`).digest("hex").slice(0, 24), email: null, name: "Guest", telegramUserId: null } : await auth.web(req);
     const b = await readJson(req, 200_000);
     if (!b.message) throw new HttpError(400, "message required");
     const t0 = Date.now();

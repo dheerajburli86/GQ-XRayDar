@@ -194,12 +194,16 @@ export function parseCommand(text, ctx = {}) {
   for (const [re, mk, label] of SIGNALS) { if (re.test(rest)) { out.conditions.push(...mk(tf)); understood.push(label); rest = rest.replace(re, " "); } }
 
   // ranking
-  const top = t.match(/ (top|best|first) (\d+) /);
-  if (top) { out.limit = +top[2]; understood.push(`limit: ${out.limit}`); }
+  const top = t.match(/ (top|best|first|biggest|largest|smallest|bottom|last) (\d+) /) || t.match(/ (\d+) (biggest|largest|smallest|top|best) /);
+  if (top) { out.limit = +(/^\d+$/.test(top[1]) ? top[1] : top[2]); understood.push(`limit: ${out.limit}`); }
+  // "by / based on market cap", "biggest", "largest": rank by size, not by the AI score
+  const bySize = /(by|on|based on|in terms of|ranked by|sorted by|order by) (market cap|marketcap|mcap|market capitali[sz]ation|size|cap) |\b(biggest|largest|most valuable|mega)\b/.test(t);
+  const smallFirst = /\b(smallest|tiniest)\b/.test(t);
   if (/strongest|best|leaders|leading|top/.test(t)) out.sort = { field: out.horizon ? `ret${out.horizon}` : out.conditions.some((c) => c.field.startsWith("rsc")) ? "rscChg_country_3M" : "score", dir: "desc" };
   if (/weakest|worst|laggards|lagging/.test(t)) out.sort = { field: out.horizon ? `ret${out.horizon}` : "score", dir: "asc" };
   if (/gainers|best perform|top perform/.test(t)) out.sort = { field: `ret${out.horizon || "1M"}`, dir: "desc" };
   if (/losers|worst perform/.test(t)) out.sort = { field: `ret${out.horizon || "1M"}`, dir: "asc" };
+  if (bySize || smallFirst) out.sort = { field: "capUsd", dir: smallFirst ? "asc" : "desc" };
   if (out.sort) understood.push(`sorted by ${out.sort.field} ${out.sort.dir === "desc" ? "high to low" : "low to high"}`);
 
   // intent
