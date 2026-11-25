@@ -7,6 +7,8 @@ import { CAPS } from "../../engine/indexEngine.js";
 import { ANALYST_TFS, normaliseTf, tfLabel } from "../../engine/calendar.js";
 import { CATEGORIES, CATEGORY_LABEL, searchInstruments, useExtras } from "../lib/instruments.js";
 import { usePersistent } from "../lib/storage.js";
+import { capless, effectiveScope } from "../lib/scope.js";
+export { capless, effectiveScope };
 
 /** Table column from a field key. */
 export function fieldColumn(key, opts = {}) {
@@ -41,11 +43,32 @@ export function ScopeFilter({ scope, onChange, show = ["region", "country", "sec
     </div>
   );
 }
-export function applyScope(rows, scope) {
+export function applyScope(rows, scope0, market) {
+  const scope = effectiveScope(scope0, market);
   return rows.filter((r) => (!scope.region || (scope.region === "India" ? r.sec.country === "India" : r.sec.region === scope.region)) && (!scope.classification || r.sec.classification === scope.classification)
     && (!scope.country || r.sec.country === scope.country) && (!scope.sector || r.sec.sector === scope.sector)
     && (!scope.industryGroup || r.sec.industryGroup === scope.industryGroup) && (!scope.cap || r.sec.capSegment === scope.cap)
     && (!scope.assetClass || (r.sec.assetClass || "Stock") === scope.assetClass));
+}
+
+/** Plain-text line of the filters in force, why some do not apply, and a way out when nothing is in scope.
+ *  Read by people and by agents driving the page, so a filter left over from an earlier question is visible. */
+export function ScopeNote({ scope = {}, market, extra = [], count, onClear }) {
+  const parts = [market && market !== "all" ? `Market: ${market}` : null, scope.region && `Region: ${scope.region}`, scope.classification && `Class: ${scope.classification}`,
+    scope.country && `Country: ${scope.country}`, scope.sector && `Sector: ${scope.sector}`, scope.industryGroup && `Industry group: ${scope.industryGroup}`,
+    scope.cap && `Size: ${scope.cap}`, scope.assetClass && `Type: ${scope.assetClass}`, ...extra].filter(Boolean);
+  const dropped = scope.cap && capless(scope, market);
+  const leavesIndia = scope.cap && !dropped && (!market || market === "all");
+  const removable = Object.keys(scope).some((k) => k !== "assetClass" && scope[k]) || extra.length > 0;
+  return (
+    <div className="small" style={{ marginTop: 4 }}>
+      <span className="muted">Filters in force: {parts.length ? parts.join(" · ") : "none"}.</span>
+      {dropped && <span className="neg"> Size filter not applied: India has no market cap in XRayDar.</span>}
+      {leavesIndia && <span className="muted"> A size filter leaves out India stocks (no market cap).</span>}
+      {count === 0 && <b className="neg"> Nothing in scope: a filter removes every row.</b>}
+      {onClear && removable && <> <button className="btn sm" onClick={onClear} title="Remove sector, size, region, country and watchlist filters">Clear filters</button></>}
+    </div>
+  );
 }
 
 /** Search box over securities, indices and the chart-only extras, with a country / category filter.
