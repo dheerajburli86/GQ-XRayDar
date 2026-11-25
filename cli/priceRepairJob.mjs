@@ -10,26 +10,39 @@ const RECHECK_DAYS = 7;
 
 export async function runPriceRepair(pool, { fmpKey = process.env.FMP_API_KEY, log = console.log, fetchImpl = fetch, rps = 3, limit = 400 } = {}) {
   if (!fmpKey) return { skipped: "no FMP_API_KEY" };
-  // suspects: active non-India instruments with a bar far from their latest close, not checked in the last week
-  const { rows: sus } = await pool.query(`
-    with last as (
-      select r.instrument_id id, r.price_native lp from returns_latest r join instruments i on i.id = r.instrument_id
-      where i.is_active and r.price_native > 0 and i.universe not like 'india%'),
-    bad as (
-      select p.instrument_id::text id, min(p.date)::text first_bad, max(p.date)::text last_bad,
+  // never compete with the engine for price_history: both scan it, and one run of each at once hit the statement timeout (2026-11-25)
+  const { rows: busy } = await pool.query(`select 1 from tas_calc_run where status = 'running' and started > now() - interval '8 hours' limit 1`).catch(() => ({ rows: [] }));
+  if (busy.length) return { skipped: "engine run in progress" };
+  // suspects: active non-India instruments with a bar far from their latest close, not checked in the last week.
+  // Read in slices of instruments (index range scans) so no single statement runs long.
+  const { rows: all } = await pool.query(`select r.instrument_id::text id, r.price_native::float8 lp from returns_latest r join instruments i on i.id = r.instrument_id
+    where i.is_active and r.price_native > 0 and i.universe not like 'india%'`);
+  const found = [];
+  for (let k = 0; k < all.length && found.length < limit * 3; k += 300) {
+    const part = all.slice(k, k + 300);
+    const { rows } = await pool.query(`
+      select p.instrument_id::text id, min(p.date)::text first_bad, max(p.date)::text last_bad, l.lp::float8 latest,
              json_agg(json_build_object('date', p.date::text, 'close', p.close::float8) order by p.date) bars
-      from price_history p join last l on l.id = p.instrument_id
+      from price_history p join unnest($1::uuid[], $2::float8[]) as l(id, lp) on l.id = p.instrument_id
       where p.date > current_date - ${LOOKBACK_DAYS} and p.close > 0 and (p.close < l.lp / 50 or p.close > l.lp * 50)
-      group by 1)
-    select b.*, i.symbol, i.universe, l.lp::float8 latest,
-           coalesce(m.provider_symbol, case when i.universe like 'us_%' then i.symbol end) psym
-    from bad b join instruments i on i.id::text = b.id join last l on l.id::text = b.id
-    left join lateral (select provider_symbol from instrument_provider_symbols s where s.instrument_id::text = b.id and s.provider_symbol is not null
-                       order by (s.status in ('SUCCESS','VERIFIED')) desc limit 1) m on true
-    where not exists (select 1 from tas_price_repair t where t.instrument_id = b.id and t.checked_at > now() - interval '${RECHECK_DAYS} days'
-                        and t.date = b.last_bad::date)
-    order by jsonb_array_length(to_jsonb(b.bars)) desc
-    limit $1`, [limit]);
+      group by p.instrument_id, l.lp`, [part.map((x) => x.id), part.map((x) => x.lp)]);
+    found.push(...rows);
+  }
+  let sus = [];
+  if (found.length) {
+    const ids = found.map((x) => x.id);
+    const { rows: meta } = await pool.query(`
+      select i.id::text id, i.symbol, i.universe,
+             coalesce(m.provider_symbol, case when i.universe like 'us_%' then i.symbol end) psym,
+             exists (select 1 from tas_price_repair t where t.instrument_id = i.id::text and t.checked_at > now() - interval '${RECHECK_DAYS} days') rechecked
+      from instruments i
+      left join lateral (select provider_symbol from instrument_provider_symbols s where s.instrument_id::text = i.id::text and s.provider_symbol is not null
+                         order by (s.status in ('SUCCESS','VERIFIED')) desc limit 1) m on true
+      where i.id = any($1::uuid[])`, [ids]);
+    const mm = new Map(meta.map((x) => [x.id, x]));
+    sus = found.filter((f) => mm.has(f.id) && !mm.get(f.id).rechecked).map((f) => ({ ...f, ...mm.get(f.id) }))
+      .sort((x, y) => y.bars.length - x.bars.length).slice(0, limit);
+  }
   if (!sus.length) return { checked: 0 };
   let last = 0;
   const hist = async (sym, from, to) => {
