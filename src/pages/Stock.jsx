@@ -74,6 +74,7 @@ export default function Stock({ route }) {
         <a className="btn sm" href={href(`screens/RSIMMA/${id}`)}>RSIMMA</a><a className="btn sm" href={href(`screens/RSCMMA/${id}`)}>RSCMMA</a>
         <Select value="" options={Object.entries(wls).map(([k, v]) => ({ value: k, label: `${inList(k) ? "✓ " : ""}${v.name}` }))} onChange={(k) => k && setWls({ ...wls, [k]: { ...wls[k], ids: inList(k) ? wls[k].ids.filter((x) => x !== id) : [...wls[k].ids, id] } })} allowEmpty="+ Watchlist" />
       </PageHead>
+      {sec.dormant && <div className="note warn">No trade in the last 5 sessions (exchange data). Figures are as of the last trade; this stock is not counted in house indices, breadth or back-tests until it trades again.</div>}
       {loading ? <Loading /> : !sn ? <div className="note">No stored analysis for this security (too little history, or not in the latest run).</div> : (
         <>
           <div className="grid g4">

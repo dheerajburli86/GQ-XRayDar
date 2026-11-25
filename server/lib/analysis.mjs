@@ -66,6 +66,49 @@ export function createAnalysis(data, cfg) {
     return { instrument: { id, symbol: sec.symbol, name: sec.name }, asOf: out.asOf, text: out.text, note: out.note, link: link(`chart/${id}`) };
   }
 
+  /** A link that opens one chart exactly as asked: Chart lab or an Analyst screen, period(s), comparison. */
+  const SCREENS = ["RSIMMA", "RSIACC", "RSCMMA", "RSCACC"];
+  async function pickOne(ref, country) {
+    const t = String(ref || "").trim();
+    if (/^i:./.test(t) || /^(CW|EW)\|/.test(t)) return { key: t.startsWith("i:") ? t : `i:${t}`, label: t.replace(/^i:/, "") };
+    let c = await data.resolve(t, 20);
+    if (country) { const want = String(canonicalCountry(country) || country).toLowerCase(); const f = c.filter((x) => String(x.country || "").toLowerCase() === want); if (f.length) c = f; }
+    if (!c.length) return { error: `no instrument matches "${ref}"` };
+    const exact = c.filter((x) => x.symbol.toUpperCase() === t.toUpperCase());
+    const list = exact.length ? exact : c;
+    if (list.length > 1 && !(exact.length === 1)) {
+      const syms = new Set(list.map((x) => `${x.symbol}|${x.country}`));
+      if (syms.size > 1) return { ambiguous: true, candidates: list.slice(0, 8).map((x) => ({ symbol: x.symbol, name: x.name, country: x.country, assetClass: x.assetClass })) };
+    }
+    const s = list[0];
+    return { key: `s:${s.id}`, id: s.id, label: `${s.symbol} · ${s.name}`, country: s.country };
+  }
+  async function chartLink({ ref, screen = null, tf = null, tf2 = null, bench = null, country = null } = {}) {
+    if (!cfg.appUrl) return { error: "APP_URL is not set on the TA server" };
+    const a = await pickOne(ref, country);
+    if (a.error || a.ambiguous) return a;
+    const sc = screen ? String(screen).toUpperCase().replace(/[^A-Z]/g, "") : null;
+    const okTf = (x) => (x && /^[0-9]*[DWMQHNY]$/i.test(String(x).trim()) ? String(x).trim().toUpperCase() : null);
+    if (sc && SCREENS.includes(sc)) {
+      const q = new URLSearchParams();
+      if (okTf(tf)) q.set("l", okTf(tf));
+      if (okTf(tf2)) q.set("r", okTf(tf2));
+      let benchLabel = null;
+      if (bench && sc.startsWith("RSC")) {
+        const b = await pickOne(bench, null);
+        if (b.error || b.ambiguous) return { benchmark: b };
+        q.set("bench", b.key.startsWith("i:") ? `idx:${b.key.slice(2)}` : b.id);
+        benchLabel = b.label;
+      }
+      const qs = q.toString();
+      return { url: link(`screens/${sc}/${encodeURIComponent(a.key)}${qs ? `?${qs}` : ""}`), instrument: a.label, screen: sc, periods: [okTf(tf) || "saved left period", okTf(tf2) || "saved right period"], comparison: benchLabel || (sc.startsWith("RSC") ? "default (BSE 500 for India, S&P 500 for the US)" : null) };
+    }
+    if (sc && sc !== "CHART" && sc !== "CHARTLAB" && sc !== "STOCK") return { error: `screen must be one of chart, stock, ${SCREENS.join(", ")}` };
+    if (!a.id) return { url: link(`screens/RSIMMA/${encodeURIComponent(a.key)}`), instrument: a.label, note: "house indices open on the RSIMMA screen" };
+    if (sc === "STOCK") return { url: link(`stock/${encodeURIComponent(a.id)}`), instrument: a.label };
+    return { url: link(`chart/${encodeURIComponent(a.id)}${okTf(tf) ? `?tf=${okTf(tf)}` : ""}`), instrument: a.label, period: okTf(tf) || "D" };
+  }
+
   async function compare(a, b) {
     const [x, y] = await Promise.all([stock(a), stock(b)]);
     if (x.error || x.ambiguous) return { left: x };
@@ -92,7 +135,7 @@ export function createAnalysis(data, cfg) {
     return {
       asOf: st.info.asOf, understood, conditions: conds, scope: sc, total: rows.length, sortedBy: sf,
       ...(rows.length ? {} : { hint: `nothing matched; countries are written like ${st.countries.slice(0, 6).join(", ")}; sectors: ${st.sectors.join(", ")}` }),
-      results: rows.slice(0, Math.min(lim || 25, 100)).map((r) => ({ id: r.id, symbol: r.sec.symbol, name: r.sec.name, country: r.sec.country, sector: r.sec.sector, [sf]: FIELD[sf]?.get(r) ?? null, ret3M: r.flat.ret3M, weeklyMma: r.flat.mmaW, score: r.flat.score, stage: r.flat.stage,
+      results: rows.slice(0, Math.min(lim || 25, 100)).map((r) => ({ id: r.id, chart: link(`chart/${r.id}`), symbol: r.sec.symbol, name: r.sec.name, country: r.sec.country, sector: r.sec.sector, [sf]: FIELD[sf]?.get(r) ?? null, ret3M: r.flat.ret3M, weeklyMma: r.flat.mmaW, score: r.flat.score, stage: r.flat.stage,
         ...Object.fromEntries((Array.isArray(columns) ? columns : []).slice(0, 20).filter((k) => FIELD[k]).map((k) => [k, FIELD[k].get(r) ?? null])),
         ...Object.fromEntries(conds.filter((c) => c.field && FIELD[c.field]).map((c) => [c.field, FIELD[c.field].get(r) ?? null])) })),
       link: query ? link(`screener?q=${encodeURIComponent(query)}`) : null,
@@ -127,5 +170,5 @@ export function createAnalysis(data, cfg) {
     return { asOf: st.info.asOf, question, rising: items.filter((x) => x.rising), notRising: items.filter((x) => !x.rising), missing: ids.length - rows.length, rule: "Rising = weekly MMA in bullish alignment, or price in a weekly uptrend and above its 50-day EMA" };
   }
 
-  return { stock, chartRead, compare, screen, market, review, fmtPct, fmtMoney };
+  return { stock, chartRead, chartLink, compare, screen, market, review, fmtPct, fmtMoney };
 }

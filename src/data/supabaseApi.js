@@ -101,7 +101,7 @@ export function createSupabaseApi(url, key) {
         countryCurrency: r.country_currency, sector: r.sector,
         // ETF type in the industry-group slot (Equity / Fixed income / Commodity / ...), also for rows stored before the engine did it
         industryGroup: r.asset_class === "ETF" && !ETF_TYPES_SET.has(r.industry_group) ? etfType({ name: r.name, category: r.industry_group }).type : r.industry_group, industry: r.industry, subIndustry: r.sub_industry ?? null, classSource: r.class_source,
-        capLocal: r.cap_local, capCurrency: r.cap_currency, capUsd: r.cap_usd, capUsdNow: r.cap_usd_now, turnoverUsd: r.turnover_usd ?? null, capSegment: r.cap_segment, assetClass: r.asset_class || "Stock", active: r.active,
+        capLocal: r.cap_local, capCurrency: r.cap_currency, capUsd: r.cap_usd, capUsdNow: r.cap_usd_now, turnoverUsd: r.turnover_usd ?? null, capSegment: r.cap_segment, assetClass: r.asset_class || "Stock", active: r.active, dormant: !!r.dormant,
       }));
     },
     async screenRows() { return (await all("tas_snapshot", "id,flat,rs_rank", undefined, "id")).map((r) => ({ id: r.id, flat: r.flat?.country === "India" ? Object.fromEntries(Object.entries(r.flat).map(([k, v]) => [k, /^cap/i.test(k) ? null : v])) : r.flat, rsRank: r.rs_rank })); },

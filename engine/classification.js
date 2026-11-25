@@ -45,14 +45,28 @@ export const FUND_UNIVERSES = { us_etfs: "ETF", india_etfs: "ETF", global_etfs: 
 export const ASSET_CLASSES = ["Stock", "ETF", "Index", "Commodity", "Crypto", "Currency"];
 const UNIVERSE_COUNTRY = { us_etfs: "United States", us_indices: "United States", india_etfs: "India", india_indices: "India", commodities: "United States", crypto_etfs: "United States" };
 
+// The heatmap's "no trade in 5 sessions" marker. Such a row is still a company: it is analysed (charts, screens,
+// the stock page) with a visible flag, but kept out of index construction, breadth and back-tests (owner, 2026-11-25:
+// Neogen and other India stocks were missing from XRayDar).
+export const DORMANT_MARKER = "NO_RECENT_TRADES";
+export const isDormantRow = (row) => String(row.sector ?? "").trim() === DORMANT_MARKER;
+
+// The instrument type of a stock row. A few India rows were added to the heatmap by hand without a type (Tata Motors
+// CV, Page Industries, NLC India, Neogen ...): in india_stocks a missing type is a stock, because the heatmap marks
+// non-companies there by sector, not by type. US "FUND" rows are REIT trusts with shares of beneficial interest.
+function stockType(row) {
+  const t = row.type == null || String(row.type).trim() === "" ? (row.universe === "india_stocks" ? "stock" : null) : row.type;
+  return row.universe === "us_stocks" && t === "FUND" ? "CS" : t;
+}
+
 export function isAnalysableRow(row) {
   if (FUND_UNIVERSES[row.universe]) return true;
-  return isEquityRow(row);
+  return isEquityRow(row) || (isDormantRow(row) && !!EQUITY_UNIVERSES[row.universe]?.has(stockType(row)));
 }
 
 export function isEquityRow(row) {
   const types = EQUITY_UNIVERSES[row.universe];
-  if (!types || !types.has(row.type)) return false;
+  if (!types || !types.has(stockType(row))) return false;
   return !NON_EQUITY_MARKERS.has(String(row.sector ?? "").trim());
 }
 
@@ -68,7 +82,8 @@ export function toSecurity(row, indiaMap = null) {
   if (universe === "india_stocks" && indiaMap) industry = indiaMap[row.symbol] ?? indiaMap[nseBaseSymbol(row.symbol)] ?? industry;
   const fund = universe === "us_etfs" && row.etf_category === "currency" ? "Currency" : FUND_UNIVERSES[universe] || null;
   // ETFs: the industry-group slot carries the ETF type (Equity / Fixed income / Commodity / Currency / Real estate ...)
-  const g = fund ? { sector: fund, industryGroup: fund === "ETF" ? etfType({ name: row.name, category: row.etf_category }).type : row.etf_category || fund, source: "asset_class" } : classifyGics({ symbol: row.symbol, industry, sector: row.sector, universe });
+  const dormant = !fund && isDormantRow(row);
+  const g = fund ? { sector: fund, industryGroup: fund === "ETF" ? etfType({ name: row.name, category: row.etf_category }).type : row.etf_category || fund, source: "asset_class" } : classifyGics({ symbol: row.symbol, industry, sector: dormant ? null : row.sector, universe });
   // owner's US workbook: sector / industry / sub-industry for US stocks and US-listed ADRs (replaces the GICS-derived labels where listed)
   let us = universe === "us_stocks" ? US_CLASS[row.symbol] || null : null;
   let usSource = us ? "us_workbook" : null;
@@ -111,6 +126,7 @@ export function toSecurity(row, indiaMap = null) {
     capUsd: !noCap && row.market_cap_usd != null ? Number(row.market_cap_usd) : null,
     active: row.is_active !== false,
     assetClass: fund || "Stock",
+    dormant,
   };
 }
 

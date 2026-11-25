@@ -170,10 +170,10 @@ export function pgSink(pool, { log = console.log, dryRun = false } = {}) {
         classification: s.classification, geo_assigned: s.geoAssigned, currency: s.currency, currency_major: s.currencyMajor, currency_divisor: s.currencyDivisor,
         country_currency: s.countryCurrency, sector: s.sector, industry_group: s.industryGroup, industry: s.industry, sub_industry: s.subIndustry ?? null, class_source: s.classSource,
         cap_local: s.capLocal, cap_currency: s.capCurrency, cap_usd: s.capUsd, cap_usd_now: extra.get(s.id)?.capUsdNow ?? null, turnover_usd: extra.get(s.id)?.turnoverUsd ?? null, shares_est: null,
-        cap_segment: s.capSegment, asset_class: s.assetClass || "Stock", active: s.active, run_id: runId,
+        cap_segment: s.capSegment, asset_class: s.assetClass || "Stock", active: s.active, dormant: !!s.dormant, run_id: runId,
       })), ["id"], ["id", "symbol", "name", "universe", "exchange", "isin", "country", "region", "classification", "geo_assigned", "currency", "currency_major",
         "currency_divisor", "country_currency", "sector", "industry_group", "industry", "sub_industry", "class_source", "cap_local", "cap_currency", "cap_usd", "cap_usd_now", "turnover_usd",
-        "shares_est", "cap_segment", "asset_class", "active", "run_id"]);
+        "shares_est", "cap_segment", "asset_class", "active", "dormant", "run_id"]);
     },
     async finish(run) {
       await flushIndices();

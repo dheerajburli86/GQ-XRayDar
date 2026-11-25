@@ -54,6 +54,12 @@ export default function StackedScreens({ route }) {
   const [tfs, setTfs] = usePersistent(`analyst.tf.${mode}`, null);
   const left = tfs?.left || "D", right = tfs?.right || "W";
   const setTf = (side, tf) => setTfs({ left, right, [side]: tf });
+  // a link may carry the periods (?l=D&r=W, sent by the GQ agent): they become this screen's saved pair
+  useEffect(() => {
+    const ok = (x) => (x && /^[0-9]*[DWMQHNY]$/i.test(x) ? x.toUpperCase() : null);
+    const l = ok(route.query.l), r = ok(route.query.r);
+    if ((l && l !== left) || (r && r !== right)) setTfs({ left: l || left, right: r || right });
+  }, [route.query.l, route.query.r, mode]); // eslint-disable-line react-hooks/exhaustive-deps
   // date range: From opens the window (and, when "candles from From" is on, starts the candle grid); To ends the data
   const [range, setRange] = usePersistent("analyst.range.v2", { from: "", to: "", anchor: false });
   const rg = { from: "", to: "", anchor: false, ...(range || {}) };

@@ -34,14 +34,14 @@ export function createData(pool, log = console.log) {
         after = rows[rows.length - 1].id;
       }
     };
-    const secs = await paged(`select id, symbol, name, universe, exchange, country, region, classification, currency, currency_major, currency_divisor, country_currency, sector, industry_group, industry, sub_industry, cap_segment, cap_usd_now, turnover_usd, active, asset_class from tas_security`, 5000);
+    const secs = await paged(`select id, symbol, name, universe, exchange, country, region, classification, currency, currency_major, currency_divisor, country_currency, sector, industry_group, industry, sub_industry, cap_segment, cap_usd_now, turnover_usd, active, dormant, asset_class from tas_security`, 5000);
     const snaps = await paged(`select id, flat, rs_rank from tas_snapshot`, 2000);
     const regimes = await pool.query(`select index_key, data from tas_regime`);
     const keys = run.stats?.screenKeys || SCREEN_KEYS;
     const sec = secs.rows.filter((r) => r.asset_class !== "Crypto").map((r) => ({
       id: r.id, symbol: r.symbol, name: r.name, universe: r.universe, exchange: r.exchange, country: r.country, region: r.region, classification: r.classification,
       currency: r.currency, currencyMajor: r.currency_major, currencyDivisor: r.currency_divisor, countryCurrency: r.country_currency, sector: r.sector,
-      industryGroup: r.industry_group, industry: r.industry, subIndustry: r.sub_industry ?? null, capSegment: r.cap_segment, capUsdNow: r.cap_usd_now, turnoverUsd: r.turnover_usd ?? null, active: r.active,
+      industryGroup: r.industry_group, industry: r.industry, subIndustry: r.sub_industry ?? null, capSegment: r.cap_segment, capUsdNow: r.cap_usd_now, turnoverUsd: r.turnover_usd ?? null, active: r.active, dormant: !!r.dormant,
       assetClass: r.asset_class || "Stock",
     }));
     const secById = new Map(sec.map((x) => [x.id, x]));

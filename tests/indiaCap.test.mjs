@@ -50,3 +50,19 @@ test("index eligibility: USD 1B minimum cap for developed markets, 200M for emer
   }
   assert.ok(checked > 0, "no memberships checked");
 });
+
+test("India rows without a type are stocks; dormant rows are analysed but flagged (2026-11-25, Neogen)", async () => {
+  const { isAnalysableRow, isEquityRow, toSecurity } = await import("../engine/classification.js");
+  const neogen = { id: "n", symbol: "NEOGEN", name: "NEOGEN CHEMICALS", universe: "india_stocks", type: null, sector: "Specialty Chemicals & Agrochemicals", is_active: true };
+  assert.equal(isEquityRow(neogen), true);
+  assert.equal(toSecurity(neogen).dormant, false);
+  const dormant = { ...neogen, id: "d", symbol: "SLEEPY", type: "stock", sector: "NO_RECENT_TRADES" };
+  assert.equal(isEquityRow(dormant), false);
+  assert.equal(isAnalysableRow(dormant), true);
+  const s = toSecurity(dormant);
+  assert.equal(s.dormant, true); assert.equal(s.assetClass, "Stock");
+  assert.notEqual(s.sector, "NO_RECENT_TRADES");
+  assert.equal(isAnalysableRow({ ...dormant, sector: "ETF" }), false);
+  assert.equal(isAnalysableRow({ id: "u", symbol: "X", universe: "global", type: null, sector: "Banks", is_active: true }), false, "a blank type outside India is not assumed to be a stock");
+  assert.equal(isEquityRow({ id: "r", symbol: "DHC", universe: "us_stocks", type: "FUND", sector: "Real Estate" }), true, "US REIT trusts");
+});

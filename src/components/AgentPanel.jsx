@@ -64,10 +64,15 @@ function Blocks({ blocks }) {
       : <a key={k} className="btn sm" href={href(b.to.split("?")[0], Object.fromEntries(new URLSearchParams(b.to.split("?")[1] || "")))}>{b.label} →</a>);
 }
 
+// a link into this app (the agent's chart links) opens here, in place; anything else opens a new tab
+const aTag = (url, label) => {
+  const own = typeof window !== "undefined" && url.startsWith(`${window.location.origin}/#/`);
+  return own ? `<a href="${url.slice(window.location.origin.length + 1)}">${label}</a>` : `<a href="${url}" target="_blank" rel="noreferrer">${label}</a>`;
+};
 const inline = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
   .replace(/`([^`]+)`/g, "<code>$1</code>")
-  .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>')
-  .replace(/(^|\s)(https?:\/\/[^\s<]+)/g, '$1<a href="$2" target="_blank" rel="noreferrer">$2</a>');
+  .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, (_m, label, url) => aTag(url, label))
+  .replace(/(^|\s)(https?:\/\/[^\s<]+)/g, (_m, pre, url) => pre + aTag(url, url));
 const cells = (line) => line.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
 
 function Rich({ text }) {

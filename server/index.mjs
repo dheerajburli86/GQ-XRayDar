@@ -316,6 +316,7 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
     return analysis.chartRead(iid, { tfs: (q(url, "tfs") || "D,W").split(",").filter((x) => /^[DWMQY]$/.test(x)), mode: q(url, "mode") });
   });
   r.get("/api/compare", async (req, _, url) => { await auth.any(req); return analysis.compare(q(url, "a"), q(url, "b")); });
+  r.get("/api/chart-link", async (req, _p, url) => { await auth.any(req); return analysis.chartLink(Object.fromEntries(url.searchParams)); });
   r.post("/api/screen", async (req) => { await auth.any(req); return analysis.screen(await readJson(req)); });
   r.get("/api/market", async (req, _, url) => { await auth.any(req); return analysis.market(q(url, "scope", "G")); });
   r.post("/api/review", async (req) => {

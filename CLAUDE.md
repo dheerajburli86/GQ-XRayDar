@@ -364,3 +364,16 @@ the xmcv project keeps only the data and the tas_* tables. Browser: `VITE_AUTH_S
 (admin API), create accounts and set temporary passwords. Without the service key the old SQL functions in xmcv are used (tests only).
 Accounts made before the move do not exist in the new project and must sign up again; tas_user rows keep their ids.
 The new project's Site URL / Redirect URLs are the XRayDar address (reset links). Never point XRayDar login at xmcv again.
+
+## India stocks missing from XRayDar; chart links from the GQ agent (added 2026-11-25, Alok Sir's items 2 and 5)
+
+- **Missing stocks**: 8 active india_stocks rows (Neogen, Tata Motors CV, Page Industries, NLC India, MTAR, Saregama, JM Financial,
+  Raymond Lifestyle) had a blank `instruments.type` and were dropped by `isEquityRow`. In india_stocks a blank type is now a stock
+  (`stockType`); US `FUND` rows (REIT trusts) count as stocks too. The heatmap's `NO_RECENT_TRADES` marker (~358 India rows) is
+  analysed with `tas_security.dormant = true`: shown with a warning on the stock page, excluded from indices, breadth and back-tests
+  (`isStock` in pipeline.js). Data health reports `not_analysed` for any active stock-universe row still dropped, and
+  `no_recent_trades` (info) for dormant ones. Rows appear after the next engine run.
+- **Chart links**: `GET /api/chart-link?ref=&screen=&tf=&tf2=&bench=&country=` (analysis.chartLink) returns a URL for Chart lab,
+  the stock page or RSIMMA / RSIACC / RSCMMA / RSCACC with periods (`?l=&r=` on the stacked screens) and a comparison. Screen rows
+  carry a `chart` link. The GQ agent's xraydar tool has `chart_link` and its prompt makes every chart answer end with a link.
+  Links into the app open in place in the agent panel (`aTag` in AgentPanel.jsx). Needs `APP_URL` on ta-server.

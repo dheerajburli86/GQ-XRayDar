@@ -14,7 +14,7 @@
 import { METHODOLOGY, methodologyHash } from "./methodology.js";
 import { quarterEndIndices, lowerBound, addDays } from "./calendar.js";
 import { buildFxTable, fxProvenance } from "./fx.js";
-import { toSecurity, isAnalysableRow } from "./classification.js";
+import { toSecurity, isAnalysableRow, NON_EQUITY_MARKERS, EQUITY_UNIVERSES } from "./classification.js";
 import { countryMeta, CAP_UNRELIABLE_COUNTRIES } from "./geography.js";
 import { IndexBuilder, indexKey, compactSeries } from "./indexEngine.js";
 import { computeWeightWatcher, wwTrend } from "./weightWatcher.js";
@@ -50,7 +50,13 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
   const rawRows = await source.securities();
   const indiaMap = source.indiaMap ? await source.indiaMap() : null;
   const secs = rawRows.filter(isAnalysableRow).map((r) => toSecurity(r, indiaMap));
-  const isStock = (sec) => sec.assetClass === "Stock";
+  // an active row in a stock universe that is neither analysed nor marked as a non-company is a gap someone must see
+  // (2026-11-25: Neogen, Tata Motors CV, Page Industries ... were dropped silently because the heatmap left their type blank)
+  const droppedIssues = rawRows.filter((r) => EQUITY_UNIVERSES[r.universe] && r.is_active !== false && !isAnalysableRow(r) && !NON_EQUITY_MARKERS.has(String(r.sector ?? "").trim()))
+    .map((r) => ({ id: r.id, symbol: r.symbol, country: r.country || null, severity: "warn", rule: "not_analysed", detail: `${r.symbol} (${r.universe}) is active but its instrument type "${r.type ?? ""}" is not a stock type, so XRayDar leaves it out. Fix the type in the heatmap, or extend EQUITY_UNIVERSES if it is a company.` }));
+  const dormantIssues = secs.filter((s) => s.dormant).map((s) => ({ id: s.id, symbol: s.symbol, country: s.country, severity: "info", rule: "no_recent_trades", detail: `${s.symbol}: the heatmap marks it as having no trade in the last 5 sessions. Shown with a flag; not in indices, breadth or back-tests.` }));
+  // dormant stocks (no trade in 5 sessions, heatmap marker) are analysed but never enter indices, breadth or back-tests
+  const isStock = (sec) => sec.assetClass === "Stock" && !sec.dormant;
   const byCountry = new Map();
   for (const s of secs) {
     if (!s.country) continue;
@@ -384,7 +390,7 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
   const fxIssues = fxRows.filter((r) => r.estimated || r.maxStale > m.fx.staleWarnDays).map((r) => ({ id: null, symbol: null, country: null, severity: r.estimated ? "warn" : "info", rule: r.estimated ? "fx_estimated" : "fx_stale", detail: `${r.currency}: ${r.estimated ? `no FX history (${r.source}); USD series use a constant rate` : `${r.staleDays} carried-forward fixings, longest ${r.maxStale} sessions`}` }));
   const symOf = new Map(secs.map((x) => [x.id, x]));
   for (const g of guardIssues) { const x = symOf.get(g.id); g.symbol = x?.symbol || null; g.country = x?.country || null; }
-  await sink.globalIssues?.([...geoIssues, ...fxIssues, ...guardIssues]);
+  await sink.globalIssues?.([...geoIssues, ...fxIssues, ...guardIssues, ...droppedIssues, ...dormantIssues]);
   await sink.securities?.(secs.concat(houseSecs), new Map(allSnaps.map((x) => [x.id, x])));
 
   run.finished = new Date().toISOString();
