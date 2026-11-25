@@ -392,3 +392,7 @@ The new project's Site URL / Redirect URLs are the XRayDar address (reset links)
 - **Kite's India history is already adjusted** for most of them: 273 of 291 events (since 2012) are flat across the ex-date (Reliance 2024 and HDFC Bank 2025 bonuses, for instance). Blindly loading all of them would adjust twice. Only events whose stored prices still show the jump were kept in `tas_corporate_action` (26 on 2026-11-25: Tembo, Dharan, Landsmill, MBL Infra, ...), and `applyCorporateActions` now skips any action whose close-before / close-on ratio is closer to 1 than to the factor (`skipped` lists them). Pinned in `tests/quality.test.mjs`.
 - Load only `source = 'nse_corporate_actions'` rows; never re-insert all 1,405 without that guard. US / Global history is adjusted by the providers; do not load actions for them.
 - BSE-only stocks are missing (NSE feed only); ISINs not in `instruments` are skipped.
+
+## LTW 40 corrected (2026-11-25, Alok Sir)
+
+LTW 40 is now W >= 0.4 and 6M < 0.4 (the Excel formula), reversing the earlier heatmap-copied rule. Belgium (W 38, 6M 46, 1Y 41) is Neutral 40 60. Pinned in `tests/glocom.test.mjs`. Stored GLOCOM codes change at the next engine run.
