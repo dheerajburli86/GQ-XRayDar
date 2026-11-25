@@ -377,3 +377,18 @@ The new project's Site URL / Redirect URLs are the XRayDar address (reset links)
   the stock page or RSIMMA / RSIACC / RSCMMA / RSCACC with periods (`?l=&r=` on the stacked screens) and a comparison. Screen rows
   carry a `chart` link. The GQ agent's xraydar tool has `chart_link` and its prompt makes every chart answer end with a link.
   Links into the app open in place in the agent panel (`aTag` in AgentPanel.jsx). Needs `APP_URL` on ta-server.
+
+## Alok Sir's list, 25 Nov 2026: sizes, group minimum, one name per industry, price repairs
+
+- **India has no size segment**: a Size filter is skipped wherever the scope is India (`src/lib/scope.js` `effectiveScope`, used by `applyScope`). Scanners / Screener show a `ScopeNote` line naming every filter in force with "Clear filters" (Grok bots read the page; a filter left from an earlier question once gave "0 in scope").
+- **GLOCOM groups need `methodology.glocom.minGroupStocks` (5) stocks to be ranked**; smaller ones keep counts and returns, show greyed "Not ranked", and never take a rank. `rerateHistory` re-rates histories written before the rule (applied in both API layers), so it holds before the next engine run.
+- **Global industries use the GICS industry group for every market** (`sec.gicsIndustryGroup`); the owner's US workbook groups stay inside the US. **One name per group**: `engine/reference/industryAliases.js` folds variants (Pharmaceuticals & Medical Products -> Pharmaceuticals, "&" vs "and" spellings ...) in `toSecurity` and both API layers.
+- **Price repairs** (`tas_price_repair`, `cli/priceRepairJob.mjs`, ta-server every 6 h): bars more than 50x from the latest close are re-fetched from FMP; `decideRepairs` replaces (provider differs and is plausible), drops (> 1000x and the provider has nothing usable) or confirms (provider agrees: a real move). Every bar loader applies them with `applyPriceRepairs` before corporate actions. price_history itself is never written; data health rule `price_repaired`. India is skipped (Kite).
+- Weight Watcher: column "Change vs 4 quarters ago", table 50 rows a page.
+
+## Corporate actions: NSE feed loaded, and India prices are ALREADY adjusted (added 2026-11-25)
+
+- **Source**: NSE `corporates-corporateActions` JSON answers from the Supabase database's outbound `net.http_get` (not from the sandbox; BSE's API is 403 there). Half-year slices 1996 to 2026 are in `tas_nse_ca_raw`; split / bonus / consolidation rows parsed into `tas_nse_ca` and the view `tas_nse_ca_factor` (factor = new shares per old: bonus a:b -> (a+b)/b, split from X to Y -> X/Y). Debenture / NCRPS / DVR / preference bonuses are not equity changes and are left at 1. 1,405 parsed events, matched to instruments by ISIN.
+- **Kite's India history is already adjusted** for most of them: 273 of 291 events (since 2012) are flat across the ex-date (Reliance 2024 and HDFC Bank 2025 bonuses, for instance). Blindly loading all of them would adjust twice. Only events whose stored prices still show the jump were kept in `tas_corporate_action` (26 on 2026-11-25: Tembo, Dharan, Landsmill, MBL Infra, ...), and `applyCorporateActions` now skips any action whose close-before / close-on ratio is closer to 1 than to the factor (`skipped` lists them). Pinned in `tests/quality.test.mjs`.
+- Load only `source = 'nse_corporate_actions'` rows; never re-insert all 1,405 without that guard. US / Global history is adjusted by the providers; do not load actions for them.
+- BSE-only stocks are missing (NSE feed only); ISINs not in `instruments` are skipped.

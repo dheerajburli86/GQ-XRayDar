@@ -8,6 +8,7 @@
 import { classifyGics, OTHERS } from "./reference/gics.js";
 import { INDUSTRY_MAP } from "./reference/industryMap.js";
 import { US_CLASS } from "./reference/usClassification.js";
+import { canonicalIndustryGroup } from "./reference/industryAliases.js";
 import { usRuleFor } from "./reference/usIndustryRules.js";
 import { canonicalCountry, countryMeta, CAP_UNRELIABLE_COUNTRIES } from "./geography.js";
 import { majorCurrency } from "./fx.js";
@@ -117,9 +118,11 @@ export function toSecurity(row, indiaMap = null) {
     currencyDivisor: divisor,
     countryCurrency: meta.currency || major,
     sector: us ? us[0] : g.sector,
-    industryGroup: us ? us[1] : g.industryGroup,
-    industry: us ? us[1] : industry || null,
+    industryGroup: canonicalIndustryGroup(us ? us[1] : g.industryGroup),
+    industry: us ? canonicalIndustryGroup(us[1]) : industry || null,
     subIndustry: us ? us[2] : null,
+    // GICS industry group even where the US workbook relabels the stock: cross-market groups (Global GLOCOM) use it
+    gicsIndustryGroup: g.industryGroup || null,
     classSource: us ? usSource : g.source,
     capLocal: !noCap && capLocal && capLocal > 0 ? capLocal : null, // in capCurrency (major units)
     capCurrency: !noCap && capCurrency ? majorCurrency(capCurrency).major : null,

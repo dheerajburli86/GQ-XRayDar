@@ -117,7 +117,7 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
       // local holiday on the final calendar date -- stays in, carried at that close.
       const lastBarT = indexAtOrBeforeMap(dates, b.time[b.time.length - 1]);
       if (!sec.active || T - 1 - lastBarT > m.eligibility.maxStaleDays) last = Math.min(last, lastBarT);
-      out.push({ sec, bars: b, first, last, close, traded, barAt, capFromDate, badPrints: bad.removed, tickerReuse: reuse.cut, shareBreaks: qual });
+      out.push({ sec, bars: b, first, last, close, traded, barAt, capFromDate, badPrints: bad.removed, tickerReuse: reuse.cut, shareBreaks: qual, priceRepairs: bars.get(sec.id)?.priceRepairs || null });
     }
     return out;
   }
@@ -255,6 +255,8 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
       issues.push(...securityIssues(sec, b, { countryLatest, countrySessions: sessions, recentFrom, sessionsBetween }));
       if (s.badPrints?.length) issues.push({ id: sec.id, symbol: sec.symbol, country: sec.country, severity: "warn", rule: "bad_print_removed",
         detail: `${s.badPrints.length} bad print(s) ignored, e.g. ${s.badPrints.slice(0, 3).map((x) => `${x.date} ${x.close} (previous close ${x.prev})`).join(", ")}: the price jumped and came straight back` });
+      if (s.priceRepairs && (s.priceRepairs.replaced || s.priceRepairs.dropped)) issues.push({ id: sec.id, symbol: sec.symbol, country: sec.country, severity: "warn", rule: "price_repaired",
+        detail: `Stored prices impossible against the latest close: ${s.priceRepairs.replaced} bar(s) replaced from the provider, ${s.priceRepairs.dropped} dropped (provider had nothing usable). The heatmap's price_history still holds the bad bars.` });
       if (s.tickerReuse) issues.push({ id: sec.id, symbol: sec.symbol, country: sec.country, severity: "warn", rule: "ticker_reuse_cut",
         detail: `${s.tickerReuse.bars} bar(s) before ${s.tickerReuse.date} dropped: after a gap the price moved from ${s.tickerReuse.prev} to ${s.tickerReuse.next}, which is a different company that used this ticker earlier. The older history of THIS company is not in the price store (it sits under its former ticker) and has to be loaded in the heatmap pipeline.` });
       if (s.shareBreaks?.length && isStock(sec)) issues.push({ id: sec.id, symbol: sec.symbol, country: sec.country, severity: "warn", rule: "share_count_break",
@@ -263,7 +265,9 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
       if (isStock(sec) && sec.industryGroup && sec.industryGroup !== UNCLASSIFIED) {
         const rc = checkpointReturns(b.time, cc, ckC), rg = checkpointReturns(b.time, usd, ckG);
         accC.industry.add(sec.industryGroup, rc); accC.sector.add(sec.sector, rc);
-        accG.industry.add(sec.industryGroup, rg); accG.sector.add(sec.sector, rg); accG.country.add(country, rg);
+        // one vocabulary across markets: the US workbook's own groups stay inside the US
+        accG.industry.add(sec.gicsIndustryGroup && sec.gicsIndustryGroup !== UNCLASSIFIED ? sec.gicsIndustryGroup : sec.industryGroup, rg);
+        accG.sector.add(sec.sector, rg); accG.country.add(country, rg);
         if (rc[rc.length - 1]) latestRet.set(sec.id, rc[rc.length - 1]);
       }
       const shares = estimateSharesFromRow(sec, b, fx, T);
@@ -378,7 +382,7 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
     if (sectors.length >= 2) rot[sc] = rotation(sectors, base, m.rotation);
   }
   await sink.rotation?.(rot);
-  for (const lv of ["industry", "sector", "country"]) glocomGroups[`G|${lv}`] = accG[lv].history();
+  for (const lv of ["industry", "sector", "country"]) glocomGroups[`G|${lv}`] = accG[lv].history(METHODOLOGY.glocom.minGroupStocks);
   await sink.glocomGroups?.(glocomGroups);
   await sink.regimes?.(regimeRows);
   await sink.ewcw?.(ewcwRows);
@@ -416,7 +420,7 @@ function indexAtOrBeforeMap(dates, d, map) {
 // GLOCOM rank and movement. The heatmap's own stock GLOCOM (glocom_latest) wins
 // where it exists, so both products show the same label for a stock.
 function applyGlocom(country, snaps, secOfId, latestRet, accC, out) {
-  const hist = { industry: accC.industry.history(), sector: accC.sector.history() };
+  const hist = { industry: accC.industry.history(METHODOLOGY.glocom.minGroupStocks), sector: accC.sector.history(METHODOLOGY.glocom.minGroupStocks) };
   out[`C:${country}|industry`] = hist.industry; out[`C:${country}|sector`] = hist.sector;
   const ids = [...latestRet.keys()];
   const market = new Map(rateGlocom(ids.map((id) => ({ key: id, ...latestRet.get(id) }))).map((x) => [x.key, x]));

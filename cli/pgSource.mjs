@@ -8,6 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { addDays } from "../engine/calendar.js";
+import { applyPriceRepairs } from "../engine/quality.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -71,6 +72,12 @@ export function pgSource(pool, { warmupDays = 400, minCalendarCount = 50, log = 
         }
         flush();
       }
+      // tas_price_repair: provider-checked fixes for impossible stored prices (cli/priceRepairJob.mjs)
+      const { rows: rep } = await pool.query(`select instrument_id, date::text d, action, open, high, low, close, volume from tas_price_repair
+        where action in ('replace','drop') and instrument_id = any($1)`, [ids]).catch(() => ({ rows: [] }));
+      const byId = new Map();
+      for (const r of rep) { if (!byId.has(r.instrument_id)) byId.set(r.instrument_id, []); byId.get(r.instrument_id).push({ date: r.d, action: r.action, open: r.open, high: r.high, low: r.low, close: r.close, volume: r.volume }); }
+      for (const [id, list] of byId) if (out.has(id)) { const r = applyPriceRepairs(out.get(id), list); out.set(id, { ...r.bars, priceRepairs: { replaced: r.replaced, dropped: r.dropped } }); }
       return out;
     },
     async fxHistory() {

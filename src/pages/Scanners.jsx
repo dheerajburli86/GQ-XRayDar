@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 import { useData } from "../data/store.jsx";
 import { PageHead, Seg, Select, Badge, Kpi, Pct } from "../components/ui.jsx";
 import { DataTable } from "../components/DataTable.jsx";
-import { ScopeFilter, applyScope, idColumns, fieldColumn } from "../components/pickers.jsx";
+import { ScopeFilter, ScopeNote, applyScope, idColumns, fieldColumn } from "../components/pickers.jsx";
 import { FIELD, testCondition } from "../../engine/fields.js";
 import { CANDLE_PATTERNS } from "../../engine/candles.js";
 import { WW_TREND_LABEL } from "../../engine/weightWatcher.js";
@@ -107,7 +107,7 @@ export default function Scanners({ route }) {
   const sc = SCANNERS.find((x) => x.id === s.id) || SCANNERS[0];
 
   const universe = useMemo(() => {
-    let rows = applyScope(d.rows, s.scope || {}).filter((r) => inMarket(r.sec, s.market));
+    let rows = applyScope(d.rows, s.scope || {}, s.market).filter((r) => inMarket(r.sec, s.market));
     if (s.wl && wls[s.wl]) { const ids = new Set(wls[s.wl].ids); rows = rows.filter((r) => ids.has(r.id)); }
     return rows;
   }, [d.rows, s.scope, s.market, s.wl, wls]);
@@ -133,6 +133,8 @@ export default function Scanners({ route }) {
           <Select label="Watchlist" value={s.wl} options={Object.entries(wls).map(([k, v]) => ({ value: k, label: v.name }))} onChange={(wl) => set({ wl })} allowEmpty="Any" />
           <span className="small muted">{universe.length.toLocaleString()} in scope · data to {d.info.asOf}</span>
         </div>
+        <ScopeNote scope={s.scope || {}} market={s.market} extra={s.wl && wls[s.wl] ? [`Watchlist: ${wls[s.wl].name}`] : []} count={universe.length}
+          onClear={() => set({ scope: { assetClass: s.scope?.assetClass || "Stock" }, wl: null })} />
       </div>
       {sc.movers ? <Movers rows={universe} /> : sc.sectors ? <SectorRank rows={universe} /> : sc.custom ? <Custom rows={universe} conds={s.custom || []} onChange={(custom) => set({ custom })} />
         : <Results rows={universe} conds={mode.conds(tf)} sort={mode.sort(tf)} asc={mode.asc} cols={mode.cols(tf)} name={`${sc.label}_${mode.label}_${tf}`} />}

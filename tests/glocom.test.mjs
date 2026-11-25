@@ -76,3 +76,25 @@ test("demo engine run writes group history and stock GLOCOM / LOCOM", async () =
   assert.ok(snaps.length > 0);
   assert.ok(snaps.some((s) => s.glocom.locom && s.glocom.industry?.rank));
 });
+
+test("groups below the minimum stock count are shown but not ranked (Alok Sir, 2026-11-25)", async () => {
+  const { GroupAccumulator, rerateHistory, smallGroups } = await import("../engine/glocom.js");
+  const acc = new GroupAccumulator(["2026-11-20"]);
+  const r = (w) => [{ w, m6: w * 2, y: w * 3 }];
+  for (let i = 0; i < 6; i++) acc.add("Big A", r(0.01 * i));
+  for (let i = 0; i < 5; i++) acc.add("Big B", r(-0.01 * i));
+  for (let i = 0; i < 3; i++) acc.add("Tiny", r(0.5));
+  const h5 = acc.history(5);
+  assert.equal(h5.groups.Tiny.rank[0], null);
+  assert.equal(h5.groups.Tiny.n[0], 3);
+  assert.ok(h5.groups.Tiny.w[0] > 0.4);
+  assert.equal(h5.of[0], 2);
+  assert.deepEqual(smallGroups(h5), [{ name: "Tiny", n: 3 }]);
+  // an older history rated with no minimum is re-rated the same way
+  const h1 = acc.history();
+  assert.equal(h1.groups.Tiny.rank[0], 1);
+  const re = rerateHistory(h1, 5);
+  assert.equal(re.groups.Tiny.rank[0], null);
+  assert.deepEqual([re.groups["Big A"].rank[0], re.groups["Big B"].rank[0]], [h5.groups["Big A"].rank[0], h5.groups["Big B"].rank[0]]);
+  assert.equal(rerateHistory(h5, 5), h5);
+});

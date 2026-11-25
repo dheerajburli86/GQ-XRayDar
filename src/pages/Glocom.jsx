@@ -6,7 +6,8 @@ import { useAsync } from "../lib/useAsync.js";
 import { navigate } from "../lib/router.js";
 import { PageHead, Select, Seg, Loading, Empty, Pct, StockLink } from "../components/ui.jsx";
 import { DataTable } from "../components/DataTable.jsx";
-import { glocomBand, groupMoves, groupTimeline, GLOCOM_RULES, NEUTRAL } from "../../engine/glocom.js";
+import { glocomBand, groupMoves, groupTimeline, smallGroups, GLOCOM_RULES, NEUTRAL } from "../../engine/glocom.js";
+import { METHODOLOGY } from "../../engine/methodology.js";
 
 const BACK = [{ value: "1", label: "vs 1 session" }, { value: "5", label: "vs 1 week" }, { value: "21", label: "vs 1 month" }, { value: "63", label: "vs 3 months" }];
 import { GBadge, Jump, UP, DOWN, comName, BandChange } from "../components/glocomUi.jsx";
@@ -18,14 +19,15 @@ export default function Glocom({ route }) {
   const q = route.query;
   const { data: scopes } = useAsync(() => d.api.glocomScopes(), []);
   const markets = useMemo(() => [...new Set((scopes || []).map((k) => k.split("|")[0]))].sort((a, b) => (a === "G" ? -1 : b === "G" ? 1 : a.localeCompare(b))), [scopes]);
-  const market = q.m || (markets.includes("C:India") ? "C:India" : markets[0] || "G");
-  const level = q.lv === "country" && market !== "G" ? "industry" : q.lv || "industry";
+  const market = q.m || (markets.includes("G") ? "G" : markets[0] || "G");
+  const level = q.lv === "country" && market !== "G" ? "industry" : q.lv || (market === "G" ? "country" : "industry");
   const back = +(q.back || 1);
   const sel = q.g || null;
   const set = (p) => navigate("glocom", { ...q, ...p });
   const { data: hist, loading } = useAsync(() => d.api.glocomGroups(`${market}|${level}`), [market, level]);
 
   const moves = useMemo(() => (hist ? groupMoves(hist, back) : []), [hist, back]);
+  const small = useMemo(() => smallGroups(hist), [hist]);
   // owner (Nov 2026): category (band) changes are what matter. Band upgrades first, then band downgrades,
   // each in rank order; groups that only changed rank inside the same band follow, plainly.
   const movers = useMemo(() => {
@@ -70,6 +72,11 @@ export default function Glocom({ route }) {
             )}
           </div>
 
+          {small.length > 0 && (
+            <div className="small muted" style={{ opacity: 0.75 }}>
+              Not ranked, fewer than {hist.minN || METHODOLOGY.glocom.minGroupStocks} stocks: {small.map((x) => `${x.name} (${x.n})`).join(" · ")}
+            </div>
+          )}
           <div className="grid" style={{ gridTemplateColumns: "minmax(0, 1.4fr) minmax(0, 1fr)" }}>
             <DataTable exportName={`glocom_${market}_${level}`} rows={moves} rowKey={(x) => x.name} pageSize={50} initialSort={{ key: "rank", dir: "asc" }}
               onRowClick={(x) => set({ g: x.name })} selectedId={sel}

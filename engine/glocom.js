@@ -145,7 +145,7 @@ export class GroupAccumulator {
    * -> { dates, of: [groups rated per date], groups: { name: { rank, code, label, score, n, w, m6, y } } }
    * where each field is an array over dates (null where the group had no constituent).
    */
-  history() {
+  history(minN = 1) {
     const names = [...this.groups.keys()].sort();
     const K = this.K, groups = {}, of = new Array(K).fill(0);
     const r4 = (v) => (v == null ? null : Math.round(v * 1e4) / 1e4);
@@ -158,17 +158,52 @@ export class GroupAccumulator {
         const avg = (j) => (g.cnt[t * 3 + j] ? g.sum[t * 3 + j] / g.cnt[t * 3 + j] : null);
         items.push({ key: name, w: avg(0), m6: avg(1), y: avg(2), n: g.n[t] });
       }
-      of[t] = items.length;
-      if (items.length < 2) continue; // a rank among fewer than two is meaningless
-      for (const x of rateGlocom(items)) {
+      // a group below minN stocks keeps its count and returns but is not rated: 1-3 stocks are noise, not an industry
+      for (const x of items) { const o = groups[x.key]; o.n[t] = x.n; o.w[t] = r4(x.w); o.m6[t] = r4(x.m6); o.y[t] = r4(x.y); }
+      const rated = items.filter((x) => x.n >= minN);
+      of[t] = rated.length;
+      if (rated.length < 2) continue; // a rank among fewer than two is meaningless
+      for (const x of rateGlocom(rated)) {
         const o = groups[x.key];
-        o.rank[t] = x.rank; o.code[t] = x.code; o.label[t] = x.label; o.score[t] = Math.round(x.score * 10) / 10; o.n[t] = x.n;
-        o.w[t] = r4(x.w); o.m6[t] = r4(x.m6); o.y[t] = r4(x.y);
+        o.rank[t] = x.rank; o.code[t] = x.code; o.label[t] = x.label; o.score[t] = Math.round(x.score * 10) / 10;
         o.pW[t] = r4(x.pW); o.p6m[t] = r4(x.p6m); o.p1y[t] = r4(x.p1y);
       }
     }
-    return { dates: [...this.dates], of, groups };
+    return { dates: [...this.dates], of, groups, minN };
   }
+}
+
+/**
+ * Re-rate a stored history so only groups with >= minN stocks are ranked (same rule sheet, same percentiles,
+ * from the stored per-date averages). Lets a history written before the minimum existed follow it at once;
+ * a history already written with that minimum is returned unchanged. Pure: returns a new object.
+ */
+export function rerateHistory(hist, minN) {
+  if (!hist?.groups || !(minN > 1) || hist.minN === minN) return hist;
+  const names = Object.keys(hist.groups), K = hist.dates.length, of = new Array(K).fill(0), groups = {};
+  const r4 = (v) => (v == null ? null : Math.round(v * 1e4) / 1e4);
+  for (const name of names) {
+    const g = hist.groups[name];
+    groups[name] = { ...g, rank: new Array(K).fill(null), code: new Array(K).fill(null), label: new Array(K).fill(null), score: new Array(K).fill(null), pW: new Array(K).fill(null), p6m: new Array(K).fill(null), p1y: new Array(K).fill(null) };
+  }
+  for (let t = 0; t < K; t++) {
+    const items = names.filter((k) => (hist.groups[k].n?.[t] || 0) >= minN).map((k) => { const g = hist.groups[k]; return { key: k, w: g.w?.[t] ?? null, m6: g.m6?.[t] ?? null, y: g.y?.[t] ?? null, n: g.n[t] }; });
+    of[t] = items.length;
+    if (items.length < 2) continue;
+    for (const x of rateGlocom(items)) {
+      const o = groups[x.key];
+      o.rank[t] = x.rank; o.code[t] = x.code; o.label[t] = x.label; o.score[t] = Math.round(x.score * 10) / 10;
+      o.pW[t] = r4(x.pW); o.p6m[t] = r4(x.p6m); o.p1y[t] = r4(x.p1y);
+    }
+  }
+  return { ...hist, of, groups, minN };
+}
+
+/** Groups present on the latest date that are too small to rank, largest first. */
+export function smallGroups(hist) {
+  if (!hist?.groups) return [];
+  const t = hist.dates.length - 1;
+  return Object.entries(hist.groups).filter(([, g]) => g.rank[t] == null && (g.n[t] || 0) > 0).map(([name, g]) => ({ name, n: g.n[t] })).sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
 }
 
 /**

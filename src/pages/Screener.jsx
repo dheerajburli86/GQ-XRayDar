@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useData } from "../data/store.jsx";
 import { PageHead, Select, Badge, Seg } from "../components/ui.jsx";
 import { DataTable } from "../components/DataTable.jsx";
-import { ScopeFilter, applyScope, idColumns, fieldColumn } from "../components/pickers.jsx";
+import { ScopeFilter, ScopeNote, applyScope, idColumns, fieldColumn } from "../components/pickers.jsx";
 import { FIELDS, FIELD, FIELD_GROUPS, OPS, testCondition } from "../../engine/fields.js";
 import { parseCommand } from "../../engine/nl.js";
 import { usePersistent, uid } from "../lib/storage.js";
@@ -80,6 +80,7 @@ export default function Screener({ route }) {
       )}
       <div className="card stack" style={{ gap: 8 }}>
         <ScopeFilter scope={scope} onChange={setScope} show={["region", "classification", "country", "sector", "cap"]} />
+        <ScopeNote scope={scope} count={rows.length} onClear={() => setScope({})} />
         {conds.map((c, i) => <ConditionRow key={i} c={c} onChange={(nc) => setConds(conds.map((x, k) => (k === i ? nc : x)))} onRemove={() => setConds(conds.filter((_, k) => k !== i))} />)}
         <div className="row">
           <button className="btn sm" onClick={() => setConds([...conds, { field: "rsiW", op: "<", value: 30 }])}>+ Condition</button>
