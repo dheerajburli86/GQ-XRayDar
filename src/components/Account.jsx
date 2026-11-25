@@ -10,11 +10,12 @@ export function AccountProvider({ children }) {
   const [session, setSession] = useState(undefined); // undefined = still checking
   const [me, setMe] = useState(null);
   const [meError, setMeError] = useState(null);
+  const [recovering, setRecovering] = useState(() => typeof window !== "undefined" && /type=recovery/.test(window.location.hash));
 
   useEffect(() => {
     if (!auth) { setSession(null); return; }
     auth.getSession().then(({ data }) => setSession(data.session || null));
-    const { data } = auth.onAuthStateChange((_e, s) => setSession(s || null));
+    const { data } = auth.onAuthStateChange((e, s) => { if (e === "PASSWORD_RECOVERY") setRecovering(true); setSession(s || null); });
     return () => data.subscription.unsubscribe();
   }, []);
 
@@ -36,6 +37,7 @@ export function AccountProvider({ children }) {
   if (LOGIN_REQUIRED) {
     if (session === undefined) return <div className="loading-screen"><div className="box card">Checking sign-in…</div></div>;
     if (!session) return <SignIn />;
+    if (recovering) return <NewPassword onDone={() => { setRecovering(false); history.replaceState(null, "", window.location.pathname); }} />;
     if (SERVER_ON && meError && /disabled/i.test(meError)) return <Blocked text={meError} onSignOut={signOut} />;
   }
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
@@ -48,6 +50,29 @@ function Blocked({ text, onSignOut }) {
   return <div className="loading-screen"><div className="box card stack" style={{ maxWidth: 420 }}><Brand sub="Account" /><div className="note warn">{text}</div><button className="btn" onClick={onSignOut}>Sign out</button></div></div>;
 }
 
+/** Shown after the reset link in the email is opened: choose a new password. */
+function NewPassword({ onDone }) {
+  const [pw, setPw] = useState(""); const [pw2, setPw2] = useState(""); const [err, setErr] = useState(null); const [busy, setBusy] = useState(false);
+  const submit = async (ev) => {
+    ev.preventDefault(); setErr(null);
+    if (pw.length < 8) { setErr("Use a password of at least 8 characters."); return; }
+    if (pw !== pw2) { setErr("The two passwords are different."); return; }
+    setBusy(true);
+    const { error } = await auth.updateUser({ password: pw });
+    setBusy(false);
+    if (error) setErr(error.message); else onDone();
+  };
+  return (
+    <div className="loading-screen"><form className="box card stack signin" style={{ maxWidth: 400, width: "100%" }} onSubmit={submit}>
+      <Brand sub="Choose a new password" />
+      <label className="stack" style={{ gap: 4 }}><span className="small muted">New password (at least 8 characters)</span><input type="password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} /></label>
+      <label className="stack" style={{ gap: 4 }}><span className="small muted">New password again</span><input type="password" autoComplete="new-password" value={pw2} onChange={(e) => setPw2(e.target.value)} /></label>
+      <button className="btn primary" type="submit" disabled={busy}>{busy ? "Please wait…" : "Save new password"}</button>
+      {err && <div className="note warn" role="alert">{err}</div>}
+    </form></div>
+  );
+}
+
 /** Sign in / create account / forgot password. */
 export function SignIn() {
   const [mode, setMode] = useState("in"); // in | up | forgot
@@ -58,6 +83,12 @@ export function SignIn() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [note, setNote] = useState(null);
+  useEffect(() => { // a reset link that failed lands here with the reason in the address
+    if (/error_code=otp_expired|error=access_denied/.test(window.location.hash)) {
+      setMode("forgot"); setErr("That reset link has expired or was already used (email apps often open links once to scan them). Enter your email to get a fresh one, and open it straight away.");
+      history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
   const go = (m) => { setMode(m); setErr(null); setNote(null); };
 
   const signIn = async (e, p) => {
