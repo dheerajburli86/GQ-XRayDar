@@ -55,22 +55,30 @@ export function securityIssues(sec, daily, ctx) {
 }
 
 /** Corporate-action adjustment: actions [{exDate, factor}] where factor = new shares per old
- *  (2-for-1 split -> 2). Prices before exDate are divided by the factor, volumes multiplied. */
+ *  (2-for-1 split -> 2). Prices before exDate are divided by the factor, volumes multiplied.
+ *  An action is applied only when the stored prices still show it: the close just before the
+ *  ex-date over the close on it must be closer to the factor than to 1 (log scale). Kite's India
+ *  history is already adjusted for most splits and bonuses (273 of 291 checked on 2026-11-25), so
+ *  applying a listed action blindly would adjust it twice. Skipped actions are returned in `skipped`. */
 export function applyCorporateActions(daily, actions) {
-  if (!actions?.length) return { bars: daily, applied: [] };
+  if (!actions?.length) return { bars: daily, applied: [], skipped: [] };
   const bars = { ...daily, open: [...daily.open], high: [...daily.high], low: [...daily.low], close: [...daily.close], volume: daily.volume ? [...daily.volume] : null };
-  const applied = [];
+  const applied = [], skipped = [];
   for (const a of [...actions].sort((x, y) => (x.exDate < y.exDate ? -1 : 1))) {
     if (!(a.factor > 0) || a.factor === 1) continue;
+    let after = bars.time.findIndex((t) => t >= a.exDate);
+    if (after <= 0) { skipped.push({ ...a, reason: "no bars on both sides of the ex-date" }); continue; }
+    const ratio = bars.close[after - 1] / bars.close[after];
+    if (!(ratio > 0) || Math.abs(Math.log(ratio / a.factor)) >= Math.abs(Math.log(ratio))) { skipped.push({ ...a, reason: "prices already adjusted", ratio }); continue; }
     let k = 0;
-    for (let i = 0; i < bars.time.length && bars.time[i] < a.exDate; i++) {
+    for (let i = 0; i < after; i++) {
       bars.open[i] /= a.factor; bars.high[i] /= a.factor; bars.low[i] /= a.factor; bars.close[i] /= a.factor;
       if (bars.volume) bars.volume[i] *= a.factor;
       k++;
     }
     applied.push({ ...a, barsAdjusted: k });
   }
-  return { bars, applied };
+  return { bars, applied, skipped };
 }
 
 /**

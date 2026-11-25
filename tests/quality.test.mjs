@@ -70,3 +70,18 @@ test("ticker reuse: bars of the previous holder of a ticker are cut at the gap +
   const shortTail = { ...bars, time: bars.time.slice(0, 40), open: bars.open.slice(0, 40), high: bars.high.slice(0, 40), low: bars.low.slice(0, 40), close: bars.close.slice(0, 40), volume: bars.volume.slice(0, 40) };
   assert.equal(cutAtTickerReuse(shortTail).cut, null);
 });
+
+import { applyCorporateActions as _aca } from "../engine/quality.js";
+test("corporate action is skipped when the prices are already adjusted", () => {
+  const mk = (c) => ({ time: ["2024-10-25", "2024-10-28", "2024-10-29"], open: [...c], high: [...c], low: [...c], close: [...c], volume: [10, 10, 10] });
+  const raw = _aca(mk([2800, 1400, 1410]), [{ exDate: "2024-10-28", factor: 2 }]);
+  assert.equal(raw.applied.length, 1);
+  assert.equal(raw.bars.close[0], 1400);
+  const adj = _aca(mk([1400, 1400, 1410]), [{ exDate: "2024-10-28", factor: 2 }]);
+  assert.equal(adj.applied.length, 0);
+  assert.equal(adj.skipped[0].reason, "prices already adjusted");
+  assert.equal(adj.bars.close[0], 1400);
+  const cons = _aca(mk([10, 100, 101]), [{ exDate: "2024-10-28", factor: 0.1 }]);
+  assert.equal(cons.applied.length, 1);
+  assert.equal(cons.bars.close[0], 100);
+});

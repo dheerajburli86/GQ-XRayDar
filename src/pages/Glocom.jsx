@@ -19,8 +19,8 @@ export default function Glocom({ route }) {
   const q = route.query;
   const { data: scopes } = useAsync(() => d.api.glocomScopes(), []);
   const markets = useMemo(() => [...new Set((scopes || []).map((k) => k.split("|")[0]))].sort((a, b) => (a === "G" ? -1 : b === "G" ? 1 : a.localeCompare(b))), [scopes]);
-  const market = q.m || (markets.includes("C:India") ? "C:India" : markets[0] || "G");
-  const level = q.lv === "country" && market !== "G" ? "industry" : q.lv || "industry";
+  const market = q.m || (markets.includes("G") ? "G" : markets[0] || "G");
+  const level = q.lv === "country" && market !== "G" ? "industry" : q.lv || (market === "G" ? "country" : "industry");
   const back = +(q.back || 1);
   const sel = q.g || null;
   const set = (p) => navigate("glocom", { ...q, ...p });
