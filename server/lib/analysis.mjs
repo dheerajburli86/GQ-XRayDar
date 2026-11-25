@@ -142,7 +142,19 @@ export function createAnalysis(data, cfg) {
     };
   }
 
-  async function market(scope = "G") {
+  /** Agents and people write the scope loosely ("G pharma", "India", "US"): map the common spellings, else leave it alone. */
+  function marketScope(raw) {
+    const t = String(raw || "G").trim();
+    if (/^(G|R:|C:)/.test(t) && !/^G\s/.test(t)) return t;
+    const k = t.toLowerCase();
+    if (/^(g|global|world)(\s|$)/.test(k)) return "G";
+    if (k === "india" || k === "in") return "C:India";
+    if (["us", "usa", "u.s.", "united states", "america"].includes(k)) return "C:United States";
+    return t;
+  }
+
+  async function market(scopeIn = "G") {
+    const scope = marketScope(scopeIn);
     const ccy = scope.startsWith("C:") ? "LCL" : "USD";
     const [cw, ew, br, rot] = await Promise.all([data.api.indexSeries(`CW|${ccy}|${scope}`), data.api.indexSeries(`EW|${ccy}|${scope}`), data.api.breadth(scope), data.api.rotation(scope)]);
     if (!cw) return { error: `no index for scope ${scope}; use G, R:<region> or C:<country>` };

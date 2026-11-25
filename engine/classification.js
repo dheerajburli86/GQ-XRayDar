@@ -39,12 +39,12 @@ export const EQUITY_UNIVERSES = {
 // ETFs and exchange indices are analysed (charts, screens, alerts) but never
 // enter the CW / EW index construction, breadth or Weight Watcher.
 export const FUND_UNIVERSES = { us_etfs: "ETF", india_etfs: "ETF", global_etfs: "ETF", demo_etfs: "ETF", us_indices: "Index", india_indices: "Index", global_indices: "Index", demo_indices: "Index",
-  commodities: "Commodity", crypto_etfs: "Crypto" };
+  commodities: "Commodity", crypto_etfs: "Crypto", currency_etf: "Currency" };
 /** Asset classes beyond stocks. Commodity and crypto products are the heatmap's
  *  exchange-traded vehicles (GLD, USO, IBIT, ...); US currency ETFs are read
  *  from the heatmap's own etf_category, never guessed from a name. */
 export const ASSET_CLASSES = ["Stock", "ETF", "Index", "Commodity", "Crypto", "Currency"];
-const UNIVERSE_COUNTRY = { us_etfs: "United States", us_indices: "United States", india_etfs: "India", india_indices: "India", commodities: "United States", crypto_etfs: "United States" };
+const UNIVERSE_COUNTRY = { us_etfs: "United States", us_indices: "United States", india_etfs: "India", india_indices: "India", commodities: "United States", crypto_etfs: "United States", currency_etf: "United States" };
 
 // The heatmap's "no trade in 5 sessions" marker. Such a row is still a company: it is analysed (charts, screens,
 // the stock page) with a visible flag, but kept out of index construction, breadth and back-tests (owner, 2026-11-25:
