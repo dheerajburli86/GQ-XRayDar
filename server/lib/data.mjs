@@ -1,9 +1,12 @@
 // Read side over the tas_* tables (computed by the engine) and the heatmap's
 // price_history. Everything is cached per calculation run: a new successful run
 // is picked up within REFRESH_MS and the caches start over.
+import { canonicalIndustryGroup } from "../../engine/reference/industryAliases.js";
 import { decodeFlat, SCREEN_KEYS } from "../../engine/screenRow.js";
 import { decodeEvents } from "../../engine/eventCodec.js";
-import { applyCorporateActions, removeBadPrints, cutAtTickerReuse } from "../../engine/quality.js";
+import { applyCorporateActions, applyPriceRepairs, removeBadPrints, cutAtTickerReuse } from "../../engine/quality.js";
+import { rerateHistory } from "../../engine/glocom.js";
+import { METHODOLOGY } from "../../engine/methodology.js";
 
 const REFRESH_MS = 5 * 60_000;
 
@@ -41,7 +44,7 @@ export function createData(pool, log = console.log) {
     const sec = secs.rows.filter((r) => r.asset_class !== "Crypto").map((r) => ({
       id: r.id, symbol: r.symbol, name: r.name, universe: r.universe, exchange: r.exchange, country: r.country, region: r.region, classification: r.classification,
       currency: r.currency, currencyMajor: r.currency_major, currencyDivisor: r.currency_divisor, countryCurrency: r.country_currency, sector: r.sector,
-      industryGroup: r.industry_group, industry: r.industry, subIndustry: r.sub_industry ?? null, capSegment: r.cap_segment, capUsdNow: r.cap_usd_now, turnoverUsd: r.turnover_usd ?? null, active: r.active, dormant: !!r.dormant,
+      industryGroup: canonicalIndustryGroup(r.industry_group), industry: r.industry, subIndustry: r.sub_industry ?? null, capSegment: r.cap_segment, capUsdNow: r.cap_usd_now, turnoverUsd: r.turnover_usd ?? null, active: r.active, dormant: !!r.dormant,
       assetClass: r.asset_class || "Stock",
     }));
     const secById = new Map(sec.map((x) => [x.id, x]));
@@ -82,7 +85,7 @@ export function createData(pool, log = console.log) {
     async etiFor(id) { const { rows } = await pool.query(`select company_id, characteristic, company_name, nse_symbol, isin, instrument_id::text, as_of::text, meets, value, note, method_version from tas_eti_characteristic where instrument_id = $1`, [id]).catch(() => ({ rows: [] })); return rows; },
     async etiChanges(limit = 300) { const { rows } = await pool.query(`select id, company_id, instrument_id::text, characteristic, from_meets, to_meets, as_of::text, at from tas_eti_change order by at desc limit $1`, [limit]).catch(() => ({ rows: [] })); return rows; },
     async glocomScopes() { const { rows } = await pool.query(`select scope_key from tas_glocom_group`).catch(() => ({ rows: [] })); return rows.map((r) => r.scope_key); },
-    async glocomGroups(scope) { const { rows } = await pool.query(`select data from tas_glocom_group where scope_key = $1`, [scope]).catch(() => ({ rows: [] })); return rows[0]?.data || null; },
+    async glocomGroups(scope) { const { rows } = await pool.query(`select data from tas_glocom_group where scope_key = $1`, [scope]).catch(() => ({ rows: [] })); return rerateHistory(rows[0]?.data || null, METHODOLOGY.glocom.minGroupStocks); },
     async rotation(scope) { const { rows } = await pool.query(`select sectors from tas_rotation where scope_key = $1`, [scope]); return rows[0]?.sectors || null; },
     async breadth(scope) { const { rows } = await pool.query(`select data from tas_breadth where scope_key = $1`, [scope]); return rows[0]?.data || null; },
     async ewcw() { const { rows } = await pool.query(`select * from tas_ewcw`); return rows.map((r) => ({ pairKey: r.pair_key, scopeKey: r.scope_key, ccy: r.ccy, name: r.name, level: r.level, asOf: r.as_of, ratio: r.ratio, chg: r.chg, aboveTrend: r.above_trend, label: r.label })); },
@@ -118,6 +121,10 @@ export function createData(pool, log = console.log) {
         }
         if (cur) out.set(curId, cur);
       }
+      const { rows: rep } = await pool.query(`select instrument_id, date::text d, action, open, high, low, close, volume from tas_price_repair where action in ('replace','drop') and instrument_id = any($1)`, [ids]).catch(() => ({ rows: [] }));
+      const reps = new Map();
+      for (const r of rep) { if (!reps.has(r.instrument_id)) reps.set(r.instrument_id, []); reps.get(r.instrument_id).push({ date: r.d, action: r.action, open: r.open, high: r.high, low: r.low, close: r.close, volume: r.volume }); }
+      for (const [id, list] of reps) if (out.has(id)) out.set(id, applyPriceRepairs(out.get(id), list).bars);
       const { rows: ca } = await pool.query(`select instrument_id, ex_date::text ex, factor from tas_corporate_action where instrument_id = any($1)`, [ids]).catch(() => ({ rows: [] }));
       const acts = new Map();
       for (const r of ca) { if (!acts.has(r.instrument_id)) acts.set(r.instrument_id, []); acts.get(r.instrument_id).push({ exDate: r.ex, factor: +r.factor }); }

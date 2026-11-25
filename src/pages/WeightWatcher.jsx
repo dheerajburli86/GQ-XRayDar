@@ -121,12 +121,12 @@ export default function WeightWatcher({ route }) {
                 </span>))}
             </div>
           </div>
-          <DataTable exportName="ww_table" rows={children} initialSort={{ key: "w", dir: "desc" }} pageSize={30}
+          <DataTable exportName="ww_table" rows={children} initialSort={{ key: "w", dir: "desc" }} pageSize={50}
             columns={[
               { key: "name", label: CHILD_LABEL[ctype] || ctype, value: (c) => c.name, render: (c) => { const dr = DRILL[view]; if (c.sec) return <a href={`#/stock/${c.sec.id}`}>{c.name}</a>; return dr ? <a onClick={() => { const n = dr(c.key, parent); navigate("ww", { view: n.v, parent: n.p }); }} style={{ cursor: "pointer" }}>{c.name} ›</a> : c.name; } },
               { key: "w", label: "Latest weight %", num: true, value: (c) => c.tr.last, render: (c) => c.tr.last?.toFixed(3) ?? "—" },
               { key: "p", label: "Prior quarter %", num: true, value: (c) => c.tr.prev, render: (c) => c.tr.prev?.toFixed(3) ?? "—" },
-              { key: "c4", label: "Change over 4 obs.", num: true, value: (c) => (c.tr.change4 != null ? c.tr.change4 * 100 : null), render: (c) => (c.tr.change4 != null ? `${(c.tr.change4 * 100).toFixed(1)}%` : "—") },
+              { key: "c4", label: "Change vs 4 quarters ago", num: true, value: (c) => (c.tr.change4 != null ? c.tr.change4 * 100 : null), render: (c) => (c.tr.change4 != null ? `${(c.tr.change4 * 100).toFixed(1)}%` : "—") },
               { key: "t", label: "Trend / turning point", value: (c) => c.tr.trend, render: (c) => <Badge kind={TREND_BADGE[c.tr.trend]}>{WW_TREND_LABEL[c.tr.trend]}</Badge> },
               { key: "cap", label: "Latest cap (USD)", num: true, value: (c) => c.caps.at(-1), render: (c) => fmtMoney(c.caps.at(-1)) },
               { key: "show", label: "Chart", value: () => null, export: false, render: (c) => <Check checked={shown.has(c.key)} onChange={(on) => toggle(c.key, on)} /> },

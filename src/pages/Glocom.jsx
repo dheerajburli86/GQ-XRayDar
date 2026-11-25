@@ -6,7 +6,8 @@ import { useAsync } from "../lib/useAsync.js";
 import { navigate } from "../lib/router.js";
 import { PageHead, Select, Seg, Loading, Empty, Pct, StockLink } from "../components/ui.jsx";
 import { DataTable } from "../components/DataTable.jsx";
-import { glocomBand, groupMoves, groupTimeline, GLOCOM_RULES, NEUTRAL } from "../../engine/glocom.js";
+import { glocomBand, groupMoves, groupTimeline, smallGroups, GLOCOM_RULES, NEUTRAL } from "../../engine/glocom.js";
+import { METHODOLOGY } from "../../engine/methodology.js";
 
 const BACK = [{ value: "1", label: "vs 1 session" }, { value: "5", label: "vs 1 week" }, { value: "21", label: "vs 1 month" }, { value: "63", label: "vs 3 months" }];
 import { GBadge, Jump, UP, DOWN, comName, BandChange } from "../components/glocomUi.jsx";
@@ -26,6 +27,7 @@ export default function Glocom({ route }) {
   const { data: hist, loading } = useAsync(() => d.api.glocomGroups(`${market}|${level}`), [market, level]);
 
   const moves = useMemo(() => (hist ? groupMoves(hist, back) : []), [hist, back]);
+  const small = useMemo(() => smallGroups(hist), [hist]);
   // owner (Nov 2026): category (band) changes are what matter. Band upgrades first, then band downgrades,
   // each in rank order; groups that only changed rank inside the same band follow, plainly.
   const movers = useMemo(() => {
@@ -70,6 +72,11 @@ export default function Glocom({ route }) {
             )}
           </div>
 
+          {small.length > 0 && (
+            <div className="small muted" style={{ opacity: 0.75 }}>
+              Not ranked, fewer than {hist.minN || METHODOLOGY.glocom.minGroupStocks} stocks: {small.map((x) => `${x.name} (${x.n})`).join(" · ")}
+            </div>
+          )}
           <div className="grid" style={{ gridTemplateColumns: "minmax(0, 1.4fr) minmax(0, 1fr)" }}>
             <DataTable exportName={`glocom_${market}_${level}`} rows={moves} rowKey={(x) => x.name} pageSize={50} initialSort={{ key: "rank", dir: "asc" }}
               onRowClick={(x) => set({ g: x.name })} selectedId={sel}

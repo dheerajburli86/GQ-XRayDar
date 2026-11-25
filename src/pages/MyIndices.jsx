@@ -141,7 +141,7 @@ function Editor({ d, idx, update, remove }) {
             <DataTable compact pageSize={25} exportName={`${idx.name} weight watcher`} rows={ww.children.map((c) => ({ ...c, id: c.key }))} columns={[
               { key: "m", label: "Member", value: (c) => c.label },
               { key: "w", label: "Weight now %", value: (c) => c.weights.at(-1), render: (c) => (c.weights.at(-1) ?? 0).toFixed(2) },
-              { key: "c4", label: "Change over 4 obs.", value: (c) => c.trend.change4, render: (c) => <Pct v={c.trend.change4 == null ? null : c.trend.change4 * 100} /> },
+              { key: "c4", label: "Change vs 4 quarters ago", value: (c) => c.trend.change4, render: (c) => <Pct v={c.trend.change4 == null ? null : c.trend.change4 * 100} /> },
               { key: "t", label: "Trend", value: (c) => c.trend.trend, render: (c) => <Badge kind={TREND_BADGE[c.trend.trend]}>{WW_TREND_LABEL[c.trend.trend]}</Badge> },
               { key: "q", label: "First quarter", value: (c) => ww.dates[c.weights.findIndex((x) => x != null)], render: (c) => { const j = c.weights.findIndex((x) => x != null); return j >= 0 ? quarterLabel(ww.dates[j]) : "—"; } },
             ]} />

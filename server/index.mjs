@@ -27,6 +27,7 @@ import { createFo, foConfig } from "./lib/fo.mjs";
 import { runXasset } from "../cli/xassetJob.mjs";
 import { runExtra } from "../cli/extraJob.mjs";
 import { runEtfInfo } from "../cli/etfInfoJob.mjs";
+import { runPriceRepair } from "../cli/priceRepairJob.mjs";
 import { RULES, DEFAULT_PARAMS, normalizeParams, describeRule, evaluateRule } from "../engine/rules.js";
 import { ALERT_TEMPLATES } from "../engine/alerts.js";
 import { FIELD, FIELDS, FIELD_GROUPS } from "../engine/fields.js";
@@ -590,6 +591,10 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
     const etfInfo = async () => { await runEtfInfo(pool, { log, fetchImpl }); };
     timers.push(setInterval(guard("etf-info", etfInfo), 3600_000));
     setTimeout(guard("etf-info", etfInfo), 210_000);
+    // impossible stored prices (SRSN at 0.0003 for months): re-checked against FMP, decisions in tas_price_repair
+    const priceRepair = async () => { await runPriceRepair(pool, { log, fetchImpl }); };
+    timers.push(setInterval(guard("price-repair", priceRepair), 6 * 3600_000));
+    setTimeout(guard("price-repair", priceRepair), 240_000);
     timers.push(setInterval(guard("extra", extra), 3 * 3600_000));
     setTimeout(guard("extra", extra), 150_000);
     timers.push(setInterval(guard("xasset", xasset), 3 * 3600_000));

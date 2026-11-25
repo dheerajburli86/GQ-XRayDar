@@ -1,11 +1,14 @@
 // Data API over Supabase (anon key, read only). Market data comes from the
 // heatmap dashboard's tables; computed analytics from this app's tas_* tables,
 // which the batch engine (cli/run.mjs) fills.
+import { canonicalIndustryGroup } from "../../engine/reference/industryAliases.js";
 import { etfType, ETF_TYPES } from "../../engine/etfType.js";
 const ETF_TYPES_SET = new Set(ETF_TYPES);
 import { CAP_UNRELIABLE_COUNTRIES } from "../../engine/geography.js";
 import { createClient } from "@supabase/supabase-js";
-import { applyCorporateActions, removeBadPrints, cutAtTickerReuse } from "../../engine/quality.js";
+import { rerateHistory } from "../../engine/glocom.js";
+import { METHODOLOGY } from "../../engine/methodology.js";
+import { applyCorporateActions, applyPriceRepairs, removeBadPrints, cutAtTickerReuse } from "../../engine/quality.js";
 import { decodeEvents } from "../../engine/eventCodec.js";
 import { SCREEN_KEYS } from "../../engine/screenRow.js";
 import { runGet, runSet, runPurge } from "../lib/idbCache.js";
@@ -100,7 +103,7 @@ export function createSupabaseApi(url, key) {
         classification: r.classification, geoAssigned: r.geo_assigned, currency: r.currency, currencyMajor: r.currency_major, currencyDivisor: r.currency_divisor,
         countryCurrency: r.country_currency, sector: r.sector,
         // ETF type in the industry-group slot (Equity / Fixed income / Commodity / ...), also for rows stored before the engine did it
-        industryGroup: r.asset_class === "ETF" && !ETF_TYPES_SET.has(r.industry_group) ? etfType({ name: r.name, category: r.industry_group }).type : r.industry_group, industry: r.industry, subIndustry: r.sub_industry ?? null, classSource: r.class_source,
+        industryGroup: r.asset_class === "ETF" && !ETF_TYPES_SET.has(r.industry_group) ? etfType({ name: r.name, category: r.industry_group }).type : canonicalIndustryGroup(r.industry_group), industry: r.industry, subIndustry: r.sub_industry ?? null, classSource: r.class_source,
         capLocal: r.cap_local, capCurrency: r.cap_currency, capUsd: r.cap_usd, capUsdNow: r.cap_usd_now, turnoverUsd: r.turnover_usd ?? null, capSegment: r.cap_segment, assetClass: r.asset_class || "Stock", active: r.active, dormant: !!r.dormant,
       }));
     },
@@ -129,6 +132,9 @@ export function createSupabaseApi(url, key) {
         const c = +r.close; if (!(c > 0)) continue;
         b.time.push(r.date); b.close.push(c); b.open.push(r.open != null ? +r.open : c); b.high.push(r.high != null ? +r.high : c); b.low.push(r.low != null ? +r.low : c); b.volume.push(r.volume != null ? +r.volume : 0);
       }
+      const rep = await one(sb.from("tas_price_repair").select("date,action,open,high,low,close,volume").eq("instrument_id", id).in("action", ["replace", "drop"])).catch(() => []);
+      const fixed = applyPriceRepairs(b, rep || []).bars;
+      b.time = fixed.time; b.open = fixed.open; b.high = fixed.high; b.low = fixed.low; b.close = fixed.close; b.volume = fixed.volume;
       const ca = await one(sb.from("tas_corporate_action").select("ex_date,factor,type,source").eq("instrument_id", id));
       const acts = ca.map((x) => ({ exDate: x.ex_date, factor: +x.factor, type: x.type, source: x.source }));
       const adj0 = acts.length ? applyCorporateActions(b, acts).bars : b;
@@ -168,7 +174,7 @@ export function createSupabaseApi(url, key) {
     async etiFor(instrumentId) { return one(sb.from("tas_eti_characteristic").select("company_id,characteristic,company_name,nse_symbol,isin,instrument_id,as_of,meets,value,note,method_version").eq("instrument_id", instrumentId)); },
     async etiChanges(limit = 300) { return one(sb.from("tas_eti_change").select("id,company_id,instrument_id,characteristic,from_meets,to_meets,as_of,at").order("at", { ascending: false }).limit(limit)); },
     async glocomScopes() { return (await all("tas_glocom_group", "scope_key")).map((r) => r.scope_key); },
-    async glocomGroups(key) { const r = await one(sb.from("tas_glocom_group").select("data").eq("scope_key", key).maybeSingle()); return r?.data || null; },
+    async glocomGroups(key) { const r = await one(sb.from("tas_glocom_group").select("data").eq("scope_key", key).maybeSingle()); return rerateHistory(r?.data || null, METHODOLOGY.glocom.minGroupStocks); },
     async rotation(key) { const r = await one(sb.from("tas_rotation").select("sectors").eq("scope_key", key).maybeSingle()); return r?.sectors || null; },
     async regimes() { const rows = await all("tas_regime", "index_key,data"); return Object.fromEntries(rows.map((r) => [r.index_key, r.data])); },
     async ewcw() {

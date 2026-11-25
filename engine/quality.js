@@ -169,3 +169,70 @@ export function shareBreaks(daily, { factor = 3, window = 10, hold = 20, stay = 
   }
   return { from, breaks };
 }
+
+// ---- price repairs ---------------------------------------------------------------------------------------
+// The heatmap's price_history holds some long runs of impossible prices (SRSN at 0.0003 IDR for ten months
+// against 85 now). removeBadPrints only drops short blips, so these runs flowed into returns and group averages.
+// cli/priceRepairJob.mjs re-fetches the provider's bars and stores one decision per bad date in tas_price_repair;
+// every bar loader applies them here, BEFORE corporate actions and the bad-print filter.
+
+/** Bars more than `factor` x away from the latest close (either way), as [{date, close}]. */
+export function farFromLatest(daily, { factor = 50, since = null } = {}) {
+  const n = daily.time.length;
+  if (!n) return [];
+  const last = daily.close[n - 1];
+  if (!(last > 0)) return [];
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    if (since && daily.time[i] < since) continue;
+    const c = daily.close[i];
+    if (c > 0 && (c < last / factor || c > last * factor)) out.push({ date: daily.time[i], close: c });
+  }
+  return out;
+}
+
+/**
+ * Decide what to do with each suspect stored bar, given the provider's bars for the same dates.
+ *  - provider has the date, differs from the stored close by > 2 %, and its close is within `factor` x of the
+ *    latest close -> replace with the provider's bar;
+ *  - otherwise, a stored close more than `impossible` x from the latest -> drop (no stock moves 1000x in a year
+ *    and back; the provider has nothing usable either);
+ *  - otherwise the provider agrees (a real move) -> confirmed, nothing changes.
+ * suspects [{date, close}], provider Map(date -> {open, high, low, close, volume}), latest = latest stored close.
+ */
+export function decideRepairs(suspects, provider, latest, { factor = 50, impossible = 1000 } = {}) {
+  const out = [];
+  for (const s of suspects) {
+    const p = provider.get(s.date);
+    const plausible = p && p.close > 0 && p.close >= latest / factor && p.close <= latest * factor;
+    if (plausible && Math.abs(p.close / s.close - 1) > 0.02) out.push({ date: s.date, action: "replace", storedClose: s.close, ...p, reason: `provider close ${p.close} vs stored ${s.close}` });
+    else if (s.close < latest / impossible || s.close > latest * impossible) out.push({ date: s.date, action: "drop", storedClose: s.close, reason: p ? `provider also implausible (${p.close})` : "provider has no bar for this date" });
+    else out.push({ date: s.date, action: "confirmed", storedClose: s.close, reason: p ? "provider agrees" : "no provider bar; within the 1000x limit" });
+  }
+  return out;
+}
+
+/** Apply stored repairs [{date, action, open, high, low, close, volume}] to daily bars. Pure. */
+export function applyPriceRepairs(daily, repairs) {
+  if (!repairs?.length) return { bars: daily, replaced: 0, dropped: 0 };
+  const by = new Map(repairs.filter((r) => r.action === "replace" || r.action === "drop").map((r) => [r.date, r]));
+  if (!by.size) return { bars: daily, replaced: 0, dropped: 0 };
+  const keys = ["time", "open", "high", "low", "close", "volume"].filter((k) => daily[k]);
+  const out = { ...daily }; for (const k of keys) out[k] = [];
+  let replaced = 0, dropped = 0;
+  for (let i = 0; i < daily.time.length; i++) {
+    const r = by.get(daily.time[i]);
+    if (r?.action === "drop") { dropped++; continue; }
+    for (const k of keys) out[k].push(daily[k][i]);
+    if (r?.action === "replace" && r.close > 0) {
+      const j = out.time.length - 1, c = +r.close;
+      out.close[j] = c;
+      if (out.open) out.open[j] = r.open > 0 ? +r.open : c;
+      if (out.high) out.high[j] = r.high > 0 ? +r.high : c;
+      if (out.low) out.low[j] = r.low > 0 ? +r.low : c;
+      if (out.volume && r.volume != null) out.volume[j] = +r.volume;
+      replaced++;
+    }
+  }
+  return { bars: out, replaced, dropped };
+}
