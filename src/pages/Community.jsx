@@ -6,10 +6,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, SERVER_ON } from "../lib/server.js";
 import { useAccount } from "../components/Account.jsx";
 import { useRoute, navigate, href } from "../lib/router.js";
-import { PageHead, Empty, Badge } from "../components/ui.jsx";
+import { PageHead, Tabs, Empty, Badge } from "../components/ui.jsx";
 import { Modal, PeoplePicker } from "../components/Share.jsx";
 import { QuickTicker } from "../components/QuickTicker.jsx";
-import { ItemPreview } from "./Library.jsx";
+import { ItemPreview, SharedItems } from "./Library.jsx";
 import { load } from "../lib/storage.js";
 import { SHARE_KINDS, uploadFile, fileUrl, downloadFile, chartHref, saveCopy, fmtWhen, fmtSize, bumpUnread } from "../lib/community.js";
 
@@ -51,7 +51,7 @@ function Attachment({ a, onInfo }) {
   if (a.type === "item") {
     return <ItemAttachment a={a} onInfo={onInfo} />;
   }
-  if (a.type === "share") return <div className="att card row between"><span>⇪ {a.title || "Shared item"}</span><a className="btn sm" href={href("library")}>Open library</a></div>;
+  if (a.type === "share") return <div className="att card row between"><span>⇪ {a.title || "Shared item"}</span><a className="btn sm" href={href("community", { view: "shared" })}>Open shared items</a></div>;
   if (a.type === "link") return <div className="att"><a href={a.url} target={a.url.startsWith("#") ? undefined : "_blank"} rel="noopener noreferrer nofollow">🔗 {a.title || a.url}</a></div>;
   return null;
 }
@@ -353,6 +353,7 @@ export default function Community() {
   const roomId = route.args[0] || null;
   const threadId = route.args[1] ? Number(route.args[1]) : null;
   const browse = route.query.browse || null;
+  const view = route.query.view === "shared" ? "shared" : "chat";
   const [rooms, setRooms] = useState(null);
   const [pub, setPub] = useState(null);
   const [err, setErr] = useState(null);
@@ -370,7 +371,8 @@ export default function Community() {
     <>
       <PageHead title="Community & chat" sub="Discuss markets in rooms and on boards, chat one-to-one or in groups, and share charts, screens, watchlists and files." />
       {err && <div className="note warn">{err}</div>}
-      <div className="community">
+      <Tabs value={view} onChange={(v) => navigate("community", v === "shared" ? { view: "shared" } : {})} tabs={[{ value: "chat", label: "Chats, rooms & boards" }, { value: "shared", label: "Shared items" }]} />
+      {view === "shared" ? <SharedItems /> : <div className="community">
         <aside className="conv-list card">
           <input placeholder="Find a conversation…" value={filter} onChange={(e) => setFilter(e.target.value)} />
           <div className="row wrap" style={{ gap: 4 }}>
@@ -411,7 +413,7 @@ export default function Community() {
           ) : roomId ? <Conversation key={roomId} roomId={roomId} threadId={threadId} me={me} onChanged={refresh} />
             : <Empty>Choose a conversation, or start a new one.</Empty>}
         </section>
-      </div>
+      </div>}
       {creating && <NewConversation kind={creating} onClose={() => setCreating(null)} onCreated={(r) => { setCreating(null); refresh(); navigate(`community/${r.id}`); }} />}
     </>
   );

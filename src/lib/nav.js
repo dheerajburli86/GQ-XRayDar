@@ -7,6 +7,6 @@ export const NAV = [
   ["Research", [["scores", "★", "AI setup scores"], ["assistant", "✦", "GQ Agent (full page)"], ["briefs", "✎", "Market briefs"], ["backtest", "⟲", "Backtest & patterns"]]],
   ["Derivatives", [["dhome", "⧉", "Derivatives dashboard"], ["dchain", "⋮", "Option chain"], ["dfut", "⇉", "Futures & rollover"], ["dvol", "≈", "Volatility lab"], ["dstrat", "⟁", "Strategy builder"], ["drisk", "⚖", "Portfolio risk"], ["dexpiry", "⏱", "Expiry & events"], ["dunusual", "⚡", "Unusual activity"], ["dscreen", "⚲", "Derivatives screener"], ["dresearch", "⟲", "Derivatives research"]]],
   ["My work", [["alerts", "◉", "Alerts"], ["tasks", "☑", "Tasks"], ["watchlists", "☰", "Watchlists & portfolio"], ["paper", "◈", "Practice portfolio"], ["notes", "✐", "Research notes"]]],
-  ["Community", [["community", "💬", "Community & chat"], ["library", "⇪", "Shared library"]]],
+  ["Community", [["community", "💬", "Community & chat"]]],
   ["Data", [["data", "⛁", "Data centre"], ["admin", "⚿", "People & access"]]],
 ];

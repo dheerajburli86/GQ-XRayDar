@@ -344,7 +344,7 @@ At <= 760px the left menu is a slide-in drawer (☰ in the top bar, closes on na
 - **Sharing levels** (`tas_share`, `tas_share_member`): private / chosen people / everyone, for items of the synced documents
   in `SHARE_KINDS` (watchlists, screens, customIndicators, alerts.rules, notes, workspaces, customIndices, deriv.screens,
   drawings, projections, indSettings). The payload is taken from the owner's SAVED doc (never the request) and refreshed on
-  every `PUT /api/docs/:key`; deleting the item ends the share. `ShareButton` (components/Share.jsx) + Shared library page.
+  every `PUT /api/docs/:key`; deleting the item ends the share. `ShareButton` (components/Share.jsx) + the "Shared items" tab of Community & chat (no separate Shared library page, owner 2026-11-25).
 - **Community** (`tas_room` kinds room / board / group / dm, `tas_room_member`, `tas_message`, `tas_file`): public rooms and
   boards are readable by anyone signed in and posting joins them; groups and DMs are members-only. Polling (3 s open
   conversation, 30 s unread badge), no websockets. Files are bytea, 10 MB, allow-listed types, served only after a membership

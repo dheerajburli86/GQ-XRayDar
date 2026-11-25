@@ -1,9 +1,9 @@
-// Shared library: what other people share with me or with everyone, and what I share. A shared item can be
-// previewed and saved into my own workspace as a copy.
+// Shared items (a tab inside Community & chat): what other people share with me or with everyone, and what I share.
+// A shared item can be previewed and saved into my own workspace as a copy.
 import { useEffect, useState } from "react";
 import { api, SERVER_ON } from "../lib/server.js";
 import { useAccount } from "../components/Account.jsx";
-import { PageHead, Tabs, Empty, Badge } from "../components/ui.jsx";
+import { Tabs, Empty, Badge } from "../components/ui.jsx";
 import { ShareDialog, Modal } from "../components/Share.jsx";
 import { SHARE_KINDS, VIS_LABEL, saveCopy, fmtWhen } from "../lib/community.js";
 import { useData } from "../data/store.jsx";
@@ -23,7 +23,7 @@ export function ItemPreview({ kind, payload }) {
   return <pre className="mono small" style={{ whiteSpace: "pre-wrap", maxHeight: 320, overflow: "auto" }}>{JSON.stringify(payload, null, 2).slice(0, 6000)}</pre>;
 }
 
-export default function Library() {
+export function SharedItems() {
   const acct = useAccount();
   const [tab, setTab] = useState("all");
   const [kind, setKind] = useState("");
@@ -42,10 +42,10 @@ export default function Library() {
   const openItem = async (r) => { try { setOpen(await api("GET", `/api/shares/${r.id}`)); } catch (e) { setMsg(e.message); } };
   const copy = (s) => { const out = saveCopy(s.kind, s.payload, s.owner?.name, s.sourceItem); if (out) setMsg(`${out} You can find it where you keep your ${(SHARE_KINDS[s.kind] || "items").toLowerCase()}s.`); };
 
-  if (!SERVER_ON || !acct.me) return <><PageHead title="Shared library" /><Empty>Sign in to see what people share.</Empty></>;
+  if (!SERVER_ON || !acct.me) return <Empty>Sign in to see what people share.</Empty>;
   return (
     <>
-      <PageHead title="Shared library" sub="Watchlists, screens, formulas, notes, layouts and settings people share. Save a copy into your own workspace, or manage what you share." />
+      <div className="small muted" style={{ marginBottom: 6 }}>Watchlists, screens, formulas, notes, layouts and settings people share. Save a copy into your own workspace, or manage what you share.</div>
       <div className="row wrap" style={{ gap: 8, marginBottom: 8 }}>
         <Tabs value={tab} onChange={setTab} tabs={[{ value: "all", label: "Everything I can see" }, { value: "with-me", label: "Shared with me" }, { value: "everyone", label: "Shared with everyone" }, { value: "mine", label: "My shares" }]} />
         <select value={kind} onChange={(e) => setKind(e.target.value)}><option value="">All kinds</option>{Object.entries(SHARE_KINDS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>

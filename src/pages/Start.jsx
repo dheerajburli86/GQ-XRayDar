@@ -54,8 +54,7 @@ const WHAT = {
   paper: "Practice trading with no real money.",
   notes: "Your private research notes.",
   admin: "Admins only: every account, its role, and whether its GQ Agent is on and what it may read.",
-  community: "Chat rooms, message boards, group chats and direct messages. Share charts, screens, watchlists and files with other XRayDar users.",
-  library: "What other people share with you or with everyone (watchlists, screens, formulas, notes, layouts). Save a copy, or choose who sees what you share.",
+  community: "Chat rooms, message boards, group chats and direct messages, plus a Shared items tab: what people share with you (watchlists, screens, formulas, notes, layouts) and what you share. Send charts and files to other XRayDar users.",
   data: "Run history, data health and issues: is the data fresh and complete?",
 };
 

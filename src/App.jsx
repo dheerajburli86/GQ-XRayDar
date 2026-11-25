@@ -66,7 +66,6 @@ const pages = {
   watchlists: page("watchlists", () => import("./pages/Watchlists.jsx")),
   notes: page("notes", () => import("./pages/Notes.jsx")),
   community: page("community", () => import("./pages/Community.jsx")),
-  library: page("library", () => import("./pages/Library.jsx")),
   admin: page("admin", () => import("./pages/Admin.jsx")),
   data: page("data", () => import("./pages/DataCentre.jsx")),
   stock: page("stock", () => import("./pages/Stock.jsx")),
