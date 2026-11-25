@@ -35,6 +35,7 @@ import { createTokens, API_SCOPES } from "./lib/tokens.mjs";
 import { createChannels, webhookAllowed } from "./lib/channels.mjs";
 import { registerPublicApi, attachStream, API_ENDPOINTS } from "./lib/publicApi.mjs";
 import { ROLES, need, can } from "./lib/rbac.mjs";
+import { createAuthAdmin } from "./lib/authAdmin.mjs";
 import { createCommunity, AGENT_SOURCES, SHARE_KINDS, normaliseAccess } from "./lib/community.mjs";
 import { MODEL_VERSIONS, ENGINE_VERSION } from "../engine/versions.js";
 
@@ -65,7 +66,7 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
   const tasks = createTasks({ pool, analysis, userdata, telegram, log });
   const scorecard = createScorecard({ data });
   const agentProxy = createAgentProxy({ cfg, data, fetchImpl, log });
-  const community = createCommunity({ pool, audit });
+  const community = createCommunity({ pool, audit, authAdmin: cfg.authServiceKey ? createAuthAdmin(cfg) : null });
   const signupLimiter = new RateLimiter(5, 3_600_000); // 5 new accounts an hour from one address
   const fo = deps.fo || createFo({ pool, log, fetchImpl, cfg: foConfig(cfg.env || process.env) });
   const limiter = new RateLimiter(cfg.rateLimitPerMin);

@@ -355,3 +355,12 @@ At <= 760px the left menu is a slide-in drawer (☰ in the top bar, closes on na
 ## The dashboard GQ Agent (history, 2026-11-24 morning)
 
 The site runs with `VITE_REQUIRE_LOGIN=false`, so the panel has no Supabase session. `POST /api/agent/chat` therefore accepts a request with NO Authorization header as a guest (`cfg.agentPublic`, env `AGENT_PUBLIC`, on by default, `AGENT_PUBLIC=0` turns it off; a token that is sent must still be valid). `GET /api/agent/status` (public) tells the panel whether the agent is connected. Guests are sent to the GQ agent as `{guest: true, guestId: sha256(ip|secret)}` (NOT an email: the agent refuses a non-email and the panel then fell back, 2026-11-24); the agent gives guests read-only access to every project's code and data EXCEPT BusyBee (staff tasks / payroll), plus the XRayDar tool and the web, and a "where the numbers live" map in its prompt (owner, 2026-11-24: the team has NO Indian market caps on any channel; the agent must say so and never quote the heatmap`s partial `market_cap_inr`). The panel shows the question at once with a working line (steps + seconds) until the answer replaces it. Rate-limited per IP and audited with a null user. The built-in fallback ranks "by market cap / biggest / largest" by `capUsd` (it used the AI score before). Before this the panel silently fell to the built-in keyword assistant (wrong answers such as "3341 stocks match" for "5 biggest US stocks"). Every other route still needs a login. The Google sign-in was removed the same day; the email-link `SignIn` stays for `VITE_REQUIRE_LOGIN` builds.
+
+## XRayDar sign-in has its OWN Supabase project (added 2026-11-25, owner)
+
+Logins no longer live in the heatmap's Supabase project (xmcvsnollphnsonaupzt). They are in "GQ-XRayDar" (ceneywmgbqmjgrlbtsiw);
+the xmcv project keeps only the data and the tas_* tables. Browser: `VITE_AUTH_SUPABASE_URL / _ANON_KEY` (auth client only,
+`src/lib/server.js`). Server: `AUTH_SUPABASE_URL / _ANON_KEY / _SERVICE_KEY` verify tokens and, through `server/lib/authAdmin.mjs`
+(admin API), create accounts and set temporary passwords. Without the service key the old SQL functions in xmcv are used (tests only).
+Accounts made before the move do not exist in the new project and must sign up again; tas_user rows keep their ids.
+The new project's Site URL / Redirect URLs are the XRayDar address (reset links). Never point XRayDar login at xmcv again.

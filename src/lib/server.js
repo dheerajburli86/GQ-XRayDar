@@ -13,11 +13,14 @@ const env = import.meta.env;
 export const SERVER_URL = (env.VITE_TA_SERVER_URL || "").replace(/\/$/, "");
 export const SERVER_ON = !!SERVER_URL;
 const SB_ON = !!(env.VITE_SUPABASE_URL && env.VITE_SUPABASE_ANON_KEY) && env.VITE_DATA_SOURCE !== "demo";
+// Sign-in has its own Supabase project (owner, 2026-11-25), apart from the heatmap's data project above.
+const AUTH_URL = env.VITE_AUTH_SUPABASE_URL || env.VITE_SUPABASE_URL;
+const AUTH_KEY = env.VITE_AUTH_SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY;
 export const LOGIN_REQUIRED = SB_ON && env.VITE_REQUIRE_LOGIN !== "false";
 export const ALLOWED_DOMAINS = String(env.VITE_ALLOWED_EMAIL_DOMAINS || "gquants.com").split(/[\s,]+/).filter(Boolean).map((x) => x.toLowerCase());
 export const SYNC_KEYS = /^(watchlists|alerts\.rules|alerts\.inbox|notes|screens|workspaces|workspace\.current|layout\.[A-Za-z]+|paper|settings|assistant\.history|agent\.history|navCollapsed|drawings|chartlab|scanners|customIndices|deriv\.positions|deriv\.journal|deriv\.screens|deriv\.events|deriv\.alerts|deriv\.risk|deriv\.coach|customIndicators|projections|indSettings|tiles\.shortcuts|analyst\.studies|events)$/;
 
-export const auth = SB_ON ? createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, storageKey: "gqta-auth", detectSessionInUrl: true } }).auth : null;
+export const auth = SB_ON ? createClient(AUTH_URL, AUTH_KEY, { auth: { persistSession: true, autoRefreshToken: true, storageKey: "gqta-auth", detectSessionInUrl: true } }).auth : null;
 
 export const emailAllowed = (email) => ALLOWED_DOMAINS.includes(String(email || "").toLowerCase().split("@")[1] || "");
 

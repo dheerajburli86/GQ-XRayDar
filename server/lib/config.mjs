@@ -9,6 +9,11 @@ export function loadConfig(e = process.env) {
     // Supabase Auth (the heatmap project's auth): used only to verify web logins
     supabaseUrl: (e.SUPABASE_URL || "").replace(/\/$/, ""),
     supabaseAnonKey: e.SUPABASE_ANON_KEY || "",
+    // XRayDar's OWN sign-in project (owner, 2026-11-25: logins must not live in the heatmap's project). When set, web
+    // logins are verified there and accounts are created / passwords set through its admin API.
+    authUrl: (e.AUTH_SUPABASE_URL || e.SUPABASE_URL || "").replace(/\/$/, ""),
+    authAnonKey: e.AUTH_SUPABASE_ANON_KEY || e.SUPABASE_ANON_KEY || "",
+    authServiceKey: e.AUTH_SUPABASE_SERVICE_KEY || "",
     // Anyone may create an account and sign in (owner, 2026-11-24). OPEN_SIGNUP=0 goes back to the domain list.
     openSignup: (e.OPEN_SIGNUP || "1") !== "0",
     allowedDomains: list(e.ALLOWED_EMAIL_DOMAINS || "gquants.com"),

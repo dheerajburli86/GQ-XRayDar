@@ -64,7 +64,7 @@ export function normaliseAccess(a, { isAdmin = false } = {}) {
   return { enabled, sources: enabled ? sources : [] };
 }
 
-export function createCommunity({ pool, audit = { event() {} } }) {
+export function createCommunity({ pool, audit = { event() {} }, authAdmin = null }) {
   const q = (sql, args) => pool.query(sql, args);
   const one = async (sql, args) => (await q(sql, args)).rows[0] || null;
   const person = (r) => ({ id: r.id, name: r.display_name || r.name || "Member" });
@@ -77,8 +77,9 @@ export function createCommunity({ pool, audit = { event() {} } }) {
     if (String(password).length > 72) throw new HttpError(400, "Use a password of at most 72 characters.");
     if (n.length < 2) throw new HttpError(400, "Enter your name (at least 2 characters).");
     let id;
-    try { id = (await one(`select public.tas_create_account($1, $2, $3) as id`, [e, password, n])).id; }
+    try { id = authAdmin ? await authAdmin.createUser(e, password, n) : (await one(`select public.tas_create_account($1, $2, $3) as id`, [e, password, n])).id; }
     catch (err) {
+      if (err instanceof HttpError) throw err;
       if (err.code === "23505" || /account exists/.test(err.message)) throw new HttpError(409, "An account with this email already exists. Sign in instead.");
       if (err.code === "22023") throw new HttpError(400, err.message);
       throw err;
@@ -91,8 +92,8 @@ export function createCommunity({ pool, audit = { event() {} } }) {
   async function setPassword(adminUser, userId, password) {
     needUuid(userId, "user");
     if (String(password || "").length < 8) throw new HttpError(400, "Use at least 8 characters.");
-    const r = await one(`select public.tas_set_password($1, $2) as ok`, [userId, password]);
-    if (!r?.ok) throw new HttpError(404, "no such account");
+    const ok = authAdmin ? await authAdmin.setPassword(userId, password) : !!(await one(`select public.tas_set_password($1, $2) as ok`, [userId, password]))?.ok;
+    if (!ok) throw new HttpError(404, "no such account in the sign-in system (an account made before the sign-in move has to sign up again)");
     audit.event({ userId: adminUser.id, actor: adminUser.email, category: "admin", action: "set_password", detail: { target: userId } });
     return { ok: true };
   }

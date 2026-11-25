@@ -46,9 +46,9 @@ export function createAuth(cfg, pool, fetchImpl = fetch) {
     if (!token) throw new HttpError(401, "sign in required");
     const hit = cache.get(token);
     if (hit && hit.until > Date.now()) return hit.user;
-    if (!cfg.supabaseUrl || !cfg.supabaseAnonKey) throw new HttpError(500, "SUPABASE_URL / SUPABASE_ANON_KEY are not set on the server");
+    if (!cfg.authUrl || !cfg.authAnonKey) throw new HttpError(500, "AUTH_SUPABASE_URL / AUTH_SUPABASE_ANON_KEY are not set on the server");
     let r;
-    try { r = await fetchImpl(`${cfg.supabaseUrl}/auth/v1/user`, { headers: { apikey: cfg.supabaseAnonKey, authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10_000) }); }
+    try { r = await fetchImpl(`${cfg.authUrl}/auth/v1/user`, { headers: { apikey: cfg.authAnonKey, authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10_000) }); }
     catch { throw new HttpError(503, "could not verify the login right now; try again in a moment"); }
     if (!r.ok) throw new HttpError(401, "session expired; sign in again");
     const u = await r.json();
