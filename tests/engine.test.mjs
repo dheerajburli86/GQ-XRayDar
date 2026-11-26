@@ -206,3 +206,11 @@ test("Technology / Non Technology index groups: scope keys parse and techGroup f
   assert.equal(techGroup({ sector: "Information Technology" }), "Technology");
   assert.equal(techGroup({ sector: "Financials" }), "Non Technology");
 });
+
+test("Technology group takes Alphabet / Meta / Amazon / Tesla / SpaceX by industry or sub-industry (Sir, 2026-11-26)", async () => {
+  const { techGroup } = await import("../engine/reference/techGroup.js");
+  const { US_CLASS } = await import("../engine/reference/usClassification.js");
+  const of = (sym) => { const [sector, industryGroup, subIndustry] = US_CLASS[sym]; return techGroup({ sector, industryGroup, subIndustry }); };
+  for (const s of ["GOOG", "META", "AMZN", "TSLA", "SPCX", "NVDA", "NFLX", "MELI"]) assert.equal(of(s), "Technology", s);
+  for (const s of ["JPM", "XOM", "LLY", "GM", "T", "WMT"]) assert.equal(of(s), "Non Technology", s);
+});
