@@ -55,6 +55,8 @@ export function pgSink(pool, { log = console.log, dryRun = false, writeParallel 
     const client = await pool.connect();
     try {
       await client.query("begin");
+      // the pooler can drop the session's statement_timeout; a history rewrite (methodology change) needs minutes
+      await client.query("set local statement_timeout = '10min'");
       await upsertJson(client, "tas_index", batch.map((b) => b.meta), ["index_key"],
         ["index_key", "family", "ccy", "currency_code", "scope_key", "name", "level", "scope_type", "scope_value", "sector", "cap", "country", "region", "classification", "start_date", "last_date", "last_level", "n_last", "cap_estimated", "run_id"]);
       const keys = batch.map((b) => b.meta.index_key);
@@ -71,16 +73,16 @@ export function pgSink(pool, { log = console.log, dryRun = false, writeParallel 
       // log revisions of historical values before overwriting them: one statement per batch, compared inside the
       // database (a full-history change, e.g. a methodology change, touches every year row of every index; one
       // round trip per year row made that the slowest part of a run)
-      for (let i = 0; i < changedExisting.length; i += 200) {
-        const part = changedExisting.slice(i, i + 200).map(([key, year, y]) => ({ index_key: key, year, dates: y.dates, level: y.level }));
+      for (let i = 0; i < changedExisting.length; i += 100) {
+        const part = changedExisting.slice(i, i + 100).map(([key, year, y]) => ({ index_key: key, year, dates: y.dates, level: y.level }));
+        // each changed year row is fetched by its primary key (nested loop), then old and new values are matched by date
         const r = await client.query(`insert into tas_index_revision (index_key, date, old_level, new_level, run_id)
-          select n.index_key, n.d, o.l, n.l, $2
-            from (select x.index_key, x.year, u.d, u.l from json_to_recordset($1::json) x(index_key text, year int, dates date[], level float8[])
-                    cross join lateral unnest(x.dates, x.level) u(d, l)) n
-            join (select v.index_key, u.d, u.l from tas_index_values v
-                    join json_to_recordset($1::json) k(index_key text, year int) on v.index_key = k.index_key and v.year = k.year
-                    cross join lateral unnest(v.dates, v.level) u(d, l)) o on o.index_key = n.index_key and o.d = n.d
-           where o.l is not null and n.l is not null and abs(o.l - n.l) > 1e-9 * greatest(1, abs(o.l))`, [JSON.stringify(part), runId]);
+          select x.index_key, u.d, u.ol, u.nl, $2
+            from json_to_recordset($1::json) x(index_key text, year int, dates date[], level float8[])
+            join tas_index_values v on v.index_key = x.index_key and v.year = x.year
+            cross join lateral (select o.d, o.l as ol, n.l as nl from unnest(v.dates, v.level) o(d, l)
+                                  join unnest(x.dates, x.level) n(d, l) on n.d = o.d) u
+           where u.ol is not null and u.nl is not null and abs(u.ol - u.nl) > 1e-9 * greatest(1, abs(u.ol))`, [JSON.stringify(part), runId]);
         counts.revisions += r.rowCount || 0;
       }
       await upsertJson(client, "tas_index_values", toWrite, ["index_key", "year"], ["index_key", "year", "dates", "level", "n", "n_stale", "cap_usd", "content_hash", "run_id"]);
