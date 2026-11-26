@@ -8,7 +8,8 @@ import { useAccount } from "./Account.jsx";
 import { api } from "../lib/server.js";
 import { answer } from "../../engine/assistant.js";
 import { parseCommand } from "../../engine/nl.js";
-import { href } from "../lib/router.js";
+import { href, navigate } from "../lib/router.js";
+import { parseChartIntent, applyChartIntent, linkToFollow } from "../lib/chartIntent.js";
 import { load, save, uid } from "../lib/storage.js";
 import { parseProjectionText, computeProjection } from "../../engine/projection.js";
 import { formulaFromText } from "../../engine/formula.js";
@@ -23,6 +24,15 @@ import { loadInstrument } from "../lib/series.js";
 async function chartAction(text, ctx, d) {
   const t = text.trim();
   const id = ctx?.instrumentId, sym = ctx?.symbol;
+  // "make it candlesticks", "open RSIMMA", "weekly and monthly": change the chart that is open, right here
+  const intent = parseChartIntent(t);
+  if (intent) {
+    const go = applyChartIntent(intent, ctx);
+    if (!go) return [{ kind: "text", text: ctx?.page ? "That change needs a stock chart open (Chart lab or an RSI / RSC screen)." : "Open a chart first, then tell me how to change it." }];
+    if (go.style) save("chartlab", { ...load("chartlab", {}), style: go.style, ...(intent.tf ? { tf: intent.tf } : {}) });
+    navigate(go.path, go.query);
+    return [{ kind: "text", text: `Done: the open chart${sym ? ` (${sym})` : ""} now shows ${go.label}.` }];
+  }
   if (/^(create|make|add|build)\b.*\b(indicator|formula)\b/i.test(t) || /^(indicator|formula)\s*[:=]/i.test(t)) {
     const f = formulaFromText(t);
     if (!f) return [{ kind: "text", text: "I could not turn that into a formula. Write it directly, e.g. \"create an indicator: ema(close, 10) - ema(close, 30)\", or describe a momentum, volatility, distance-from-EMA, new-high or volume-spike indicator." }];
@@ -163,6 +173,9 @@ export function AgentPanel() {
         const r = await api("POST", "/api/agent/chat", { message: text, history, context: ctx || pageContext });
         entry.source = r.source; entry.notice = r.notice;
         if (r.answer) entry.text = r.answer; else entry.blocks = r.blocks;
+        // "open RELIANCE RSCMMA weekly": when the answer carries exactly one chart of this app, open it in place
+        const follow = r.answer ? linkToFollow(text, r.answer, window.location.origin) : null;
+        if (follow) { window.location.hash = `#/${follow}`; entry.notice = "Opened on screen."; }
       }
     } catch (e) { entry.blocks = [{ kind: "text", text: `Could not answer: ${e.message}` }]; }
     setHist((h) => h.map((m) => (m.id === pendingId ? entry : m)));

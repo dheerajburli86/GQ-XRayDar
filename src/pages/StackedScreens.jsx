@@ -4,6 +4,7 @@
 //   RSCMMA / RSCACC  Price | RSC | RSI of RSC | RSI of RSI of RSC | RSI of RSI of RSI of RSC
 // MMA = short EMA 3-15 (yellow) + long EMA 30-60 (red); ACC = EMA 4 / 14 / 26 / 39.
 // All maths is engine/analyst.js; this page only draws it.
+import { setAgentContext } from "../components/AgentPanel.jsx";
 import { rowBars } from "../lib/dataWindow.js";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useData } from "../data/store.jsx";
@@ -54,6 +55,8 @@ export default function StackedScreens({ route }) {
   const [tfs, setTfs] = usePersistent(`analyst.tf.${mode}`, null);
   const left = tfs?.left || "D", right = tfs?.right || "W";
   const setTf = (side, tf) => setTfs({ left, right, [side]: tf });
+  // the GQ agent sees what is open, so "switch to RSCACC" / "make it monthly" changes this screen
+  useEffect(() => { if (instKey) setAgentContext({ page: "screens", mode, instKey, instrumentId: secId, symbol: instShort, left, right }); return () => setAgentContext(null); }, [instKey, mode, left, right, secId, instShort]);
   // a link may carry the periods (?l=D&r=W, sent by the GQ agent): they become this screen's saved pair
   useEffect(() => {
     const ok = (x) => (x && /^[0-9]*[DWMQHNY]$/i.test(x) ? x.toUpperCase() : null);

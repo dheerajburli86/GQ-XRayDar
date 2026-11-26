@@ -84,6 +84,8 @@ export default function ChartLab({ route }) {
   useChartKeys({ onTf: (tf) => set({ tf }), onSearch: (ch) => setPicking({ initial: ch }) });
   // a chart link shared in a chat opens on its own period (#/chart/<id>?tf=W)
   useEffect(() => { const t = route.query?.tf; if (t && /^[0-9]*[DWMQHNY]$/i.test(t) && t !== v.tf) set({ tf: t.toUpperCase() }); }, [route.query?.tf]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ... and on its own chart style (#/chart/<id>?style=ha), so the GQ agent can change the open chart
+  useEffect(() => { const st = route.query?.style; if (st && STYLES.some((x) => x[0] === st) && st !== v.style) set({ style: st }); }, [route.query?.style]); // eslint-disable-line react-hooks/exhaustive-deps
   const [allDrawings, setAllDrawings] = usePersistent("drawings", {});
   const drawings = useMemo(() => allDrawings[id] || [], [allDrawings, id]);
   const setDrawings = (list) => setAllDrawings({ ...allDrawings, [id]: list });

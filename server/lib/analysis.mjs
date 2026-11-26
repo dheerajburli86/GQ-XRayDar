@@ -13,8 +13,16 @@ import { canonicalCountry } from "../../engine/geography.js";
 const r2 = (v) => (v == null || !Number.isFinite(v) ? null : Math.round(v * 100) / 100);
 const TFN = { D: "daily", W: "weekly", M: "monthly", Q: "quarterly", Y: "yearly" };
 
+const SCREENS = ["RSIMMA", "RSIACC", "RSCMMA", "RSCACC"];
+// chart styles the Chart lab takes in its address (?style=)
+const STYLE_ALIASES = { candles: "candles", candle: "candles", candlestick: "candles", candlesticks: "candles", ha: "ha", heikinashi: "ha",
+  line: "line", bar: "bar", bars: "bar", ohlc: "bar", renko: "renko", kagi: "kagi", pnf: "pnf", "p&f": "pnf", pointfigure: "pnf", pointandfigure: "pnf", tpo: "tpo", marketprofile: "tpo" };
+
 export function createAnalysis(data, cfg) {
   const link = (path) => (cfg.appUrl ? `${cfg.appUrl}/#/${path}` : null);
+  // every place that hands out a link for one stock hands out all of its screens, so an answer never labels the plain
+  // chart as "RSIMMA" (2026-11-26: the agent reused the chart link in a screen table's RSIMMA column)
+  const screenLinks = (id) => ({ chart: link(`chart/${id}`), stock: link(`stock/${id}`), ...Object.fromEntries(SCREENS.map((sc) => [sc, link(`screens/${sc}/${encodeURIComponent(`s:${id}`)}`)])) });
 
   async function stock(ref) {
     const cands = await data.resolve(ref);
@@ -49,7 +57,7 @@ export function createAnalysis(data, cfg) {
       glocom: s.glocom ? { label: s.glocom.label, code: s.glocom.code } : null,
       score: s.score ? { total: s.score.total, components: Object.fromEntries(Object.entries(s.score.components).map(([k, c]) => [k, c.score])), conflicts: s.score.conflicts } : null,
       recentSignals: ev.map((e) => ({ date: e.date, signal: EVENT_LABEL[e.type] || e.type, after1M: e.fwd?.["1M"] ?? null })),
-      links: { chart: link(`chart/${sec.id}`), page: link(`stock/${sec.id}`) },
+      links: { ...screenLinks(sec.id), page: link(`stock/${sec.id}`) },
       note: "Descriptive analysis of stored data. Not a recommendation.",
     };
     return out;
@@ -67,7 +75,6 @@ export function createAnalysis(data, cfg) {
   }
 
   /** A link that opens one chart exactly as asked: Chart lab or an Analyst screen, period(s), comparison. */
-  const SCREENS = ["RSIMMA", "RSIACC", "RSCMMA", "RSCACC"];
   async function pickOne(ref, country) {
     const t = String(ref || "").trim();
     if (/^i:./.test(t) || /^(CW|EW)\|/.test(t)) return { key: t.startsWith("i:") ? t : `i:${t}`, label: t.replace(/^i:/, "") };
@@ -83,7 +90,7 @@ export function createAnalysis(data, cfg) {
     const s = list[0];
     return { key: `s:${s.id}`, id: s.id, label: `${s.symbol} · ${s.name}`, country: s.country };
   }
-  async function chartLink({ ref, screen = null, tf = null, tf2 = null, bench = null, country = null } = {}) {
+  async function chartLink({ ref, screen = null, tf = null, tf2 = null, bench = null, country = null, style = null } = {}) {
     if (!cfg.appUrl) return { error: "APP_URL is not set on the TA server" };
     const a = await pickOne(ref, country);
     if (a.error || a.ambiguous) return a;
@@ -106,7 +113,12 @@ export function createAnalysis(data, cfg) {
     if (sc && sc !== "CHART" && sc !== "CHARTLAB" && sc !== "STOCK") return { error: `screen must be one of chart, stock, ${SCREENS.join(", ")}` };
     if (!a.id) return { url: link(`screens/RSIMMA/${encodeURIComponent(a.key)}`), instrument: a.label, note: "house indices open on the RSIMMA screen" };
     if (sc === "STOCK") return { url: link(`stock/${encodeURIComponent(a.id)}`), instrument: a.label };
-    return { url: link(`chart/${encodeURIComponent(a.id)}${okTf(tf) ? `?tf=${okTf(tf)}` : ""}`), instrument: a.label, period: okTf(tf) || "D" };
+    const st = style ? STYLE_ALIASES[String(style).toLowerCase().replace(/[^a-z&]/g, "")] : null;
+    if (style && !st) return { error: `style must be one of ${Object.keys(STYLE_ALIASES).join(", ")}` };
+    const cq = new URLSearchParams();
+    if (okTf(tf)) cq.set("tf", okTf(tf));
+    if (st) cq.set("style", st);
+    return { url: link(`chart/${encodeURIComponent(a.id)}${cq.toString() ? `?${cq}` : ""}`), instrument: a.label, period: okTf(tf) || "D", style: st || "as last used" };
   }
 
   async function compare(a, b) {
@@ -135,7 +147,7 @@ export function createAnalysis(data, cfg) {
     return {
       asOf: st.info.asOf, understood, conditions: conds, scope: sc, total: rows.length, sortedBy: sf,
       ...(rows.length ? {} : { hint: `nothing matched; countries are written like ${st.countries.slice(0, 6).join(", ")}; sectors: ${st.sectors.join(", ")}` }),
-      results: rows.slice(0, Math.min(lim || 25, 100)).map((r) => ({ id: r.id, chart: link(`chart/${r.id}`), symbol: r.sec.symbol, name: r.sec.name, country: r.sec.country, sector: r.sec.sector, [sf]: FIELD[sf]?.get(r) ?? null, ret3M: r.flat.ret3M, weeklyMma: r.flat.mmaW, score: r.flat.score, stage: r.flat.stage,
+      results: rows.slice(0, Math.min(lim || 25, 100)).map((r) => ({ id: r.id, chart: link(`chart/${r.id}`), links: screenLinks(r.id), symbol: r.sec.symbol, name: r.sec.name, country: r.sec.country, sector: r.sec.sector, [sf]: FIELD[sf]?.get(r) ?? null, ret3M: r.flat.ret3M, weeklyMma: r.flat.mmaW, score: r.flat.score, stage: r.flat.stage,
         ...Object.fromEntries((Array.isArray(columns) ? columns : []).slice(0, 20).filter((k) => FIELD[k]).map((k) => [k, FIELD[k].get(r) ?? null])),
         ...Object.fromEntries(conds.filter((c) => c.field && FIELD[c.field]).map((c) => [c.field, FIELD[c.field].get(r) ?? null])) })),
       link: query ? link(`screener?q=${encodeURIComponent(query)}`) : null,
