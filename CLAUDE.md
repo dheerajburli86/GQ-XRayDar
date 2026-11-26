@@ -396,3 +396,11 @@ The new project's Site URL / Redirect URLs are the XRayDar address (reset links)
 ## LTW 40 corrected (2026-11-25, Alok Sir)
 
 LTW 40 is now W >= 0.4 and 6M < 0.4 (the Excel formula), reversing the earlier heatmap-copied rule. Belgium (W 38, 6M 46, 1Y 41) is Neutral 40 60. Pinned in `tests/glocom.test.mjs`. Stored GLOCOM codes change at the next engine run.
+
+## GLOCOM / LOCOM band history export (added 2026-11-26, Shankar Sir's mail)
+
+`GET /api/glocom-history` (login or agent secret) returns every stored session of `tas_glocom_group` as CSV, one row per date x group:
+date, market, level, group, band, band_code, rank, rated_groups, score, stocks, ret_1w/6m/1y, pctile_1w/6m/1y (fractions; USD for Global).
+`?scope=G|industry`, `?market=India`, `?format=json`. Builder in `engine/glocomExport.js`. Depth is only what `methodology.glocom.historySessions`
+stores (70 sessions); it is NOT point-in-time: past dates are re-derived by each run from today's prices, corporate-action / bad-print repairs and
+today's industry mapping. Equal-weight average of constituents; Indian groups carry no cap or size filter.

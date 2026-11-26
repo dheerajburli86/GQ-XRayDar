@@ -39,6 +39,7 @@ import { ROLES, need, can } from "./lib/rbac.mjs";
 import { createAuthAdmin } from "./lib/authAdmin.mjs";
 import { createCommunity, AGENT_SOURCES, SHARE_KINDS, normaliseAccess } from "./lib/community.mjs";
 import { MODEL_VERSIONS, ENGINE_VERSION } from "../engine/versions.js";
+import { glocomHistoryRows, toCsv, scopeParts, GLOCOM_EXPORT_COLUMNS } from "../engine/glocomExport.js";
 
 const log = (m) => console.log(`${new Date().toISOString().slice(0, 19)} ${m}`);
 
@@ -517,6 +518,20 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
     const chunks = []; let size = 0;
     for await (const c of req) { size += c.length; if (size > 10 * 1024 * 1024) throw new HttpError(413, "Files can be at most 10 MB."); chunks.push(c); }
     return community.upload(u, id, { name: q(url, "name", "file"), mime: req.headers["content-type"], data: Buffer.concat(chunks) });
+  });
+  // GLOCOM / LOCOM group band history as CSV (all stored sessions). ?scope=G|industry limits it to one scope; ?market=India limits by market name.
+  r.get("/api/glocom-history", async (req, _, url) => {
+    await auth.any(req);
+    const scope = q(url, "scope"), market = q(url, "market");
+    let keys = await data.api.glocomScopes();
+    if (scope) keys = keys.filter((k) => k === scope);
+    if (market) keys = keys.filter((k) => scopeParts(k).market.toLowerCase() === market.toLowerCase());
+    keys.sort();
+    const rows = [];
+    for (const k of keys) rows.push(...glocomHistoryRows(k, await data.api.glocomGroups(k)));
+    if (q(url, "format") === "json") return { columns: GLOCOM_EXPORT_COLUMNS, rows };
+    const body = Buffer.from(toCsv(rows));
+    return { __raw: { status: 200, body, headers: { "content-type": "text/csv; charset=utf-8", "content-length": body.length, "cache-control": "no-store", "content-disposition": "attachment; filename=\"glocom_locom_band_history.csv\"" } } };
   });
   r.get("/api/files/:id", async (req, { id }) => {
     const f = await community.download(await auth.web(req), id);
