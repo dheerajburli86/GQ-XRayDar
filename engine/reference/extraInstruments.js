@@ -51,6 +51,32 @@ export const EXTRA_FMP = [
   { symbol: "BZUSD", label: "Brent crude (futures)", category: "Commodity", region: "Global", country: null },
   { symbol: "NGUSD", label: "Natural gas (futures)", category: "Commodity", region: "Global", country: null },
   { symbol: "HGUSD", label: "Copper (futures)", category: "Commodity", region: "Global", country: null },
+  // Added 2026-11-26 (owner's indices list; each confirmed by a live FMP probe with daily history to 2026-11-25/26).
+  // Not added although FMP answered: LEAD (last bar Jul 2026), cotton CTUSD (Jan 2025), lean hogs HEUSD (Feb 2025),
+  // feeder cattle GFUSD (Dec 2025): stale series are not charted.
+  { symbol: "WIG20.WA", label: "WIG20 (Poland)", category: "Index", region: "Europe", country: "Poland" },
+  { symbol: "WIG.WA", label: "WIG (Poland)", category: "Index", region: "Europe", country: "Poland" },
+  { symbol: "RTSI.ME", label: "RTS Index (Russia)", category: "Index", region: "Europe", country: "Russia" },
+  { symbol: "XIN9.FGI", label: "FTSE China A50 (from May 2023)", category: "Index", region: "Asia", country: "China" },
+  { symbol: "PLUSD", label: "Platinum (futures)", category: "Commodity", region: "Global", country: null },
+  { symbol: "PAUSD", label: "Palladium (futures)", category: "Commodity", region: "Global", country: null },
+  { symbol: "HOUSD", label: "Heating oil (futures)", category: "Commodity", region: "Global", country: null },
+  { symbol: "RBUSD", label: "RBOB gasoline (futures)", category: "Commodity", region: "Global", country: null },
+  { symbol: "ALIUSD", label: "Aluminum (futures)", category: "Commodity", region: "Global", country: null },
+  { symbol: "ZNUSD", label: "Zinc (futures)", category: "Commodity", region: "Global", country: null },
+  { symbol: "KEUSX", label: "Wheat (futures)", category: "Commodity", region: "Global", country: null },
+  { symbol: "ZRUSD", label: "Rough rice (futures)", category: "Commodity", region: "Global", country: null },
+  { symbol: "ZCUSX", label: "Corn (futures)", category: "Commodity", region: "Global", country: null },
+  { symbol: "ZSUSX", label: "Soybeans (futures)", category: "Commodity", region: "Global", country: null },
+  { symbol: "ZLUSX", label: "Soybean oil (futures)", category: "Commodity", region: "Global", country: null },
+  { symbol: "ZMUSD", label: "Soybean meal (futures)", category: "Commodity", region: "Global", country: null },
+  { symbol: "CCUSD", label: "Cocoa (futures)", category: "Commodity", region: "Global", country: null },
+  { symbol: "KCUSX", label: "Coffee (futures)", category: "Commodity", region: "Global", country: null },
+  { symbol: "SBUSD", label: "Sugar (futures, from Nov 2021)", category: "Commodity", region: "Global", country: null },
+  { symbol: "OJUSX", label: "Orange juice (futures)", category: "Commodity", region: "Global", country: null },
+  { symbol: "LEUSX", label: "Live cattle (futures)", category: "Commodity", region: "Global", country: null },
+  { symbol: "LBUSD", label: "Lumber (futures)", category: "Commodity", region: "Global", country: null },
+  { symbol: "ZOUSX", label: "Oats (futures)", category: "Commodity", region: "Global", country: null },
 ];
 
 /** Currency pairs built from the app's FX table (tas_fx, USD per unit of each currency). */

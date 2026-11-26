@@ -404,3 +404,8 @@ date, market, level, group, band, band_code, rank, rated_groups, score, stocks, 
 `?scope=G|industry`, `?market=India`, `?format=json`. Builder in `engine/glocomExport.js`. Depth is only what `methodology.glocom.historySessions`
 stores (70 sessions); it is NOT point-in-time: past dates are re-derived by each run from today's prices, corporate-action / bad-print repairs and
 today's industry mapping. Equal-weight average of constituents; Indian groups carry no cap or size filter.
+
+## Extra chart series added from the owner's indices list (2026-11-26)
+
+23 more FMP series in `engine/reference/extraInstruments.js` (WIG20, WIG, RTSI, China A50, platinum, palladium, heating oil, RBOB, aluminium, zinc, wheat, rice, corn, soybeans + oil + meal, cocoa, coffee, sugar, OJ, live cattle, lumber, oats), chosen from a live probe (`cli/indexProbe.mjs`). Stale FMP series (lead, cotton, lean hogs, feeder cattle) were left out on purpose.
+Still not held: 26 items FMP cannot serve (PSI 20, BUX, SZSE, STAR 50, Hang Seng TECH, Philippines, Karachi, Vietnam, Gulf / Africa exchanges, TA-35, Athens General, Turkey All Share, nickel, gas oil, coal, HRC, CRB, India 10Y), MSCI index levels (licensed; ETFs stand in) and MCX gold / silver (need Kite, never log in separately).
