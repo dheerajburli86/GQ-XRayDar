@@ -14,6 +14,7 @@ import { runPipeline } from "../engine/pipeline.js";
 import { METHODOLOGY } from "../engine/methodology.js";
 import { pgSource } from "./pgSource.mjs";
 import { pgSink } from "./pgSink.mjs";
+import { retryPool } from "./pgRetry.mjs";
 
 const args = process.argv.slice(2);
 const flag = (n) => args.includes(n);
@@ -37,12 +38,15 @@ const dryRun = flag("--dry-run");
 const methodology = { ...METHODOLOGY, ...(opt("--start") ? { startDate: opt("--start") } : {}) };
 const only = opt("--countries") ? new Set(opt("--countries").split(",").map((s) => s.trim())) : null;
 
-const source = pgSource(pool, { readParallel: reads });
+// an idle client the pooler drops must not crash the process; the next query on it is retried
+pool.on("error", (e) => console.warn(`[pool] idle client error: ${e.message}`));
+const db = retryPool(pool);
+const source = pgSource(db, { readParallel: reads });
 if (only) {
   const base = source.securities;
   source.securities = async () => (await base()).filter((r) => only.has(String(r.country || "").replace(/_/g, " ")) || (r.universe === "us_stocks" && only.has("United States")) || (r.universe === "india_stocks" && only.has("India")));
 }
-const sink = pgSink(pool, { dryRun, writeParallel: writes });
+const sink = pgSink(db, { dryRun, writeParallel: writes });
 const t0 = Date.now();
 let last = "";
 try {

@@ -11,6 +11,7 @@
 
 import { stableStringify, hashString, METHODOLOGY } from "../engine/methodology.js";
 import { encodeEvents } from "../engine/eventCodec.js";
+import { withRetry, isTransient } from "./pgRetry.mjs";
 import { SCREEN_KEYS } from "../engine/screenRow.js";
 
 const CURRENT_STATE = ["tas_snapshot", "tas_events", "tas_security", "tas_ww", "tas_breadth", "tas_rotation", "tas_glocom_group", "tas_glocom_weekly", "tas_regime", "tas_ewcw", "tas_backtest", "tas_fx"];
@@ -52,7 +53,11 @@ export function pgSink(pool, { log = console.log, dryRun = false, writeParallel 
   async function flushIndices() {
     if (!pendingIdx.length || dryRun) { pendingIdx.length = 0; return; }
     const batch = pendingIdx.splice(0);
+    await withRetry(() => writeIndexBatch(batch), { log, what: "index batch" });
+  }
+  async function writeIndexBatch(batch) {
     const client = await pool.connect();
+    let bad = null;
     try {
       await client.query("begin");
       // the pooler can drop the session's statement_timeout; a history rewrite (methodology change) needs minutes
@@ -88,14 +93,17 @@ export function pgSink(pool, { log = console.log, dryRun = false, writeParallel 
       await upsertJson(client, "tas_index_values", toWrite, ["index_key", "year"], ["index_key", "year", "dates", "level", "n", "n_stale", "cap_usd", "content_hash", "run_id"]);
       counts.yearRowsWritten += toWrite.length;
       await client.query("commit");
-    } catch (e) { await client.query("rollback"); throw e; } finally { client.release(); }
+    } catch (e) { bad = e; await client.query("rollback").catch(() => {}); throw e; } finally { client.release(bad && isTransient(bad) ? bad : undefined); }
   }
 
   async function simple(table, rows, conflict, cols) {
     if (dryRun || !rows.length) return;
-    const client = await pool.connect();
-    try { await client.query("begin"); await upsertJson(client, table, rows, conflict, cols); await client.query("commit"); }
-    catch (e) { await client.query("rollback"); throw e; } finally { client.release(); }
+    await withRetry(async () => {
+      const client = await pool.connect();
+      let bad = null;
+      try { await client.query("begin"); await upsertJson(client, table, rows, conflict, cols); await client.query("commit"); }
+      catch (e) { bad = e; await client.query("rollback").catch(() => {}); throw e; } finally { client.release(bad && isTransient(bad) ? bad : undefined); }
+    }, { log, what: table });
   }
 
   return {
