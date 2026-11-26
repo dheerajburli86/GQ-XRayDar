@@ -33,19 +33,18 @@ test("demo engine run: India gets equal-weight indices only and no Weight Watche
   assert.ok(indiaSecs.length > 0 && indiaSecs.every((x) => x.capUsdNow == null), "India securities still carry a cap");
 });
 
-test("index eligibility: USD 1B minimum cap for developed markets, 200M for emerging; India (no cap) is not filtered", async () => {
+test("index eligibility: flat USD 250M minimum cap for every global stock; India (no cap) is not filtered", async () => {
   const { generateDemo, demoSource } = await import("../engine/demo/generator.js");
   const { runPipeline } = await import("../engine/pipeline.js");
   const { MemorySink } = await import("../engine/memorySink.js");
   const { METHODOLOGY } = await import("../engine/methodology.js");
-  const { countryMeta } = await import("../engine/geography.js");
-  assert.deepEqual({ ...METHODOLOGY.eligibility.minCapUsd }, { developed: 1e9, emerging: 2e8 });
+  assert.deepEqual({ ...METHODOLOGY.eligibility.minCapUsd }, { developed: 2.5e8, emerging: 2.5e8 });
   const sink = new MemorySink();
   await runPipeline(demoSource(generateDemo({ from: "2022-01-03" })), sink.sinkInterface, {});
   let checked = 0;
   for (const ms of sink.memberships) {
     if (ms.country === "India" || ms.latest) continue;
-    const min = countryMeta(ms.country).classification === "Emerging Markets" ? 2e8 : 1e9;
+    const min = 2.5e8;
     for (const x of ms.members) { checked++; assert.ok(x.capUsd >= min, `${ms.country} ${x.id} cap ${x.capUsd} below ${min}`); }
   }
   assert.ok(checked > 0, "no memberships checked");

@@ -22,6 +22,7 @@
 // FX relatives from the same base date, which is the correct conversion; it is
 // never an index level divided by a spot rate.
 
+import { techGroup } from "./reference/techGroup.js";
 import { METHODOLOGY } from "./methodology.js";
 import { CAP_UNRELIABLE_COUNTRIES } from "./geography.js";
 
@@ -29,9 +30,10 @@ export const CAPS = ["Large", "Mid", "Small"];
 
 /** Scope key grammar: G | R:<region> | M:<classification> | C:<country>, optionally
  *  followed by |S:<sector> and/or |K:<cap>. Full index key = FAMILY|CCY|scope. */
-export function scopeKey({ scope, sector, cap }) {
+export function scopeKey({ scope, sector, cap, tech }) {
   let k = scope;
   if (sector) k += `|S:${sector}`;
+  if (tech) k += `|T:${tech}`;
   if (cap) k += `|K:${cap}`;
   return k;
 }
@@ -39,10 +41,11 @@ export const indexKey = (family, ccy, scope) => `${family}|${ccy}|${scope}`;
 
 export function parseScope(sk) {
   const parts = sk.split("|");
-  const out = { scope: parts[0], sector: null, cap: null };
+  const out = { scope: parts[0], sector: null, cap: null, tech: null };
   for (const p of parts.slice(1)) {
     if (p.startsWith("S:")) out.sector = p.slice(2);
     if (p.startsWith("K:")) out.cap = p.slice(2);
+    if (p.startsWith("T:")) out.tech = p.slice(2);
   }
   const [t, v] = out.scope.includes(":") ? out.scope.split(/:(.*)/s) : ["G", null];
   out.scopeType = t; out.scopeValue = v;
@@ -58,16 +61,16 @@ const SCOPE_NAME = { G: "Global", R: "", M: "", C: "" };
 export function scopeName(sk) {
   const p = parseScope(sk);
   const base = p.scopeType === "G" ? SCOPE_NAME.G : p.scopeValue;
-  return [base, p.cap ? `${p.cap} Cap` : null, p.sector].filter(Boolean).join(" ");
+  return [base, p.cap ? `${p.cap} Cap` : null, p.sector, p.tech].filter(Boolean).join(" ");
 }
 
 /** Hierarchy level per the spec (1..6), plus supplementary levels. */
 export function levelOf(sk) {
   const p = parseScope(sk);
-  if (p.scopeType === "C") return p.sector && p.cap ? "1" : p.cap ? "2" : p.sector ? "1s" : "3";
-  if (p.scopeType === "R") return p.sector || p.cap ? "4s" : "4";
-  if (p.scopeType === "M") return p.sector || p.cap ? "5s" : "5";
-  return p.sector || p.cap ? "6s" : "6";
+  if (p.scopeType === "C") return p.sector && p.cap ? "1" : p.cap ? "2" : p.sector || p.tech ? "1s" : "3";
+  if (p.scopeType === "R") return p.sector || p.cap || p.tech ? "4s" : "4";
+  if (p.scopeType === "M") return p.sector || p.cap || p.tech ? "5s" : "5";
+  return p.sector || p.cap || p.tech ? "6s" : "6";
 }
 export const LEVEL_LABEL = {
   1: "L1 Country sector by cap", "1s": "Country sector (all caps)", 2: "L2 Country cap segment", 3: "L3 Country",
@@ -217,16 +220,17 @@ export class IndexBuilder {
       // ---- cells ----
       const cells = new Map();
       for (const e of members) {
-        const key = `${e.s.sec.sector}|${e.seg}`;
+        const tg = techGroup(e.s.sec);
+        const key = `${e.s.sec.sector}|${e.seg}|${tg}`;
         let c = cells.get(key);
         if (!c) {
           c = { sector: e.s.sec.sector, seg: e.seg, mem: [], GL: 1, GU: 1 };
-          const targetsL = capless ? [cS, `${cS}|S:${e.s.sec.sector}`]
-            : [cS, `${cS}|K:${e.seg}`, `${cS}|S:${e.s.sec.sector}`, `${cS}|S:${e.s.sec.sector}|K:${e.seg}`];
+          const targetsL = capless ? [cS, `${cS}|S:${e.s.sec.sector}`, `${cS}|T:${tg}`]
+            : [cS, `${cS}|K:${e.seg}`, `${cS}|S:${e.s.sec.sector}`, `${cS}|S:${e.s.sec.sector}|K:${e.seg}`, `${cS}|T:${tg}`];
           c.loc = targetsL.map(loc);
           const sec = e.s.sec.sector;
           c.hi = capless ? [] : ["G", `G|S:${sec}`, `G|K:${e.seg}`, `R:${region}`, `R:${region}|S:${sec}`, `R:${region}|K:${e.seg}`,
-            `M:${cls}`, `M:${cls}|S:${sec}`, `M:${cls}|K:${e.seg}`].map((sk) => this._higher(sk));
+            `M:${cls}`, `M:${cls}|S:${sec}`, `M:${cls}|K:${e.seg}`, `G|T:${tg}`, `R:${region}|T:${tg}`, `M:${cls}|T:${tg}`].map((sk) => this._higher(sk));
           cells.set(key, c);
         }
         c.mem.push({ s: e.s, VL: 1, VU: 1 });
@@ -324,7 +328,7 @@ export class IndexBuilder {
     const p = parseScope(sk);
     this.series.set(key, {
       key, family, ccy, currencyCode, scopeKey: sk, name: `${scopeName(sk)} ${family}${ccy === "LCL" ? ` (${currencyCode})` : " (USD)"}`,
-      level: levelOf(sk), scopeType: p.scopeType, scopeValue: p.scopeValue, sector: p.sector, cap: p.cap,
+      level: levelOf(sk), scopeType: p.scopeType, scopeValue: p.scopeValue, sector: p.sector, cap: p.cap, tech: p.tech,
       country: meta.country || null, region: meta.region || null, classification: meta.classification || null,
       start: s.start, values: s.level, rets: s.ret, n: src.n, nStale: src.nStale, capSeries: src.cap,
     });

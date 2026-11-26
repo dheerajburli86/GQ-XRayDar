@@ -196,3 +196,13 @@ test("split guard recognises split ratios and ignores ordinary moves", () => {
   assert.equal(isSplitLike(0.45, g), false);   // not near any split factor
   assert.equal(isSplitLike(1.05, g), false);
 });
+
+test("Technology / Non Technology index groups: scope keys parse and techGroup follows the IT sector", async () => {
+  const { parseScope, scopeName, levelOf } = await import("../engine/indexEngine.js");
+  const { techGroup } = await import("../engine/reference/techGroup.js");
+  assert.equal(parseScope("C:India|T:Technology").tech, "Technology");
+  assert.equal(scopeName("G|T:Non Technology"), "Global Non Technology");
+  assert.equal(levelOf("R:Europe|T:Technology"), "4s");
+  assert.equal(techGroup({ sector: "Information Technology" }), "Technology");
+  assert.equal(techGroup({ sector: "Financials" }), "Non Technology");
+});

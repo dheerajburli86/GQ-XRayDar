@@ -5,7 +5,7 @@
 // back to the rules that produced it.
 
 export const METHODOLOGY = Object.freeze({
-  version: "1.3.0",
+  version: "1.4.0",
 
   // History window the index engine builds from. [C]
   startDate: "2010-01-01", // owner (Nov 2026): Weight Watcher and indices from 2010 (was 2015)
@@ -33,9 +33,9 @@ export const METHODOLOGY = Object.freeze({
     maxStaleDays: 10,     // no trade for this many sessions before rebalance -> ineligible
     requireCap: true,     // a stock without market cap joins neither CW nor EW (matched universes)
     maxCapUsd: 6e12,      // an estimated cap above this (larger than any company has been) is a share-count change
-    // Minimum market cap at each rebalance (owner, 2026-11-19): USD 1B developed, USD 200M emerging.
-    // Not applied to countries without a reliable cap (India: equal-weight, no size filter yet).
-    minCapUsd: { developed: 1e9, emerging: 2e8 },
+    // Minimum market cap at each rebalance: a flat USD 250M for every global stock (owner / Alok Sir, 2026-11-26,
+    // replacing 1B developed / 200M emerging). Not applied to countries without a reliable cap (India: equal-weight).
+    minCapUsd: { developed: 2.5e8, emerging: 2.5e8 },
     maxCapMultiple: 100,  // nor more than 100x the stock's own cap at its last bar
   },
 

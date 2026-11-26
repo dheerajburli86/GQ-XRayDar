@@ -201,7 +201,7 @@ redeploy ENDS the job that is running. On 2026-11-19 a push at 06:26 UTC killed 
 
 ## Index minimum market cap (added 2026-11-19, owner / Alok Sir)
 
-- `methodology.eligibility.minCapUsd` = USD 1B developed, USD 200M emerging, tested on the (estimated) cap at every rebalance in `IndexBuilder.addCountry`, before the Large/Mid/Small split (so the percentile bands are computed on the stocks that pass). Countries without a reliable cap (India) skip it and the bands: wait for a cap source, do not substitute turnover. Methodology version 1.1.0; the stored indices change at the next engine run.
+- `methodology.eligibility.minCapUsd` = **flat USD 250M for every global stock** (Alok Sir, 2026-11-26; was 1B developed / 200M emerging, methodology 1.4.0), tested on the (estimated) cap at every rebalance in `IndexBuilder.addCountry`, before the Large/Mid/Small split (so the percentile bands are computed on the stocks that pass). Countries without a reliable cap (India) skip it and the bands: wait for a cap source, do not substitute turnover. Methodology version 1.1.0; the stored indices change at the next engine run.
 
 ## Added 2026-11-20: US classification workbook, 9-month timeframe, Z key, callouts
 
@@ -413,3 +413,7 @@ Still not held: 26 items FMP cannot serve (PSI 20, BUX, SZSE, STAR 50, Hang Seng
 ## USD copies of local-currency indices (added 2026-11-26)
 
 `cli/extraJob.mjs` `runUsd`: every held exchange-provided index (heatmap global_indices, india_indices, and the extra FMP indices) quoted in local currency also gets a chart series `USD:<symbol>` (heatmap ones `USD:GL:^BVSP`, `USD:IN:<symbol>`), labelled "<name> (USD)", category Index, in `tas_extra_series`. Level x `tas_fx` USD-per-unit on the same day; a day with no fixing carries the last rate up to 5 days and the source text says estimated. Currency comes from `COUNTRY_CURRENCY` (the heatmap's instruments.currency says USD for every global index, which is wrong for the levels). US indices are already USD and get no copy.
+
+## Technology / Non Technology index groups (added 2026-11-26, Alok Sir)
+
+Scope suffix `|T:Technology` / `|T:Non Technology` (`parseScope().tech`, level "Xs"): CW / EW, local + USD, per country, region, classification and Global. Definition in ONE place, `engine/reference/techGroup.js`: US = the owner's sub-industry workbook's Information Technology sector, India / Global = GICS Information Technology (they have no sub-industry). India is equal-weight only and in no roll-up (no cap), so the Global / region Technology groups hold US + Global stocks, and India has its own `C:India|T:...` pair. Indices appear after the next engine run.
