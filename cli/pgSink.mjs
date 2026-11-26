@@ -28,7 +28,23 @@ async function upsertJson(client, table, rows, conflict, cols) {
   }
 }
 
-export function pgSink(pool, { log = console.log, dryRun = false } = {}) {
+export function pgSink(pool, { log = console.log, dryRun = false, writeParallel = 1 } = {}) {
+  // index batches are written in the background, up to writeParallel at once (each is its own transaction on
+  // its own index keys); a failure is re-thrown at the next write or at the drain
+  const inflight = new Set();
+  let writeError = null;
+  async function kickFlush() {
+    if (writeError) throw writeError;
+    const p = flushIndices().catch((e) => { writeError ||= e; }).finally(() => inflight.delete(p));
+    inflight.add(p);
+    if (inflight.size >= writeParallel) await Promise.race(inflight);
+    if (writeError) throw writeError;
+  }
+  async function drainFlush() {
+    await kickFlush();
+    await Promise.all(inflight);
+    if (writeError) throw writeError;
+  }
   let runId = null;
   const pendingIdx = [];
   const counts = { indices: 0, yearRowsWritten: 0, yearRowsUnchanged: 0, revisions: 0, snapshots: 0, events: 0, issues: 0 };
@@ -106,10 +122,10 @@ export function pgSink(pool, { log = console.log, dryRun = false } = {}) {
         },
         years: ys,
       });
-      if (pendingIdx.length >= 100) await flushIndices();
+      if (pendingIdx.length >= 100) await kickFlush();
     },
     async memberships(list) {
-      await flushIndices();
+      await drainFlush();
       await simple("tas_membership", list.map((m) => ({ country: m.country, rebalance_date: m.date, is_latest: m.latest, members: m.members, run_id: runId })),
         ["country", "rebalance_date", "is_latest"], ["country", "rebalance_date", "is_latest", "members", "run_id"]);
       log(`memberships: ${list.length} rebalance snapshots`);
@@ -164,7 +180,7 @@ export function pgSink(pool, { log = console.log, dryRun = false } = {}) {
       }), ["currency"], ["currency", "source", "estimated", "stale_days", "max_stale", "estimated_days", "latest", "latest_date", "dates", "rate", "stale", "run_id"]);
     },
     async securities(secs, extra) {
-      await flushIndices();
+      await drainFlush();
       await simple("tas_security", secs.map((s) => ({
         id: s.id, symbol: s.symbol, name: s.name, universe: s.universe, exchange: s.exchange, isin: s.isin, country: s.country, region: s.region,
         classification: s.classification, geo_assigned: s.geoAssigned, currency: s.currency, currency_major: s.currencyMajor, currency_divisor: s.currencyDivisor,
@@ -176,7 +192,7 @@ export function pgSink(pool, { log = console.log, dryRun = false } = {}) {
         "shares_est", "cap_segment", "asset_class", "active", "dormant", "run_id"]);
     },
     async finish(run) {
-      await flushIndices();
+      await drainFlush();
       log(`writes: ${JSON.stringify(counts)}`);
       if (dryRun) return;
       for (const t of CURRENT_STATE) await pool.query(`delete from ${t} where run_id is distinct from $1`, [runId]);

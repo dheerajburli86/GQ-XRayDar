@@ -11,6 +11,7 @@
 //   pass 2  per country: per-stock signals, events, breadth, data health
 //   post    breadth series, rotation, regimes, EWCW, backtest summary
 
+import { weightedLimiter } from "./concurrency.js";
 import { METHODOLOGY, methodologyHash } from "./methodology.js";
 import { quarterEndIndices, lowerBound, addDays } from "./calendar.js";
 import { buildFxTable, fxProvenance } from "./fx.js";
@@ -34,7 +35,10 @@ import { turnoverUsd } from "./turnover.js";
  * source: see docs/ARCHITECTURE.md ("Source interface")
  * sink:   receives results as they are produced (all methods optional, may be async)
  */
-export async function runPipeline(source, sink, { methodology = METHODOLOGY, onProgress = () => {}, runId = null } = {}) {
+// parallel = { countries: max countries in pass 2 at once, budget: securities in flight, prefetch: countries loaded ahead in pass 1 }.
+// The default (1 / 0) is the old one-at-a-time behaviour; the batch CLI turns it up. Results are the same either way.
+export async function runPipeline(source, sink, { methodology = METHODOLOGY, onProgress = () => {}, runId = null, parallel = {} } = {}) {
+  const par = { countries: 1, budget: Infinity, prefetch: 0, ...parallel };
   const m = methodology;
   const started = new Date().toISOString();
   const run = { runId: runId || `run_${started.replace(/[-:.TZ]/g, "").slice(0, 14)}`, started, mode: source.mode, methodologyVersion: m.version, methodologyHash: methodologyHash(m), status: "running", stats: {} };
@@ -163,9 +167,16 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
   }
 
   let ci = 0;
-  for (const country of countries) {
+  // pass 1 adds countries in sorted order (the roll-ups are sums, but a fixed order keeps runs byte-identical);
+  // the next countries' bars are read while the current one is computed and written
+  const loads = new Map();
+  const prefetch = (i) => { if (i < countries.length && !loads.has(i)) { const p = loadCountry(countries[i]); p.catch(() => {}); loads.set(i, p); } };
+  for (let i = 0; i < countries.length; i++) {
+    const country = countries[i];
     progress("indices", ci++, countries.length, country);
-    const stocks = await loadCountry(country);
+    for (let k = 0; k <= par.prefetch; k++) prefetch(i + k);
+    const stocks = await loads.get(i);
+    loads.delete(i);
     if (!stocks.length) continue;
     const equities = stocks.filter((x) => isStock(x.sec));
     if (equities.length) builder.addCountry(country, countryCcy(country, byCountry.get(country)), equities, geo[country].region, geo[country].classification);
@@ -213,10 +224,15 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
   const ckG = dates.slice(-gK);
   const accG = { industry: new GroupAccumulator(ckG), sector: new GroupAccumulator(ckG), country: new GroupAccumulator(ckG) };
   const glocomGroups = {};
-  for (const country of countries) {
+  // pass 2: countries are independent (each writes its own rows; shared accumulators only add), so several run at
+  // once, largest first, within a budget of securities held in memory
+  const limiter = weightedLimiter(par.budget, par.countries);
+  const bySize = [...countries].sort((a, b) => byCountry.get(b).length - byCountry.get(a).length || (a < b ? -1 : 1));
+  await Promise.all(bySize.map((country) => limiter(byCountry.get(country).length, () => signalsFor(country))));
+  async function signalsFor(country) {
     progress("signals", ci++, countries.length, country);
     const stocks = await loadCountry(country);
-    if (!stocks.length) continue;
+    if (!stocks.length) return;
     const ccy = countryCcy(country, byCountry.get(country));
     const fxCC = fx(ccy).rate;
     // a country without a reliable cap has no CW: its equal-weight index is its benchmark

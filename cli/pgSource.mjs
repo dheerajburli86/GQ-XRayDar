@@ -9,6 +9,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { addDays } from "../engine/calendar.js";
 import { applyPriceRepairs } from "../engine/quality.js";
+import { mapLimit } from "../engine/concurrency.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -20,7 +21,7 @@ export const FUND_UNIVERSES = ["us_etfs", "india_etfs", "global_etfs", "us_indic
 // ETFs, bonds and fund codes that sit in the stock universe.
 export const INCLUDE_INACTIVE = new Set(["us_stocks", "global"]);
 
-export function pgSource(pool, { warmupDays = 400, minCalendarCount = 50, log = console.log } = {}) {
+export function pgSource(pool, { warmupDays = 400, minCalendarCount = 50, log = console.log, readParallel = 1 } = {}) {
   const intern = new Map();
   const iv = (s) => { let x = intern.get(s); if (x === undefined) { x = s; intern.set(s, x); } return x; };
   let startDate = null;
@@ -53,8 +54,11 @@ export function pgSource(pool, { warmupDays = 400, minCalendarCount = 50, log = 
     async countryBars(ids) {
       const out = new Map();
       const from = addDays(startDate, -warmupDays);
-      for (let i = 0; i < ids.length; i += 150) {
-        const chunk = ids.slice(i, i + 150);
+      // chunks are read in parallel (the engine waits on the database, not the CPU); each chunk is a contiguous
+      // block of whole instruments, so assembling them independently is safe
+      const chunks = [];
+      for (let i = 0; i < ids.length; i += 150) chunks.push(ids.slice(i, i + 150));
+      await mapLimit(chunks, readParallel, async (chunk) => {
         const { rows } = await pool.query({
           text: `select instrument_id::text, date::text, open, high, low, close, volume from price_history
                   where instrument_id = any($1::uuid[]) and date >= $2 and close is not null and close > 0
@@ -71,7 +75,7 @@ export function pgSource(pool, { warmupDays = 400, minCalendarCount = 50, log = 
           cur.volume.push(r[6] != null ? +r[6] : 0);
         }
         flush();
-      }
+      });
       // tas_price_repair: provider-checked fixes for impossible stored prices (cli/priceRepairJob.mjs)
       const { rows: rep } = await pool.query(`select instrument_id, date::text d, action, open, high, low, close, volume from tas_price_repair
         where action in ('replace','drop') and instrument_id = any($1)`, [ids]).catch(() => ({ rows: [] }));

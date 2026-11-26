@@ -26,22 +26,29 @@ if (!url) {
 }
 pg.types.setTypeParser(1082, (v) => v); // date -> 'YYYY-MM-DD' string, never a timezone-shifted Date
 
-const pool = new pg.Pool({ connectionString: url, max: 4, ssl: url.includes("localhost") ? false : { rejectUnauthorized: false }, statement_timeout: 600000 });
+// Parallelism (the run waits on the database, not the CPU): ENGINE_COUNTRIES countries at once in pass 2,
+// ENGINE_BUDGET securities in memory at once, ENGINE_READS parallel bar reads per country, ENGINE_WRITES
+// index batches written at once, ENGINE_PREFETCH countries read ahead in pass 1. ENGINE_COUNTRIES=1 restores the old behaviour.
+const envN = (k, d) => (Number.isFinite(+process.env[k]) && process.env[k] !== "" && process.env[k] != null ? +process.env[k] : d);
+const parallel = { countries: envN("ENGINE_COUNTRIES", 4), budget: envN("ENGINE_BUDGET", 14000), prefetch: envN("ENGINE_PREFETCH", 2) };
+const reads = envN("ENGINE_READS", 3), writes = envN("ENGINE_WRITES", 3);
+const pool = new pg.Pool({ connectionString: url, max: Math.min(12, Math.max(4, parallel.countries * reads + writes + 2)), ssl: url.includes("localhost") ? false : { rejectUnauthorized: false }, statement_timeout: 600000 });
 const dryRun = flag("--dry-run");
 const methodology = { ...METHODOLOGY, ...(opt("--start") ? { startDate: opt("--start") } : {}) };
 const only = opt("--countries") ? new Set(opt("--countries").split(",").map((s) => s.trim())) : null;
 
-const source = pgSource(pool);
+const source = pgSource(pool, { readParallel: reads });
 if (only) {
   const base = source.securities;
   source.securities = async () => (await base()).filter((r) => only.has(String(r.country || "").replace(/_/g, " ")) || (r.universe === "us_stocks" && only.has("United States")) || (r.universe === "india_stocks" && only.has("India")));
 }
-const sink = pgSink(pool, { dryRun });
+const sink = pgSink(pool, { dryRun, writeParallel: writes });
 const t0 = Date.now();
 let last = "";
 try {
   const run = await runPipeline(source, sink, {
     methodology,
+    parallel,
     onProgress: ({ phase, done, total, note }) => {
       const line = `${phase} ${done}/${total}${note ? ` ${note}` : ""}`;
       if (line !== last) { console.log(`[${((Date.now() - t0) / 1000).toFixed(0)}s] ${line}`); last = line; }
