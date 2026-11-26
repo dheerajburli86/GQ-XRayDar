@@ -9,7 +9,7 @@ export class MemorySink {
     this.run = null; this.methodology = null;
     this.indexMeta = new Map(); this.indexData = new Map();
     this.memberships = []; this.ww = []; this.snapshots = new Map(); this.events = new Map();
-    this.issues = []; this.breadth = {}; this.rotation = {}; this.glocomGroups = {}; this.regimes = {}; this.ewcw = []; this.backtest = [];
+    this.issues = []; this.breadth = {}; this.rotation = {}; this.glocomGroups = {}; this.glocomWeekly = {}; this.regimes = {}; this.ewcw = []; this.backtest = [];
     this.fxRows = []; this.fxSeries = new Map(); this.securities = [];
     this.dates = null;
   }
@@ -53,7 +53,7 @@ export class MemorySink {
     return {
       begin: (r, m) => this.begin(r, m), indexSeries: (m, c) => this.indexSeries(m, c), memberships: (l) => this.setMemberships(l),
       ww: (w) => this.setWW(w), countryResults: (c, r) => this.countryResults(c, r), globalIssues: (l) => this.globalIssues(l),
-      breadth: (b) => this.setBreadth(b), rotation: (r) => this.setRotation(r), glocomGroups: (g) => { this.glocomGroups = g; }, regimes: (r) => this.setRegimes(r),
+      breadth: (b) => this.setBreadth(b), rotation: (r) => this.setRotation(r), glocomGroups: (g) => { this.glocomGroups = g; }, glocomWeekly: (g) => { this.glocomWeekly = g; }, regimes: (r) => this.setRegimes(r),
       ewcw: (r) => this.setEwcw(r), backtest: (r) => this.setBacktest(r), fx: (r, x) => this.fx(r, x),
       securities: (s, e) => this.setSecurities(s, e), finish: (r) => this.finish(r),
     };

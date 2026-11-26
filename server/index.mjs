@@ -39,7 +39,7 @@ import { ROLES, need, can } from "./lib/rbac.mjs";
 import { createAuthAdmin } from "./lib/authAdmin.mjs";
 import { createCommunity, AGENT_SOURCES, SHARE_KINDS, normaliseAccess } from "./lib/community.mjs";
 import { MODEL_VERSIONS, ENGINE_VERSION } from "../engine/versions.js";
-import { glocomHistoryRows, toCsv, scopeParts, GLOCOM_EXPORT_COLUMNS } from "../engine/glocomExport.js";
+import { glocomHistoryRows, toCsv, scopeParts, GLOCOM_EXPORT_COLUMNS, GLOCOM_WEEKLY_COLUMNS } from "../engine/glocomExport.js";
 
 const log = (m) => console.log(`${new Date().toISOString().slice(0, 19)} ${m}`);
 
@@ -523,15 +523,21 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
   r.get("/api/glocom-history", async (req, _, url) => {
     await auth.any(req);
     const scope = q(url, "scope"), market = q(url, "market");
-    let keys = await data.api.glocomScopes();
+    // weekly=1: one row per week since methodology.glocom.weeklyFrom (tas_glocom_weekly), plus the equal-weight level;
+    // about a million rows across every market, so it is served one market (or scope) at a time
+    const weekly = q(url, "weekly") === "1";
+    if (weekly && !scope && !market) { const e = new Error("the weekly history is served one market at a time: add market=Global, market=India, ..."); e.status = 400; throw e; }
+    let keys = weekly ? await data.api.glocomWeeklyScopes() : await data.api.glocomScopes();
     if (scope) keys = keys.filter((k) => k === scope);
     if (market) keys = keys.filter((k) => scopeParts(k).market.toLowerCase() === market.toLowerCase());
     keys.sort();
     const rows = [];
-    for (const k of keys) rows.push(...glocomHistoryRows(k, await data.api.glocomGroups(k)));
-    if (q(url, "format") === "json") return { columns: GLOCOM_EXPORT_COLUMNS, rows };
-    const body = Buffer.from(toCsv(rows));
-    return { __raw: { status: 200, body, headers: { "content-type": "text/csv; charset=utf-8", "content-length": body.length, "cache-control": "no-store", "content-disposition": "attachment; filename=\"glocom_locom_band_history.csv\"" } } };
+    for (const k of keys) rows.push(...glocomHistoryRows(k, weekly ? await data.api.glocomWeekly(k) : await data.api.glocomGroups(k), { withLevel: weekly }));
+    const cols = weekly ? GLOCOM_WEEKLY_COLUMNS : GLOCOM_EXPORT_COLUMNS;
+    if (q(url, "format") === "json") return { columns: cols, rows };
+    const body = Buffer.from(toCsv(rows, cols));
+    const name = weekly ? "glocom_locom_weekly_history.csv" : "glocom_locom_band_history.csv";
+    return { __raw: { status: 200, body, headers: { "content-type": "text/csv; charset=utf-8", "content-length": body.length, "cache-control": "no-store", "content-disposition": `attachment; filename="${name}"` } } };
   });
   r.get("/api/files/:id", async (req, { id }) => {
     const f = await community.download(await auth.web(req), id);

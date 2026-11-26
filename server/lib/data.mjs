@@ -85,6 +85,8 @@ export function createData(pool, log = console.log) {
     async etiFor(id) { const { rows } = await pool.query(`select company_id, characteristic, company_name, nse_symbol, isin, instrument_id::text, as_of::text, meets, value, note, method_version from tas_eti_characteristic where instrument_id = $1`, [id]).catch(() => ({ rows: [] })); return rows; },
     async etiChanges(limit = 300) { const { rows } = await pool.query(`select id, company_id, instrument_id::text, characteristic, from_meets, to_meets, as_of::text, at from tas_eti_change order by at desc limit $1`, [limit]).catch(() => ({ rows: [] })); return rows; },
     async glocomScopes() { const { rows } = await pool.query(`select scope_key from tas_glocom_group`).catch(() => ({ rows: [] })); return rows.map((r) => r.scope_key); },
+    async glocomWeeklyScopes() { const { rows } = await pool.query(`select scope_key from tas_glocom_weekly`).catch(() => ({ rows: [] })); return rows.map((r) => r.scope_key); },
+    async glocomWeekly(scope) { const { rows } = await pool.query(`select data from tas_glocom_weekly where scope_key = $1`, [scope]).catch(() => ({ rows: [] })); return rows[0]?.data || null; },
     async glocomGroups(scope) { const { rows } = await pool.query(`select data from tas_glocom_group where scope_key = $1`, [scope]).catch(() => ({ rows: [] })); return rerateHistory(rows[0]?.data || null, METHODOLOGY.glocom.minGroupStocks); },
     async rotation(scope) { const { rows } = await pool.query(`select sectors from tas_rotation where scope_key = $1`, [scope]); return rows[0]?.sectors || null; },
     async breadth(scope) { const { rows } = await pool.query(`select data from tas_breadth where scope_key = $1`, [scope]); return rows[0]?.data || null; },

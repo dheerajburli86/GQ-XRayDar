@@ -160,7 +160,8 @@ export class GroupAccumulator {
       }
       // a group below minN stocks keeps its count and returns but is not rated: 1-3 stocks are noise, not an industry
       for (const x of items) { const o = groups[x.key]; o.n[t] = x.n; o.w[t] = r4(x.w); o.m6[t] = r4(x.m6); o.y[t] = r4(x.y); }
-      const rated = items.filter((x) => x.n >= minN);
+      // ...nor is a group whose 1W, 6M and 1Y returns are not all known yet (the first year of the weekly history)
+      const rated = items.filter((x) => x.n >= minN && x.w != null && x.m6 != null && x.y != null);
       of[t] = rated.length;
       if (rated.length < 2) continue; // a rank among fewer than two is meaningless
       for (const x of rateGlocom(rated)) {
@@ -242,4 +243,27 @@ export function groupTimeline(hist, name) {
     if (jump || bandMove) out.push({ date: hist.dates[t], rank: g.rank[t], prevRank: g.rank[t - 1], jump, label: g.label[t], prevLabel: g.label[t - 1], code: g.code[t], prevCode: g.code[t - 1], bandMove });
   }
   return out.reverse();
+}
+
+/** The last session of every calendar week (Monday-based) on or after `from`: the weekly history's checkpoints. */
+export function weekEnds(dates, from = null) {
+  const out = [];
+  const wk = (d) => { const t = Date.parse(`${d}T00:00:00Z`) / 864e5; return Math.floor((t + 3) / 7); }; // 1970-01-01 was a Thursday
+  for (let i = 0; i < dates.length; i++) {
+    if (from && dates[i] < from) continue;
+    if (i === dates.length - 1 || wk(dates[i + 1]) !== wk(dates[i])) out.push(dates[i]);
+  }
+  return out;
+}
+
+/** Equal-weight return level per group from its weekly 1-week averages (base 100 at the first week with stocks). */
+export function ewLevel(w) {
+  const out = new Array(w.length).fill(null);
+  let lvl = null;
+  for (let t = 0; t < w.length; t++) {
+    if (w[t] == null) { out[t] = lvl; continue; }
+    lvl = lvl == null ? 100 : lvl * (1 + w[t]);
+    out[t] = Math.round(lvl * 1e4) / 1e4;
+  }
+  return out;
 }

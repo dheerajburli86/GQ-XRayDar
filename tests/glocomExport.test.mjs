@@ -18,3 +18,18 @@ test("global scope name and csv quoting", () => {
   assert.match(csv, /"Banks, Trusts"/);
   assert.equal(csv.split("\n")[0].split(",").length, 16);
 });
+
+test("weekly history: week-end checkpoints and an equal-weight level chained from the weekly returns", async () => {
+  const { weekEnds, ewLevel } = await import("../engine/glocom.js");
+  const { glocomHistoryRows, GLOCOM_WEEKLY_COLUMNS } = await import("../engine/glocomExport.js");
+  // Mon 5 Jan 2026 .. Wed 14 Jan: week ends are Fri 9 Jan and the last date
+  const dates = ["2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08", "2026-01-09", "2026-01-12", "2026-01-13", "2026-01-14"];
+  assert.deepEqual(weekEnds(dates), ["2026-01-09", "2026-01-14"]);
+  assert.deepEqual(weekEnds(dates, "2026-01-10"), ["2026-01-14"]);
+  assert.deepEqual(ewLevel([null, 0.1, null, -0.1]), [null, 100, 100, 90]);
+  assert.deepEqual(ewLevel([0.1, 0.1]), [100, 110]);
+  const h = { dates: ["2026-01-09", "2026-01-16"], of: [2, 2], groups: { Banks: { n: [6, 6], w: [0.02, 0.05], m6: [0.1, 0.1], y: [0.2, 0.2], rank: [1, 2], code: [1, 3], label: ["US 80 80", "Neutral 40 60"], score: [90, 50], pW: [1, 0], p6m: [1, 0], p1y: [1, 0] } } };
+  const rows = glocomHistoryRows("C:India|industry", h, { withLevel: true });
+  assert.deepEqual(rows.map((r) => r.ew_level), [100, 105]);
+  assert.ok(GLOCOM_WEEKLY_COLUMNS.includes("ew_level"));
+});

@@ -27,7 +27,7 @@ import { scoreSetup } from "./scoring.js";
 import { buildFlat } from "./screenRow.js";
 import { securityIssues, applyCorporateActions, removeBadPrints, shareBreaks, cutAtTickerReuse } from "./quality.js";
 import { BacktestAccumulator } from "./backtest.js";
-import { GroupAccumulator, checkpointReturns, rateGlocom, groupMoves } from "./glocom.js";
+import { GroupAccumulator, checkpointReturns, rateGlocom, groupMoves, weekEnds } from "./glocom.js";
 import { UNCLASSIFIED } from "./classification.js";
 import { turnoverUsd } from "./turnover.js";
 
@@ -224,6 +224,11 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
   const ckG = dates.slice(-gK);
   const accG = { industry: new GroupAccumulator(ckG), sector: new GroupAccumulator(ckG), country: new GroupAccumulator(ckG) };
   const glocomGroups = {};
+  // the same bands at every week's last session since methodology.glocom.weeklyFrom (backtests): each date uses only
+  // the prices up to it; one global week calendar so every market lines up
+  const ckW = weekEnds(dates, m.glocom.weeklyFrom);
+  const accGW = { industry: new GroupAccumulator(ckW), sector: new GroupAccumulator(ckW), country: new GroupAccumulator(ckW) };
+  const glocomWeekly = {};
   // pass 2: countries are independent (each writes its own rows; shared accumulators only add), so several run at
   // once, largest first, within a budget of securities held in memory
   const limiter = weightedLimiter(par.budget, par.countries);
@@ -254,6 +259,7 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
     const snaps = [], events = new Map(), issues = [];
     const ckC = sessions.length >= 2 ? sessions.slice(-gK) : ckG;
     const accC = { industry: new GroupAccumulator(ckC), sector: new GroupAccumulator(ckC) };
+    const accCW = { industry: new GroupAccumulator(ckW), sector: new GroupAccumulator(ckW) };
     const latestRet = new Map();
     const secOfId = new Map(stocks.map((x) => [x.sec.id, x.sec]));
     for (const s of stocks) {
@@ -284,6 +290,10 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
         // one vocabulary across markets: the US workbook's own groups stay inside the US
         accG.industry.add(sec.gicsIndustryGroup && sec.gicsIndustryGroup !== UNCLASSIFIED ? sec.gicsIndustryGroup : sec.industryGroup, rg);
         accG.sector.add(sec.sector, rg); accG.country.add(country, rg);
+        const rcW = checkpointReturns(b.time, cc, ckW), rgW = checkpointReturns(b.time, usd, ckW);
+        accCW.industry.add(sec.industryGroup, rcW); accCW.sector.add(sec.sector, rcW);
+        accGW.industry.add(sec.gicsIndustryGroup && sec.gicsIndustryGroup !== UNCLASSIFIED ? sec.gicsIndustryGroup : sec.industryGroup, rgW);
+        accGW.sector.add(sec.sector, rgW); accGW.country.add(country, rgW);
         if (rc[rc.length - 1]) latestRet.set(sec.id, rc[rc.length - 1]);
       }
       const shares = estimateSharesFromRow(sec, b, fx, T);
@@ -339,6 +349,8 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
       return null;
     };
     applyGlocom(country, snaps, secOfId, latestRet, accC, glocomGroups);
+    glocomWeekly[`C:${country}|industry`] = accCW.industry.history(METHODOLOGY.glocom.minGroupStocks);
+    glocomWeekly[`C:${country}|sector`] = accCW.sector.history(METHODOLOGY.glocom.minGroupStocks);
     const fpct = fundamentalPercentiles(snaps.map((x) => ({ id: x.id, f: x.f })));
     for (const x of snaps) {
       const sec = secOf.get(x.id);
@@ -400,6 +412,8 @@ export async function runPipeline(source, sink, { methodology = METHODOLOGY, onP
   await sink.rotation?.(rot);
   for (const lv of ["industry", "sector", "country"]) glocomGroups[`G|${lv}`] = accG[lv].history(METHODOLOGY.glocom.minGroupStocks);
   await sink.glocomGroups?.(glocomGroups);
+  for (const lv of ["industry", "sector", "country"]) glocomWeekly[`G|${lv}`] = accGW[lv].history(METHODOLOGY.glocom.minGroupStocks);
+  await sink.glocomWeekly?.(glocomWeekly);
   await sink.regimes?.(regimeRows);
   await sink.ewcw?.(ewcwRows);
   await sink.backtest?.(bt.rows());

@@ -20,11 +20,12 @@ export default function Glocom({ route }) {
   const q = route.query;
   const { data: scopes } = useAsync(() => d.api.glocomScopes(), []);
   const [dl, setDl] = useState(null);
-  const download = async (all) => {
+  const download = async (all, weekly = false) => {
     setDl("Preparing the file...");
+    const mk = market === "G" ? "Global" : market.slice(2), slug = market === "G" ? "global" : market.slice(2).replace(/\W+/g, "_");
     try {
-      await downloadFromServer(`/api/glocom-history${all ? "" : `?market=${encodeURIComponent(market === "G" ? "Global" : market.slice(2))}`}`,
-        all ? "glocom_locom_band_history_all.csv" : `glocom_locom_band_history_${market === "G" ? "global" : market.slice(2).replace(/\W+/g, "_")}.csv`);
+      await downloadFromServer(`/api/glocom-history${all ? "" : `?market=${encodeURIComponent(mk)}${weekly ? "&weekly=1" : ""}`}`,
+        weekly ? `glocom_locom_weekly_since_2010_${slug}.csv` : all ? "glocom_locom_band_history_all.csv" : `glocom_locom_band_history_${slug}.csv`);
       setDl(null);
     } catch (e) { setDl(`Download failed: ${e.message}`); }
   };
@@ -60,6 +61,7 @@ export default function Glocom({ route }) {
         <Seg value={String(back)} options={BACK} onChange={(v) => set({ back: v })} />
         {SERVER_ON && <button className="btn" title="Every stored session, one row per date and group: band, rank, score, 1W / 6M / 1Y returns and percentiles, stock count" onClick={() => download(false)}>⬇ History (this market)</button>}
         {SERVER_ON && <button className="btn" title="The same for every market and level" onClick={() => download(true)}>⬇ History (all)</button>}
+        {SERVER_ON && <button className="btn" title="One row per week since 2010 for this market: bands, ranks, returns, percentiles and each group's equal-weight return level. Each week uses only prices up to that week; industries are today's." onClick={() => download(false, true)}>⬇ Weekly since 2010 (this market)</button>}
       </PageHead>
       {dl && <div className="note small">{dl}</div>}
       {loading ? <Loading /> : !hist ? <Empty>No GLOCOM history yet for this market. It is written by the nightly engine run.</Empty> : (
