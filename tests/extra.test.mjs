@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { runExtra } from "../cli/extraJob.mjs";
+import { runExtra, toUsd } from "../cli/extraJob.mjs";
 import { currencyPairs, crossRate } from "../engine/reference/extraInstruments.js";
 
 test("currency pairs follow market quoting and rupee crosses are built from USD rates", () => {
@@ -20,6 +20,7 @@ test("extra job: skips symbols FMP does not answer, writes pairs only from real 
     if (sql.startsWith("insert into tas_xasset_bars")) { for (const r of JSON.parse(args[0])) bars.set(`${r.symbol}|${r.date}`, r.close); return { rows: [] }; }
     if (sql.startsWith("select date::text d, close from tas_xasset_bars")) return { rows: [...bars].filter(([k]) => k.startsWith(args[0] + "|")).map(([k, c]) => ({ d: k.split("|")[1], close: c })) };
     if (sql.startsWith("select currency")) return { rows: [{ currency: "INR", d: days, rate: days.map(() => 0.012), stale: days.map((_, i) => (i === 3 ? 1 : 0)) }] };
+    if (sql.includes("from instruments i join price_history")) return { rows: [] };
     if (sql.startsWith("insert into tas_extra_series")) { written.push({ symbol: args[0], dates: args[7], close: args[8] }); return { rows: [] }; }
     throw new Error(sql);
   } };
@@ -30,4 +31,12 @@ test("extra job: skips symbols FMP does not answer, writes pairs only from real 
   const inr = written.find((x) => x.symbol === "FX:USDINR");
   assert.equal(inr.dates.length, 29); // the carried-forward day is left out
   assert.equal(Math.round(inr.close[0] * 100) / 100, 83.33);
+});
+
+test("USD version of a local index: close x USD per unit, short gaps carry the last rate, long gaps are dropped", () => {
+  const dates = ["2026-01-05", "2026-01-06", "2026-01-07", "2026-01-20"];
+  const fx = new Map([["2026-01-05", 0.2], ["2026-01-06", 0.25]]);
+  const u = toUsd(dates, [100, 100, 100, 100], fx);
+  assert.deepEqual(u.dates, ["2026-01-05", "2026-01-06", "2026-01-07"]);
+  assert.deepEqual(u.close, [20, 25, 25]);
 });

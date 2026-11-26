@@ -409,3 +409,7 @@ today's industry mapping. Equal-weight average of constituents; Indian groups ca
 
 23 more FMP series in `engine/reference/extraInstruments.js` (WIG20, WIG, RTSI, China A50, platinum, palladium, heating oil, RBOB, aluminium, zinc, wheat, rice, corn, soybeans + oil + meal, cocoa, coffee, sugar, OJ, live cattle, lumber, oats), chosen from a live probe (`cli/indexProbe.mjs`). Stale FMP series (lead, cotton, lean hogs, feeder cattle) were left out on purpose.
 Still not held: 26 items FMP cannot serve (PSI 20, BUX, SZSE, STAR 50, Hang Seng TECH, Philippines, Karachi, Vietnam, Gulf / Africa exchanges, TA-35, Athens General, Turkey All Share, nickel, gas oil, coal, HRC, CRB, India 10Y), MSCI index levels (licensed; ETFs stand in) and MCX gold / silver (need Kite, never log in separately).
+
+## USD copies of local-currency indices (added 2026-11-26)
+
+`cli/extraJob.mjs` `runUsd`: every held exchange-provided index (heatmap global_indices, india_indices, and the extra FMP indices) quoted in local currency also gets a chart series `USD:<symbol>` (heatmap ones `USD:GL:^BVSP`, `USD:IN:<symbol>`), labelled "<name> (USD)", category Index, in `tas_extra_series`. Level x `tas_fx` USD-per-unit on the same day; a day with no fixing carries the last rate up to 5 days and the source text says estimated. Currency comes from `COUNTRY_CURRENCY` (the heatmap's instruments.currency says USD for every global index, which is wrong for the levels). US indices are already USD and get no copy.

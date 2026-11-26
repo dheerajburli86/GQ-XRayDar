@@ -97,3 +97,12 @@ export function currencyPairs(currencies) {
 
 /** Price of BASE in QUOTE units from USD-per-unit rates. */
 export const crossRate = (usdPerBase, usdPerQuote, per = 1) => (usdPerBase > 0 && usdPerQuote > 0 ? (usdPerBase / usdPerQuote) * per : null);
+
+/** Currency an index level is quoted in, by country (exchange-provided indices are quoted in local currency). */
+export const COUNTRY_CURRENCY = {
+  Australia: "AUD", Brazil: "BRL", France: "EUR", Germany: "EUR", Spain: "EUR", Italy: "EUR", Netherlands: "EUR", Belgium: "EUR", Austria: "EUR",
+  Ireland: "EUR", Finland: "EUR", "Euro area": "EUR", Europe: "EUR", "United Kingdom": "GBP", Canada: "CAD", "Hong Kong": "HKD", Indonesia: "IDR",
+  "South Korea": "KRW", Argentina: "ARS", Mexico: "MXN", Japan: "JPY", "New Zealand": "NZD", Denmark: "DKK", Sweden: "SEK", Norway: "NOK",
+  Switzerland: "CHF", Singapore: "SGD", Taiwan: "TWD", China: "CNY", Russia: "RUB", Malaysia: "MYR", Thailand: "THB", Israel: "ILS",
+  Turkey: "TRY", Poland: "PLN", Chile: "CLP", "South Africa": "ZAR", India: "INR", "United States": "USD",
+};
