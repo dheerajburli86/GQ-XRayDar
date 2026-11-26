@@ -120,7 +120,10 @@ export function toSecurity(row, indiaMap = null) {
     sector: us ? us[0] : g.sector,
     industryGroup: canonicalIndustryGroup(us ? us[1] : g.industryGroup),
     industry: us ? canonicalIndustryGroup(us[1]) : industry || null,
-    subIndustry: us ? us[2] : null,
+    // sub-industry, one level below the industry group, in every market (Alok Sir, 2026-11-26): US = the owner's workbook;
+    // India = the exchanges' official basic industry (NSE / BSE harmonised scheme), else the India business label;
+    // Global = the data vendor's industry (about 200 labels, finer than the 25 GICS groups)
+    subIndustry: fund ? null : us ? us[2] : universe === "india_stocks" ? row.official_basic_industry || industry || null : universe === "global" ? row.industry || null : null,
     // GICS industry group even where the US workbook relabels the stock: cross-market groups (Global GLOCOM) use it
     gicsIndustryGroup: g.industryGroup || null,
     classSource: us ? usSource : g.source,

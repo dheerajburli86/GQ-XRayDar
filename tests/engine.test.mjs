@@ -214,3 +214,15 @@ test("Technology group takes Alphabet / Meta / Amazon / Tesla / SpaceX by indust
   for (const s of ["GOOG", "META", "AMZN", "TSLA", "SPCX", "NVDA", "NFLX", "MELI"]) assert.equal(of(s), "Technology", s);
   for (const s of ["JPM", "XOM", "LLY", "GM", "T", "WMT"]) assert.equal(of(s), "Non Technology", s);
 });
+
+test("sub-industry in every market: US workbook, India official basic industry, Global vendor industry", async () => {
+  const { toSecurity } = await import("../engine/classification.js");
+  const ind = toSecurity({ id: "1", symbol: "TCS", name: "TCS", universe: "india_stocks", type: "EQ", industry: "IT Services", official_basic_industry: "Computers - Software & Consulting", is_active: true, country: "India" });
+  assert.equal(ind.subIndustry, "Computers - Software & Consulting");
+  const ind2 = toSecurity({ id: "2", symbol: "XYZ", name: "XYZ", universe: "india_stocks", type: "EQ", industry: "Steel", is_active: true, country: "India" });
+  assert.equal(ind2.subIndustry, "Steel");
+  const gl = toSecurity({ id: "3", symbol: "SAP", name: "SAP", universe: "global", type: "stock", industry: "Packaged software", is_active: true, country: "Germany" });
+  assert.equal(gl.subIndustry, "Packaged software");
+  const us = toSecurity({ id: "4", symbol: "NVDA", name: "NVIDIA", universe: "us_stocks", type: "CS", is_active: true });
+  assert.equal(us.subIndustry, "AI & Compute Processors (GPU/CPU/ASIC)");
+});

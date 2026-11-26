@@ -40,7 +40,9 @@ export function pgSource(pool, { warmupDays = 400, minCalendarCount = 50, log = 
       const { rows } = await pool.query(
         `select id::text, symbol, name, universe, type, sector, industry, country, region, currency, exchange, isin,
                 is_active, market_cap_local, market_cap_currency, market_cap_usd, market_cap_inr, etf_category,
-                case when universe = 'us_stocks' then (select f.profile->>'industry' from fundamentals f where f.instrument_id = instruments.id limit 1) end as fmp_industry
+                case when universe = 'us_stocks' then (select f.profile->>'industry' from fundamentals f where f.instrument_id = instruments.id limit 1) end as fmp_industry,
+                case when universe = 'india_stocks' then (select o.basic_industry from india_official_classification o
+                  where o.instrument_id = instruments.id and coalesce(o.basic_industry, '') <> '' limit 1) end as official_basic_industry
            from instruments where universe = any($1)`, [[...STOCK_UNIVERSES, ...FUND_UNIVERSES]]);
       // Funds and indices: active only (an inactive ETF row is a muted or closed product).
       const kept = rows.filter((r) => r.is_active !== false || (INCLUDE_INACTIVE.has(r.universe)));
