@@ -43,15 +43,32 @@ async function upsert(pool, r) {
   [r.symbol, r.label, r.category, r.region || null, r.country || null, r.currency || null, r.source, r.dates, r.close]);
 }
 
-async function refresh(pool, symbol, key, fetchImpl) {
-  const { rows } = await pool.query(`select max(date)::text d from tas_xasset_bars where symbol = $1`, [symbol]);
-  const start = rows[0]?.d || "1990-01-01";
-  const r = await fetchImpl(`https://financialmodelingprep.com/stable/historical-price-eod/full?symbol=${encodeURIComponent(symbol)}&from=${start}&apikey=${key}`, { signal: AbortSignal.timeout(60_000) });
+// FMP answers at most ~5000 daily bars per request (about 20 years), so a first fetch walks back in windows
+// (to = day before the oldest bar received) until FMP returns fewer than a full page: full history, not the last 20 years.
+const PAGE = 4900;
+async function fetchWindow(symbol, key, fetchImpl, from, to) {
+  const r = await fetchImpl(`https://financialmodelingprep.com/stable/historical-price-eod/full?symbol=${encodeURIComponent(symbol)}&from=${from}${to ? `&to=${to}` : ""}&apikey=${key}`, { signal: AbortSignal.timeout(60_000) });
   if (!r.ok) throw new Error(`FMP HTTP ${r.status}`);
   const j = await r.json();
-  const data = (Array.isArray(j) ? j : j?.historical || []).map((x) => ({ symbol, date: String(x.date).slice(0, 10), close: +(x.adjClose ?? x.close) })).filter((x) => x.close > 0 && /^\d{4}-\d\d-\d\d$/.test(x.date));
+  return (Array.isArray(j) ? j : j?.historical || []).map((x) => ({ symbol, date: String(x.date).slice(0, 10), close: +(x.adjClose ?? x.close) })).filter((x) => x.close > 0 && /^\d{4}-\d\d-\d\d$/.test(x.date));
+}
+async function save(pool, data) {
   for (let i = 0; i < data.length; i += 4000) {
     await pool.query(`insert into tas_xasset_bars (symbol, date, close) select symbol, date, close from json_populate_recordset(null::tas_xasset_bars, $1::json)
       on conflict (symbol, date) do update set close = excluded.close`, [JSON.stringify(data.slice(i, i + 4000))]);
+  }
+}
+export async function refresh(pool, symbol, key, fetchImpl) {
+  const { rows } = await pool.query(`select max(date)::text d, min(date)::text m from tas_xasset_bars where symbol = $1`, [symbol]);
+  const start = rows[0]?.d || "1990-01-01";
+  let data = await fetchWindow(symbol, key, fetchImpl, start, null);
+  await save(pool, data);
+  // a full page means older bars may exist: keep walking back (at most 6 windows, ~100 years)
+  for (let n = 0; n < 6 && data.length >= PAGE; n++) {
+    const oldest = data.map((x) => x.date).sort()[0];
+    const to = new Date(Date.parse(oldest + "T00:00:00Z") - 86_400_000).toISOString().slice(0, 10);
+    if (to < start) break;
+    data = await fetchWindow(symbol, key, fetchImpl, start, to);
+    await save(pool, data);
   }
 }
