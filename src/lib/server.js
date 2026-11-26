@@ -72,3 +72,14 @@ export async function startSync() {
   for (const k of localKeys()) if (SYNC_KEYS.test(k) && !(k in remote)) { const v = load(k, undefined); if (v !== undefined) push(k, v); }
   setSyncHook(push);
 }
+
+/** Download a file from the server with the login token (the browser cannot add the header to a plain link). */
+export async function downloadFromServer(path, filename) {
+  if (!SERVER_ON) throw new Error("The Technical Analysis server is not connected (VITE_TA_SERVER_URL).");
+  const r = await fetch(SERVER_URL + path, { headers: await authHeaders() });
+  if (!r.ok) { let m = `server answered HTTP ${r.status}`; try { m = (await r.json()).error || m; } catch { /* not json */ } throw new Error(m); }
+  const url = URL.createObjectURL(await r.blob());
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}

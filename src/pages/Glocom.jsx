@@ -1,6 +1,7 @@
 // GLOCOM / LOCOM: industry and sector bands from the heatmap's rule sheet, the
 // rank of every group, and every move up or down (how many places, which band).
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { downloadFromServer, SERVER_ON } from "../lib/server.js";
 import { useData } from "../data/store.jsx";
 import { useAsync } from "../lib/useAsync.js";
 import { navigate } from "../lib/router.js";
@@ -18,6 +19,15 @@ export default function Glocom({ route }) {
   const d = useData();
   const q = route.query;
   const { data: scopes } = useAsync(() => d.api.glocomScopes(), []);
+  const [dl, setDl] = useState(null);
+  const download = async (all) => {
+    setDl("Preparing the file...");
+    try {
+      await downloadFromServer(`/api/glocom-history${all ? "" : `?market=${encodeURIComponent(market === "G" ? "Global" : market.slice(2))}`}`,
+        all ? "glocom_locom_band_history_all.csv" : `glocom_locom_band_history_${market === "G" ? "global" : market.slice(2).replace(/\W+/g, "_")}.csv`);
+      setDl(null);
+    } catch (e) { setDl(`Download failed: ${e.message}`); }
+  };
   const markets = useMemo(() => [...new Set((scopes || []).map((k) => k.split("|")[0]))].sort((a, b) => (a === "G" ? -1 : b === "G" ? 1 : a.localeCompare(b))), [scopes]);
   const market = q.m || (markets.includes("G") ? "G" : markets[0] || "G");
   const level = q.lv === "country" && market !== "G" ? "industry" : q.lv || (market === "G" ? "country" : "industry");
@@ -48,7 +58,10 @@ export default function Glocom({ route }) {
         <Select label="Market" value={market} options={markets.map((k) => ({ value: k, label: label(k) }))} onChange={(v) => set({ m: v, g: undefined })} />
         <Seg value={level} options={[{ value: "industry", label: "Industries" }, { value: "sector", label: "Sectors" }, ...(market === "G" ? [{ value: "country", label: "Countries" }] : [])]} onChange={(v) => set({ lv: v, g: undefined })} />
         <Seg value={String(back)} options={BACK} onChange={(v) => set({ back: v })} />
+        {SERVER_ON && <button className="btn" title="Every stored session, one row per date and group: band, rank, score, 1W / 6M / 1Y returns and percentiles, stock count" onClick={() => download(false)}>⬇ History (this market)</button>}
+        {SERVER_ON && <button className="btn" title="The same for every market and level" onClick={() => download(true)}>⬇ History (all)</button>}
       </PageHead>
+      {dl && <div className="note small">{dl}</div>}
       {loading ? <Loading /> : !hist ? <Empty>No GLOCOM history yet for this market. It is written by the nightly engine run.</Empty> : (
         <>
           <div className="card">
