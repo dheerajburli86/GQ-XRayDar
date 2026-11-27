@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import { PageHead, Seg, Select, Loading, ErrorBox, Empty, Check } from "../components/ui.jsx";
 import { TvChart } from "../components/TvChart.jsx";
 import { useAsync } from "../lib/useAsync.js";
+import { usePersistent } from "../lib/storage.js";
 import { DATA_SOURCE } from "../data/api.js";
 import { exportCsv, exportXlsx } from "../lib/exporters.js";
 import { GLOCOM_RULES, glocomBand } from "../../engine/glocom.js";
@@ -15,9 +16,10 @@ const CODE = Object.fromEntries([...GLOCOM_RULES.map((r) => [r.label, r.code]), 
 const catColor = (l) => glocomBand(CODE[l]).bg;
 const fp = (v, d = 1) => (v == null || !Number.isFinite(v) ? "—" : `${(v * 100).toFixed(d)}%`);
 const f2 = (v) => (v == null || !Number.isFinite(v) ? "—" : v.toFixed(2));
-const CFG_KEY = "gqta.gp.configs";
-const readCfgs = () => { try { return JSON.parse(localStorage.getItem(CFG_KEY) || "{}"); } catch { return {}; } };
-const writeCfgs = (c) => { try { localStorage.setItem(CFG_KEY, JSON.stringify(c)); } catch { /* storage unavailable */ } };
+// Saved configurations are a synced document ("gp.configs"): they follow the login across devices. Ones saved here
+// before the sync existed (plain localStorage) are carried over once.
+const OLD_CFG_KEY = "gqta.gp.configs";
+const oldCfgs = () => { try { return JSON.parse(localStorage.getItem(OLD_CFG_KEY) || "{}"); } catch { return {}; } };
 
 const cache = new Map();
 const ratingCache = new Map(); // ratings depend only on the universe and the rebalance day, not on the weights being edited
@@ -58,7 +60,9 @@ export default function GlocomPortfolios() {
   const [catW, setCatW] = useState(null);   // {label: percent} or null = equal
   const [idxW, setIdxW] = useState({});     // {key: relative weight}
   const [cfgName, setCfgName] = useState("");
-  const [cfgs, setCfgs] = useState(readCfgs);
+  const [cfgStored, setCfgs] = usePersistent("gp.configs", null);
+  const cfgs = cfgStored || {};
+  useEffect(() => { if (cfgStored === null) { const o = oldCfgs(); if (Object.keys(o).length) setCfgs(o); } }, [cfgStored, setCfgs]);
   const [when, setWhen] = useState(null);
   const { data, loading, error } = useAsync(() => loadUniverse(uk), [uk]);
   const pending = useRef(null); // a saved configuration waiting for the universe / portfolio switch to settle
@@ -119,13 +123,13 @@ export default function GlocomPortfolios() {
   const whenH = hold.find((h) => h.date === when) || hold.at(-1);
   const freqName = { W: "Weekly", M: "Monthly" };
 
-  const saveCfg = () => { const n = cfgName.trim(); if (!n) return; const next = { ...cfgs, [n]: { uk, pk, extra, catW, idxW, cost } }; setCfgs(next); writeCfgs(next); };
+  const saveCfg = () => { const n = cfgName.trim(); if (!n) return; const next = { ...cfgs, [n]: { uk, pk, extra, catW, idxW, cost } }; setCfgs(next); };
   const loadCfg = (n) => {
     const c = cfgs[n]; if (!c) return;
     if (c.uk === uk && c.pk === pk) { setExtra(c.extra || []); setCatW(c.catW || null); setIdxW(c.idxW || {}); setCost(c.cost ?? 10); return; }
     pending.current = c; setUk(c.uk); setPk(c.pk);
   };
-  const delCfg = (n) => { const next = { ...cfgs }; delete next[n]; setCfgs(next); writeCfgs(next); };
+  const delCfg = (n) => { const next = { ...cfgs }; delete next[n]; setCfgs(next); };
   const setCat = (c, v) => setCatW((w) => ({ ...(w || Object.fromEntries(cats.map((x) => [x, +(100 / cats.length).toFixed(2)]))), [c]: v === "" ? 0 : +v }));
 
   const statCols = [{ k: "W", l: "Weekly" }, { k: "M", l: "Monthly" }, ...(st.dW ? [{ k: "dW", l: "Weekly (equal)" }, { k: "dM", l: "Monthly (equal)" }] : [])];
@@ -145,7 +149,7 @@ export default function GlocomPortfolios() {
 
   return (
     <div className="stack">
-      <PageHead title="GLOCOM / LOCOM category portfolios" sub="Hold the indices that sit in chosen GLOCOM categories; re-rate and re-weight at every weekly or monthly rebalance. Price returns, ratings use only data up to each rebalance date." />
+      <PageHead title="GLOCOM / LOCOM category portfolios" sub="Hold the indices that sit in chosen GLOCOM categories; re-rate and re-weight at every weekly or monthly rebalance. Ratings use only data up to each rebalance date. Limits: price returns only (no dividends, no total-return series held); the ETF and index lists are today's, so delisted or closed funds are not in the history; US benchmark is the S&P 500." />
       <div className="card">
         <div className="row" style={{ flexWrap: "wrap", gap: 12 }}>
           <Select label="Universe" value={uk} onChange={(v) => v && setUk(v)} options={GP_KEYS.map((k) => ({ value: k, label: GP_UNIVERSES[k].label }))} />

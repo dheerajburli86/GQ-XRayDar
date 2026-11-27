@@ -18,7 +18,7 @@ const AUTH_URL = env.VITE_AUTH_SUPABASE_URL || env.VITE_SUPABASE_URL;
 const AUTH_KEY = env.VITE_AUTH_SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY;
 export const LOGIN_REQUIRED = SB_ON && env.VITE_REQUIRE_LOGIN !== "false";
 export const ALLOWED_DOMAINS = String(env.VITE_ALLOWED_EMAIL_DOMAINS || "gquants.com").split(/[\s,]+/).filter(Boolean).map((x) => x.toLowerCase());
-export const SYNC_KEYS = /^(watchlists|alerts\.rules|alerts\.inbox|notes|screens|workspaces|workspace\.current|layout\.[A-Za-z]+|paper|settings|assistant\.history|agent\.history|navCollapsed|drawings|chartlab|scanners|customIndices|deriv\.positions|deriv\.journal|deriv\.screens|deriv\.events|deriv\.alerts|deriv\.risk|deriv\.coach|customIndicators|projections|indSettings|tiles\.shortcuts|analyst\.studies|events)$/;
+export const SYNC_KEYS = /^(watchlists|alerts\.rules|alerts\.inbox|notes|screens|workspaces|workspace\.current|layout\.[A-Za-z]+|paper|settings|assistant\.history|agent\.history|navCollapsed|drawings|chartlab|scanners|customIndices|deriv\.positions|deriv\.journal|deriv\.screens|deriv\.events|deriv\.alerts|deriv\.risk|deriv\.coach|customIndicators|projections|indSettings|tiles\.shortcuts|analyst\.studies|events|gp\.configs)$/;
 
 export const auth = SB_ON ? createClient(AUTH_URL, AUTH_KEY, { auth: { persistSession: true, autoRefreshToken: true, storageKey: "gqta-auth", detectSessionInUrl: true } }).auth : null;
 
