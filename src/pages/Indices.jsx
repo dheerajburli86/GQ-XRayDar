@@ -78,7 +78,7 @@ export default function Indices({ route }) {
             rows={list} />
         </div>
         <div className="stack">
-          {!meta ? <div className="empty">Index not found</div> : loading ? <Loading /> : (
+          {!meta ? <div className="empty">Index not found</div> : loading ? <Loading /> : !data?.s ? <div className="empty">This index's history could not be loaded just now (the database is busy while the nightly engine refreshes). Use Retry above, or try again in a minute.</div> : (
             <>
               <div className="card">
                 <div className="row between">
