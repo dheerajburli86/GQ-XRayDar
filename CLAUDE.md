@@ -455,3 +455,22 @@ The 2026-11-26 15:30 UTC run died on "Connection terminated unexpectedly" (the p
 - PRICE returns only: no total-return index series are held, so dividends are missing from every figure (the page says so). ETFs start at their launch; indices from 2010.
   History is NOT survivorship-free for the ETF list (today's launched ETFs) and the India list is today's active Sectoral indices.
 - Saved configurations live in the browser's localStorage (not synced). Excel export = statistics, NAV, composition of every rebalance.
+
+## Alok Sir's items 19-21 (added 2026-11-27)
+
+- **Item 19 (currency labels)**: every index name carries the currency it is quoted in, "KOSPI Composite Index (KRW)" vs "(USD)"
+  (`src/lib/currencyLabel.js`, applied to securities in `store.jsx` and to chart-only extras in `useExtras`). The currency of an exchange index is
+  the COUNTRY's (`COUNTRY_CURRENCY`): the heatmap's `instruments.currency` says USD for every global index. A name that already ends in a
+  three-letter tag (USD copies, house indices) is left alone.
+- **Item 20 (agent edits the open chart)**: "show candlestick chart for TSLA" is handled in the panel (`parseChartRequest` + `resolveSecurity`),
+  not by the agent: same page, same period (`keepTf`), new instrument and style. An instrument that is not an exact ticker or a unique name
+  prefix is NOT guessed; the sentence goes to the agent. A link to the Stocks page in an agent answer is never followed for a chart request.
+- **Item 21 (two index sets)**: workbook `New_Index_Creation.xlsx` -> `scripts/gen_index_sets.py` -> `engine/reference/indexSetsData.js` (16 FG
+  sets + 9 ETF sets, generated, do not edit). How each workbook ticker resolves is `engine/reference/indexSets.js` (`LEAF`, `ALIAS`); the
+  maths is `engine/indexSets.js` (equal-weighted, daily-rebalanced composite in USD, base 100, starts when half the resolvable members have a return).
+  `cli/indexSetsJob.mjs` (run at the end of `runExtra`) writes the series into `tas_extra_series` (symbol `GQSET:<code>`) and the member-by-member
+  resolution into `tas_index_set`; page "Index sets" shows both. **Missing members are listed, never invented**: no live series exists for Nickel,
+  Steel, HRC, Lead, Cotton, most Gulf / African exchanges, Egypt and Abu Dhabi / Dubai. MSCI levels are licensed, so the MSCI country ETFs stand in
+  and are labelled proxy; `FGREIT` / `USTBOND` (named in FGALLASSET$ but never defined in the workbook) use VNQ / IEF, also labelled proxy;
+  `AGG` is not held. The weighting is an assumption (the workbook gives none): equal weight. US tech / non-tech members come from the house
+  `T:` indices, so they appear after the engine run that builds them.

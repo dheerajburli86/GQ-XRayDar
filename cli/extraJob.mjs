@@ -2,6 +2,7 @@
 // (engine/reference/extraInstruments.js). FMP indices / yields / commodity futures are fetched
 // incrementally into tas_xasset_bars (full history on first sight); currency pairs are built
 // from tas_fx. Writes only tas_extra_series and tas_xasset_bars.
+import { runIndexSets } from "./indexSetsJob.mjs";
 import { EXTRA_FMP, currencyPairs, crossRate, COUNTRY_CURRENCY } from "../engine/reference/extraInstruments.js";
 
 export async function runExtra(pool, { fmpKey = process.env.FMP_API_KEY, log = console.log, fetchImpl = fetch } = {}) {
@@ -32,6 +33,7 @@ export async function runExtra(pool, { fmpKey = process.env.FMP_API_KEY, log = c
     written++;
   }
   written += await runUsd(pool, { byCcy, log });
+  try { written += await runIndexSets(pool, { log }); } catch (e) { log(`[extra] index sets skipped: ${e.message}`); }
   log(`[extra] wrote ${written} chart series${missing.length ? `; FMP had no data for ${missing.join(", ")}` : ""}`);
   return { written, missing };
 }

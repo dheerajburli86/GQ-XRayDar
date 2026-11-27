@@ -4,6 +4,7 @@
 // Currency, Commodity, Crypto).
 import { useEffect, useState } from "react";
 import { usePersistent } from "./storage.js";
+import { labelExtra } from "./currencyLabel.js";
 import { secRankCmp } from "../../engine/turnover.js";
 
 export const INDIA_PROXY_LABEL = "India CW (Nifty 500, official index)";
@@ -52,7 +53,7 @@ export function useExtras(api) {
     if (!api?.extraList) return undefined;
     let live = true;
     extrasPromise ||= api.extraList().catch(() => []);
-    extrasPromise.then((l) => { if (live) setList(l || []); });
+    extrasPromise.then((l) => { if (live) setList((l || []).map(labelExtra)); });
     return () => { live = false; };
   }, [api]);
   return list;

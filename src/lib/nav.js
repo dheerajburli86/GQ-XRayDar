@@ -1,7 +1,7 @@
 // Left-menu structure: [group, [[page key, icon, label], ...]]. Shared by the menu and the Start page.
 export const NAV = [
   ["Overview", [["home", "★", "Start here"], ["market", "◎", "Command centre"], ["explorer", "⇣", "Top-down explorer"], ["heatmap", "▦", "Heatmap"], ["xasset", "⊕", "Cross-asset"]]],
-  ["Indices", [["indices", "≋", "CW / EW indices"], ["ewcw", "⇋", "EW vs CW (EWCW)"], ["ww", "◔", "Weight Watcher"], ["myindex", "✚", "My indices"]]],
+  ["Indices", [["indexsets", "▧", "Index sets (FG / ETF)"], ["indices", "≋", "CW / EW indices"], ["ewcw", "⇋", "EW vs CW (EWCW)"], ["ww", "◔", "Weight Watcher"], ["myindex", "✚", "My indices"]]],
   ["Charts", [["chart", "📈", "Chart lab"], ["screens/RSIACC", "∿", "RSIACC"], ["screens/RSCACC", "∿", "RSCACC"], ["screens/RSIMMA", "≡", "RSIMMA"], ["screens/RSCMMA", "≡", "RSCMMA"], ["tiles", "▦", "Multi-tile screen"], ["workspace", "⊞", "Multi-chart workspace"]]],
   ["Discovery", [["scanners", "⌖", "Scanners"], ["rs", "↗", "Relative strength"], ["screener", "⚲", "Screener"], ["early", "◷", "Early-stage scanner"], ["imbeti", "◈", "IMB / ETI characteristics"], ["funnel", "▽", "Opportunity funnel"], ["rotation", "↻", "Sector rotation"], ["glocom", "◫", "GLOCOM / LOCOM"], ["gport", "▦", "GLOCOM category portfolios"], ["breadth", "▥", "Market breadth"], ["breadthan", "▤", "Breadth analyser (CCR)"]]],
   ["Research", [["scores", "★", "AI setup scores"], ["assistant", "✦", "GQ Agent (full page)"], ["briefs", "✎", "Market briefs"], ["backtest", "⟲", "Backtest & patterns"]]],

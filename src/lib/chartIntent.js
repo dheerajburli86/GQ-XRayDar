@@ -48,6 +48,24 @@ export function parseChartIntent(text) {
   return Object.keys(out).length ? out : null;
 }
 
+const QUESTION = new Set("why what how when where who which is are was were does do did will would should can could has have had than if because".split(" "));
+const NOISE = new Set(["for", "of", "on", "to", "the", "a", "an", "please", "pls", "me", "my"]);
+/**
+ * "show candlestick chart for TSLA", "weekly line chart of apple": a chart request that also names the instrument.
+ * Returns {intent, query} (query = the words that are not chart vocabulary) or null. The caller must resolve `query` to
+ * exactly one instrument; if it cannot, the sentence is left to the GQ agent. Questions are never taken as commands.
+ */
+export function parseChartRequest(text) {
+  const t = String(text || "").toLowerCase().replace(/[^a-z0-9&\s.-]/g, " ").replace(/\s+/g, " ").trim();
+  const words = t.split(/\s+/).filter(Boolean);
+  const extra = words.filter((w) => !FILLER.has(w.replace(/-/g, "")) && !NOISE.has(w));
+  if (!extra.length || extra.length > 3 || extra.some((w) => QUESTION.has(w))) return null;
+  const rest = words.filter((w) => !extra.includes(w)).join(" ");
+  const intent = parseChartIntent(rest);
+  if (!intent || (!intent.style && !intent.screen)) return null;
+  return { intent, query: extra.join(" ") };
+}
+
 /**
  * Where the open chart goes for an intent. ctx = {page, instrumentId, instKey, tf, mode, left, right} from the page.
  * Returns {path, query, style, label} or null when the open page cannot take this change.
@@ -60,13 +78,14 @@ export function applyChartIntent(intent, ctx) {
   const screen = intent.screen || (ctx.page === "screens" && !intent.style ? ctx.mode : null);
   if (screen) {
     const q = {};
-    if (intent.tf) q.l = intent.tf;
-    if (intent.tf2) q.r = intent.tf2;
+    if (intent.tf) q.l = intent.tf; else if (ctx.keepTf && ctx.left) q.l = ctx.left;
+    if (intent.tf2) q.r = intent.tf2; else if (ctx.keepTf && ctx.right) q.r = ctx.right;
     return { path: `screens/${screen}/${encodeURIComponent(key)}`, query: q, label: `${screen}${intent.tf ? ` · ${intent.tf}${intent.tf2 ? ` | ${intent.tf2}` : ""}` : ""}` };
   }
   if (!secId) return null; // house indices / extras have no Chart lab
   const q = {};
   if (intent.tf) q.tf = intent.tf;
+  else if (ctx.keepTf && ctx.tf) q.tf = ctx.tf;      // another instrument on the same chart keeps the period in force
   if (intent.style) q.style = intent.style;
   return { path: `chart/${secId}`, query: q, style: intent.style || null, label: [intent.style && STYLE_LABEL[intent.style], intent.tf].filter(Boolean).join(" · ") || "chart" };
 }

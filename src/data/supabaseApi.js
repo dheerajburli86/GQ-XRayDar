@@ -152,6 +152,8 @@ export function createSupabaseApi(url, key) {
     async extraList() {
       try { return (await all("tas_extra_series", "symbol,label,category,region,country,currency,source")).map((r) => ({ ...r })); } catch { return []; }
     },
+    /** The workbook index sets and what each holds (tas_index_set, cli/indexSetsJob.mjs). */
+    async indexSets() { try { return await all("tas_index_set", "symbol,code,sheet,label,members,n_members,n_resolved,start_date,last_date,method,updated_at"); } catch { return []; } },
     async extraSeries(symbol) { const r = await one(sb.from("tas_extra_series").select("dates,close,currency,label").eq("symbol", symbol).maybeSingle()); return r; },
     async fxSeries(ccy) { const r = await one(sb.from("tas_fx").select("dates,rate,stale").eq("currency", ccy).maybeSingle()); return r; },
     async wwGroups() { return (await all("tas_ww", "parent_key,parent_type,child_type")).map((r) => ({ parentKey: r.parent_key, parentType: r.parent_type, childType: r.child_type })); },
@@ -206,7 +208,7 @@ export function createSupabaseApi(url, key) {
   // Wrap the read methods in the caches above. Answers are shared between callers, so pages
   // must treat them as read-only (they already do: every page copies before changing anything).
   const PERSIST = ["indexSeries", "breadth", "rotation", "glocomGroups", "ww", "ewcw", "backtestSummary", "wwGroups", "breadthKeys", "rotationScopes", "glocomScopes", "fxSeries"];
-  const MEMORY = ["extraList", "extraSeries", "snapshot", "bars", "events", "etiRows", "membership", "membershipDates", "fxSummary", "corporateActions", "issues"];
+  const MEMORY = ["extraList", "indexSets", "extraSeries", "snapshot", "bars", "events", "etiRows", "membership", "membershipDates", "fxSummary", "corporateActions", "issues"];
   for (const name of [...PERSIST, ...MEMORY]) {
     const fn = api[name], persist = PERSIST.includes(name);
     api[name] = (...args) => cached(`${name}:${JSON.stringify(args)}`, () => withRetry(() => fn(...args)), { persist });

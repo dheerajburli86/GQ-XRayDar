@@ -29,3 +29,18 @@ test("an agent answer with exactly one in-app link is followed when the person a
   assert.equal(linkToFollow("what is the RSI of TCS", `see [chart](${o}/#/chart/1)`, o), null);
   assert.equal(linkToFollow("show the breakouts", `[a](${o}/#/chart/1) [b](${o}/#/chart/2)`, o), null);
 });
+
+import { parseChartRequest, applyChartIntent as applyIt } from "../src/lib/chartIntent.js";
+test("item 20: a chart request that names an instrument keeps the open screen and period", () => {
+  const r = parseChartRequest("Show candlestick chart for TSLA");
+  assert.deepEqual(r, { intent: { style: "candles" }, query: "tsla" });
+  const go = applyIt(r.intent, { page: "chart", instrumentId: "9", instKey: "s:9", tf: "W", keepTf: true });
+  assert.equal(go.path, "chart/9"); assert.equal(go.query.style, "candles"); assert.equal(go.query.tf, "W");
+  const sc = applyIt({ screen: "RSIMMA" }, { page: "screens", mode: "RSIACC", instKey: "s:9", left: "W", right: "M", keepTf: true });
+  assert.equal(sc.query.l, "W"); assert.equal(sc.query.r, "M");
+});
+test("item 20: questions and unclear sentences are not taken as chart commands", () => {
+  assert.equal(parseChartRequest("why is the line chart for tesla falling"), null);
+  assert.equal(parseChartRequest("what is the best candlestick pattern"), null);
+  assert.equal(parseChartRequest("make it candlesticks"), null);   // no instrument named: the plain intent path handles it
+});

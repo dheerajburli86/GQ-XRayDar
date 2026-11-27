@@ -1,6 +1,7 @@
 // App-wide data: security master, screen rows, index catalogue and regimes,
 // loaded once from whichever data source is configured, plus user settings.
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { labelIndexSecurity } from "../lib/currencyLabel.js";
 import { getApi, onProgress, DATA_SOURCE } from "./api.js";
 import { decodeFlat } from "../../engine/screenRow.js";
 import { usePersistent } from "../lib/storage.js";
@@ -39,7 +40,8 @@ export function DataProvider({ children }) {
           bundle = { secs, srows, idx, regimes };
           if (ck) idbSet(ck, bundle);
         }
-        const { secs, srows, idx, regimes } = bundle;
+        const { srows, idx, regimes } = bundle;
+        const secs = bundle.secs.map(labelIndexSecurity); // each index name carries its currency (item 19)
         if (!alive) return;
         const secById = new Map(secs.map((x) => [x.id, x]));
         const keys = info.screenKeys;

@@ -58,6 +58,7 @@ const pages = {
   imbeti: page("imbeti", () => import("./pages/ImbEti.jsx")),
   breadth: page("breadth", () => import("./pages/Breadth.jsx")),
   breadthan: page("breadthan", () => import("./pages/BreadthAnalyser.jsx")),
+  indexsets: page("indexsets", () => import("./pages/IndexSets.jsx")),
   gport: page("gport", () => import("./pages/GlocomPortfolios.jsx")),
   scores: page("scores", () => import("./pages/Scores.jsx")),
   assistant: page("assistant", () => import("./pages/Assistant.jsx")),

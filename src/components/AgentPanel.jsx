@@ -9,11 +9,12 @@ import { api } from "../lib/server.js";
 import { answer } from "../../engine/assistant.js";
 import { parseCommand } from "../../engine/nl.js";
 import { href, navigate } from "../lib/router.js";
-import { parseChartIntent, applyChartIntent, linkToFollow } from "../lib/chartIntent.js";
+import { parseChartIntent, parseChartRequest, applyChartIntent, linkToFollow } from "../lib/chartIntent.js";
 import { load, save, uid } from "../lib/storage.js";
 import { parseProjectionText, computeProjection } from "../../engine/projection.js";
 import { formulaFromText } from "../../engine/formula.js";
 import { aggregate } from "../../engine/indicators.js";
+import { secRankCmp } from "../../engine/turnover.js";
 import { loadInstrument } from "../lib/series.js";
 
 /**
@@ -32,6 +33,20 @@ async function chartAction(text, ctx, d) {
     if (go.style) save("chartlab", { ...load("chartlab", {}), style: go.style, ...(intent.tf ? { tf: intent.tf } : {}) });
     navigate(go.path, go.query);
     return [{ kind: "text", text: `Done: the open chart${sym ? ` (${sym})` : ""} now shows ${go.label}.` }];
+  }
+  // "show candlestick chart for TSLA" while a chart or screen is open: the same screen, the same period, a new instrument and style (item 20)
+  const req = parseChartRequest(t);
+  if (req) {
+    const sec = resolveSecurity(req.query, d);
+    if (sec) {
+      const next = { ...ctx, instrumentId: sec.id, instKey: `s:${sec.id}`, symbol: sec.symbol, keepTf: true };
+      const go = applyChartIntent(req.intent, next);
+      if (go) {
+        if (go.style) save("chartlab", { ...load("chartlab", {}), style: go.style });
+        navigate(go.path, go.query);
+        return [{ kind: "text", text: `Done: ${sec.symbol} · ${sec.name} now shows ${go.label}${ctx?.page ? ", on the same screen and period" : ""}.` }];
+      }
+    }
   }
   if (/^(create|make|add|build)\b.*\b(indicator|formula)\b/i.test(t) || /^(indicator|formula)\s*[:=]/i.test(t)) {
     const f = formulaFromText(t);
@@ -61,6 +76,16 @@ async function chartAction(text, ctx, d) {
     return [{ kind: "list", items: list.map((p) => { const r = computeProjection(bars, p, ctx.tf || "D"); return `${p.name}: ${r.statusText}. Method: ${r.methodNote}.${r.stats ? ` ${r.stats.cases} past cases, ${Math.round(r.stats.hitRate * 100)}% went the projected way.` : ""}`; }) }];
   }
   return null;
+}
+
+/** One security for a typed name: an exact ticker, else a name that starts with the words and is unique. Anything unclear returns null (the agent answers). */
+function resolveSecurity(query, d) {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return null;
+  const bySym = d.secs.filter((s) => s.symbol.toLowerCase() === q.replace(/\s+/g, ""));
+  if (bySym.length) return [...bySym].sort(secRankCmp)[0];
+  const byName = d.secs.filter((s) => (s.name || "").toLowerCase().startsWith(q));
+  return byName.length === 1 ? byName[0] : null;
 }
 
 let pageContext = null;
@@ -175,7 +200,8 @@ export function AgentPanel() {
         if (r.answer) entry.text = r.answer; else entry.blocks = r.blocks;
         // "open RELIANCE RSCMMA weekly": when the answer carries exactly one chart of this app, open it in place
         const follow = r.answer ? linkToFollow(text, r.answer, window.location.origin) : null;
-        if (follow) { window.location.hash = `#/${follow}`; entry.notice = "Opened on screen."; }
+        // a chart request is never answered by moving to the Stocks page (item 20): only a link to another chart view is followed
+        if (follow && !/^stock\//.test(follow)) { window.location.hash = `#/${follow}`; entry.notice = "Opened on screen."; }
       }
     } catch (e) { entry.blocks = [{ kind: "text", text: `Could not answer: ${e.message}` }]; }
     setHist((h) => h.map((m) => (m.id === pendingId ? entry : m)));
