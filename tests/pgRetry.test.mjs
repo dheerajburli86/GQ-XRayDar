@@ -12,3 +12,7 @@ test("a dropped connection is retried; a real error is not", async () => {
   assert.equal(isTransient({ code: "57014", message: "canceling statement due to statement timeout" }), false);
   assert.equal(isTransient({ code: "ECONNRESET", message: "read ECONNRESET" }), true);
 });
+
+test("a client-side read timeout (a silently dead connection) is retried", () => {
+  assert.equal(isTransient(new Error("Query read timeout")), true);
+});

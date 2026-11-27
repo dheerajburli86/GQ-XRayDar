@@ -33,7 +33,7 @@ pg.types.setTypeParser(1082, (v) => v); // date -> 'YYYY-MM-DD' string, never a 
 const envN = (k, d) => (Number.isFinite(+process.env[k]) && process.env[k] !== "" && process.env[k] != null ? +process.env[k] : d);
 const parallel = { countries: envN("ENGINE_COUNTRIES", 4), budget: envN("ENGINE_BUDGET", 14000), prefetch: envN("ENGINE_PREFETCH", 2) };
 const reads = envN("ENGINE_READS", 3), writes = envN("ENGINE_WRITES", 3);
-const pool = new pg.Pool({ connectionString: url, max: Math.min(12, Math.max(4, parallel.countries * reads + writes + 2)), ssl: url.includes("localhost") ? false : { rejectUnauthorized: false }, statement_timeout: 600000 });
+const pool = new pg.Pool({ connectionString: url, max: Math.min(12, Math.max(4, parallel.countries * reads + writes + 2)), ssl: url.includes("localhost") ? false : { rejectUnauthorized: false }, statement_timeout: 600000, query_timeout: 900000, keepAlive: true, keepAliveInitialDelayMillis: 10000 });
 const dryRun = flag("--dry-run");
 const methodology = { ...METHODOLOGY, ...(opt("--start") ? { startDate: opt("--start") } : {}) };
 const only = opt("--countries") ? new Set(opt("--countries").split(",").map((s) => s.trim())) : null;

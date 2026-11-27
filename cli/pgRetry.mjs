@@ -6,7 +6,7 @@ const TRANSIENT_CODES = new Set(["ECONNRESET", "ECONNREFUSED", "EPIPE", "ETIMEDO
 export function isTransient(e) {
   if (!e) return false;
   if (TRANSIENT_CODES.has(e.code)) return true;
-  return /Connection terminated|connection timeout|terminating connection|server closed the connection|Client has encountered a connection error|socket hang up/i.test(String(e.message || ""));
+  return /Connection terminated|connection timeout|terminating connection|server closed the connection|Client has encountered a connection error|socket hang up|Query read timeout/i.test(String(e.message || ""));
 }
 
 export async function withRetry(fn, { tries = 5, log = console.warn, what = "query" } = {}) {
