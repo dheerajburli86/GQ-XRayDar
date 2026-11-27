@@ -50,6 +50,58 @@ const STAT_ROWS = [
   ["CAGR minus benchmark CAGR", (s) => s.excessCagr, fp, true],
 ];
 
+// Side-by-side comparison of saved configurations: each is re-run with its own universe, categories, weights and cost,
+// then cut to the latest common start so the figures are comparable.
+const COMPARE_COLORS = ["#16a34a", "#2563eb", "#d97706", "#9333ea", "#dc2626", "#0891b2"];
+function CompareConfigs({ cfgs, rf, freq }) {
+  const names = Object.keys(cfgs);
+  const [sel, setSel] = useState([]);
+  const chosen = sel.filter((n) => cfgs[n]).slice(0, 6);
+  const { data, loading, error } = useAsync(async () => {
+    const out = [];
+    for (const n of chosen) {
+      const c = cfgs[n]; const P = PORTFOLIOS[c.pk]; if (!P) continue;
+      const all = await loadUniverse(c.uk);
+      const members = all.filter((x) => !x.bench), bench = all.find((x) => x.bench) || null;
+      if (!members.length) continue;
+      const cats = [...P.categories, ...(c.extra || []).filter((x) => P.optional.includes(x))];
+      const nw = c.catW ? normaliseWeights(c.catW, cats) : null;
+      const idx = {}; for (const [k, v] of Object.entries(c.idxW || {})) if (v !== "" && v != null && Number.isFinite(+v)) idx[k] = +v;
+      const r = runPortfolio(members, bench, { freq, categories: cats, costBps: c.cost ?? 10, catWeights: nw ? nw.w : null, idxWeights: idx });
+      out.push({ n, r, bench: !!bench });
+    }
+    return out;
+  }, [chosen.join("|"), freq]);
+  const view = useMemo(() => {
+    if (!data || !data.length) return null;
+    const start = data.map((d) => d.r.dates[0]).filter(Boolean).sort().at(-1);
+    const rows = data.map((d) => { const r = sliceRun(d.r, start); return { n: d.n, r, s: stats(r, rf) }; });
+    return { start, rows };
+  }, [data, rf]);
+  const nav = view ? view.rows.map((x, i) => ({ id: x.n, type: "line", data: x.r.dates.map((d, k) => ({ time: d, value: x.r.nav[k] })).filter((p) => p.value != null && Number.isFinite(p.value)), options: { color: COMPARE_COLORS[i % 6], lineWidth: 2, title: x.n } })) : [];
+  return (
+    <div className="card">
+      <div className="h3">Compare saved configurations ({freq === "W" ? "weekly" : "monthly"})</div>
+      {names.length < 2 ? <p className="legend-note">Save at least two configurations above to compare them here.</p> : <>
+        <div className="row" style={{ flexWrap: "wrap", gap: 12 }}>{names.map((n) => (
+          <label key={n} className="small"><input type="checkbox" checked={sel.includes(n)} onChange={(e) => setSel((a) => e.target.checked ? [...a, n] : a.filter((x) => x !== n))} /> {n} <span className="muted">({cfgs[n].uk}, {cfgs[n].pk})</span></label>
+        ))}</div>
+        {loading && <Loading what="comparison" />}
+        {error && <ErrorBox error={error} />}
+        {view && view.rows.length > 0 && <>
+          <p className="legend-note">All start {view.start}, the latest first date among the chosen configurations. Price returns only; each uses its own universe, weights and cost.</p>
+          <div className="tbl-wrap"><table className="tbl">
+            <thead><tr><th>Measure</th>{view.rows.map((x) => <th key={x.n} className="num">{x.n}</th>)}</tr></thead>
+            <tbody>{STAT_ROWS.map(([label, f, fmt]) => (
+              <tr key={label}><td>{label}</td>{view.rows.map((x) => <td key={x.n} className="num">{fmt(f(x.s))}</td>)}</tr>
+            ))}</tbody></table></div>
+          <TvChart height={300} logScale legend series={nav} />
+        </>}
+      </>}
+    </div>
+  );
+}
+
 export default function GlocomPortfolios() {
   const [uk, setUk] = useState("us_sector");
   const [pk, setPk] = useState("strong");
@@ -207,6 +259,8 @@ export default function GlocomPortfolios() {
           ))}</tbody></table></div>
         <p className="legend-note">Sharpe = annualised mean daily return less the risk-free rate, over annualised volatility. Hit ratio counts rebalance periods in which the portfolio beat the benchmark. Weekly and monthly are separate runs over the same window starting {runs.start}; costs are charged on the weight traded at every rebalance.</p>
       </div>
+
+      <CompareConfigs cfgs={cfgs} rf={rf} freq={view} />
 
       <div className="card"><div className="h3">Growth of 1 (log scale)</div><TvChart height={320} logScale legend series={navSeries} /></div>
       <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: 10 }}>
