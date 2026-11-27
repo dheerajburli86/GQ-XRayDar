@@ -166,7 +166,7 @@ export default function GlocomPortfolios() {
         <div className="h3">Categories and weights</div>
         <div className="row" style={{ flexWrap: "wrap", gap: 14 }}>
           {P.optional.map((c) => <Check key={c} checked={extra.includes(c)} onChange={(v) => setExtra((e) => (v ? [...e, c] : e.filter((x) => x !== c)))}>Also hold {c}</Check>)}
-          {P.optional.length > 0 && <span className="small muted">{pk === "weak" ? "The spec lists UW 30 30 twice and asks to confirm the second category; the red categories are optional here." : "Optional."}</span>}
+          {P.optional.length > 0 && <span className="small muted">Optional.</span>}
         </div>
         <div className="row" style={{ flexWrap: "wrap", gap: 10, marginTop: 8 }}>
           {cats.map((c) => (

@@ -13,8 +13,8 @@ export const GP_VERSION = "1.0.0";
 /** The three portfolios of the spec. The weak list is the confirmed pair; the spec repeats "UW 30 30" and says the
  *  intended category is to be confirmed, so the other two red categories are offered as optional extras. */
 export const PORTFOLIOS = {
-  strong: { label: "Strong", categories: ["US 80 80", "LTS 80", "US 60 60"], optional: ["LTS 60"] },
-  weak: { label: "Weak (long only)", categories: ["UW 30 30", "LTW 30"], optional: ["UW 40 40", "LTW 40"] },
+  strong: { label: "Strong", categories: ["US 80 80", "LTS 80", "US 60 60"], optional: [] },
+  weak: { label: "Weak (long only)", categories: ["UW 30 30", "LTW 30", "UW 40 40"], optional: [] },
   neutral: { label: "Neutral", categories: ["Neutral 40 60"], optional: [] },
 };
 

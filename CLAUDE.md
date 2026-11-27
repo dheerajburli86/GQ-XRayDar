@@ -451,7 +451,7 @@ The 2026-11-26 15:30 UTC run died on "Connection terminated unexpectedly" (the p
 - Weights: equal across the chosen categories that have a qualifying index at that rebalance, then equal inside each (empty categories drop out and the rest re-normalise; nothing qualifying = cash).
   Custom category % (validated to 100, rescaled) and per-index relative weights are optional; the page also runs the equal-weight version alongside when any weight is edited.
 - **Weekly and monthly are two separate runs** with daily NAV (so volatility, drawdown and Sharpe are comparable); both are cut to the later of their two start dates. Costs = bp x one-way-plus-other-way weight traded at each rebalance (default 10 bp).
-- Weak (long only) defaults to UW 30 30 + LTW 30. The spec lists "UW 30 30" twice and says the intended category needs confirming, so UW 40 40 / LTW 40 are optional tick-boxes; Strong = US 80 80, LTS 80, US 60 60 with LTS 60 optional. Confirm with Shankar Sir.
+- Categories confirmed by Alok Sir (2026-11-27, WhatsApp): Strong = US 80 80, LTS 80, US 60 60 only (no LTS 60); Weak (long only) = UW 30 30, LTW 30, UW 40 40 (the repeated UW 30 30 was meant as UW 40 40; no LTW 40). Global country universe on iShares MSCI single-country ETFs, US benchmark S&P 500 and price-only returns / today's lists all approved.
 - PRICE returns only: no total-return index series are held, so dividends are missing from every figure (the page says so). ETFs start at their launch; indices from 2010.
   History is NOT survivorship-free for the ETF list (today's launched ETFs) and the India list is today's active Sectoral indices.
 - Saved configurations live in the browser's localStorage (not synced). Excel export = statistics, NAV, composition of every rebalance.
