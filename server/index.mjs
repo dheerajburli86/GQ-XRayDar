@@ -26,6 +26,7 @@ import { createAgentProxy } from "./lib/agent.mjs";
 import { createFo, foConfig } from "./lib/fo.mjs";
 import { runXasset } from "../cli/xassetJob.mjs";
 import { runExtra } from "../cli/extraJob.mjs";
+import { runIndexSets } from "../cli/indexSetsJob.mjs";
 import { runGp } from "../cli/gpJob.mjs";
 import { runEtfInfo } from "../cli/etfInfoJob.mjs";
 import { runPriceRepair } from "../cli/priceRepairJob.mjs";
@@ -609,6 +610,16 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
       if (rows[0]?.t && Date.now() - new Date(rows[0].t).getTime() < 20 * 3600_000) return;
       await runExtra(pool, { log, fetchImpl });
     };
+    // the workbook index sets (item 21): built from series already stored, so they follow the extras job without waiting 20 hours,
+    // and are rebuilt when an engine run finishes (the US tech / non-tech house indices they use only exist after one)
+    const indexSets = async () => {
+      const { rows } = await pool.query(`select (select max(updated_at) from tas_index_set) s, (select max(updated_at) from tas_index) i, (select max(updated_at) from tas_extra_series) x`).catch(() => ({ rows: [] }));
+      const r = rows[0] || {};
+      const stale = !r.s || Date.now() - new Date(r.s).getTime() > 20 * 3600_000 || (r.i && new Date(r.i) > new Date(r.s)) || (r.x && new Date(r.x) > new Date(r.s));
+      if (stale) await runIndexSets(pool, { log });
+    };
+    timers.push(setInterval(guard("index-sets", indexSets), 3 * 3600_000));
+    setTimeout(guard("index-sets", indexSets), 150_000);
     // ETF details (asset class, AUM, holdings, sector / country weights): a slice of stale ETFs every hour
     const etfInfo = async () => { await runEtfInfo(pool, { log, fetchImpl }); };
     timers.push(setInterval(guard("etf-info", etfInfo), 3600_000));
