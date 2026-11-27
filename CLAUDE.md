@@ -439,3 +439,19 @@ The engine rates the same groups at every week's last session since `methodology
 ## Dropped database connections are retried (added 2026-11-26)
 
 The 2026-11-26 15:30 UTC run died on "Connection terminated unexpectedly" (the pooler recycled a connection under a running read). `cli/pgRetry.mjs`: `retryPool` retries every `query()` on a dropped connection (ECONNRESET, 57P01, "Connection terminated" ...; 5 tries, 2 s doubling); pgSink retries each whole transaction (index batches, `simple` upserts) the same way and releases a broken client with its error so the pool drops it; `pool.on("error")` keeps an idle client's death from crashing the process. Statement timeouts and data errors are NOT retried. Retried writes are idempotent upserts in their own transaction.
+
+## GLOCOM / LOCOM category portfolios (added 2026-11-27, owner's strategy spec)
+
+- Page `gport` (Discovery menu), maths in `engine/glocomPortfolio.js` (tests `tests/glocomPortfolio.test.mjs`), universes in `engine/gpUniverses.js`.
+  Series are copied from the heatmap's `price_history` by `cli/gpJob.mjs` (server, refreshed when older than 20 h) into `tas_gp_series`
+  (migration 20261127000000, anon-readable, tas_* only). Universes: global country (iShares MSCI single-country ETFs, USD), global sector (iShares Global sector ETFs),
+  US sector (11 S&P 500 sector indices), India sectoral (every india_indices row filed Sectoral, INR). Benchmarks: ACWI, ACWI, S&P 500, Nifty 500.
+- **Point in time**: the category at a rebalance date comes from 1W / 6M / 1Y price returns up to that date, percentile among the universe's own members that have all three
+  (at least 8 do, else nobody is rated), same rule sheet as `engine/glocom.js`. The position opens at that date's close and is held to the next rebalance. A test pins "a later spike cannot change an earlier rating".
+- Weights: equal across the chosen categories that have a qualifying index at that rebalance, then equal inside each (empty categories drop out and the rest re-normalise; nothing qualifying = cash).
+  Custom category % (validated to 100, rescaled) and per-index relative weights are optional; the page also runs the equal-weight version alongside when any weight is edited.
+- **Weekly and monthly are two separate runs** with daily NAV (so volatility, drawdown and Sharpe are comparable); both are cut to the later of their two start dates. Costs = bp x one-way-plus-other-way weight traded at each rebalance (default 10 bp).
+- Weak (long only) defaults to UW 30 30 + LTW 30. The spec lists "UW 30 30" twice and says the intended category needs confirming, so UW 40 40 / LTW 40 are optional tick-boxes; Strong = US 80 80, LTS 80, US 60 60 with LTS 60 optional. Confirm with Shankar Sir.
+- PRICE returns only: no total-return index series are held, so dividends are missing from every figure (the page says so). ETFs start at their launch; indices from 2010.
+  History is NOT survivorship-free for the ETF list (today's launched ETFs) and the India list is today's active Sectoral indices.
+- Saved configurations live in the browser's localStorage (not synced). Excel export = statistics, NAV, composition of every rebalance.

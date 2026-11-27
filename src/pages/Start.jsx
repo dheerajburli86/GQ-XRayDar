@@ -34,6 +34,7 @@ const WHAT = {
   rotation: "Which sectors are leading, improving, weakening or lagging.",
   glocom: "Colour bands comparing a stock, industry or sector with its peers over 1 week, 6 months and 1 year.",
   breadth: "How many stocks sit above their averages; new highs and lows over time.",
+  gport: "Back-test strong, weak and neutral GLOCOM baskets of indices / ETFs, rebalanced weekly or monthly, with editable weights.",
   breadthan: "CCR, OUP, RR, RRM, RRMK, TR and TRMK for an index and its parts over chosen periods.",
   scores: "AI setup scores: a 0-100 summary of the stored signals, not advice.",
   assistant: "Ask in plain English; it explains what the stored data shows.",

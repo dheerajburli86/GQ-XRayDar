@@ -26,6 +26,7 @@ import { createAgentProxy } from "./lib/agent.mjs";
 import { createFo, foConfig } from "./lib/fo.mjs";
 import { runXasset } from "../cli/xassetJob.mjs";
 import { runExtra } from "../cli/extraJob.mjs";
+import { runGp } from "../cli/gpJob.mjs";
 import { runEtfInfo } from "../cli/etfInfoJob.mjs";
 import { runPriceRepair } from "../cli/priceRepairJob.mjs";
 import { RULES, DEFAULT_PARAMS, normalizeParams, describeRule, evaluateRule } from "../engine/rules.js";
@@ -616,6 +617,14 @@ export async function createServer(cfg = loadConfig(), deps = {}) {
     const priceRepair = async () => { await runPriceRepair(pool, { log, fetchImpl }); };
     timers.push(setInterval(guard("price-repair", priceRepair), 6 * 3600_000));
     setTimeout(guard("price-repair", priceRepair), 240_000);
+    // GLOCOM / LOCOM category-portfolio universes (tas_gp_series), refreshed when older than 20 hours
+    const gp = async () => {
+      const { rows } = await pool.query(`select max(updated_at) t from tas_gp_series`).catch(() => ({ rows: [] }));
+      if (rows[0]?.t && Date.now() - new Date(rows[0].t).getTime() < 20 * 3600_000) return;
+      await runGp(pool, { log });
+    };
+    timers.push(setInterval(guard("gp", gp), 3 * 3600_000));
+    setTimeout(guard("gp", gp), 120_000);
     timers.push(setInterval(guard("extra", extra), 3 * 3600_000));
     setTimeout(guard("extra", extra), 150_000);
     timers.push(setInterval(guard("xasset", xasset), 3 * 3600_000));
