@@ -474,3 +474,7 @@ The 2026-11-26 15:30 UTC run died on "Connection terminated unexpectedly" (the p
   and are labelled proxy; `FGREIT` / `USTBOND` (named in FGALLASSET$ but never defined in the workbook) use VNQ / IEF, also labelled proxy;
   `AGG` is not held. Equal weight and monthly rebalance in USD, confirmed by Alok Sir 2026-11-28; the MSCI ETF / VNQ / IEF / EZA / EPHE / KSA stand-ins were confirmed too. US tech / non-tech members come from the house
   `T:` indices, so they appear after the engine run that builds them.
+
+## India market caps are back (added 2026-11-28, owner)
+
+`CAP_UNRELIABLE_COUNTRIES` is EMPTY: India caps now come from the heatmap's `refresh_india_market_caps()` (CMIE Prowess share count x latest close; 5,160 of 5,365 active stocks on 2026-11-28; the rest stay capless and are excluded from CW / EW like any uncapped stock). India again gets CW + size segments, Weight Watcher, the flat USD 250M minimum and "top N by cap"; the capless / turnover path stays in the engine for any country added back to the set. The notes above that say "India has NO market cap" are history. Historical India caps are constant-share estimates like everywhere else (shares as of the Prowess observation). Stored India indices change at the next engine run (the old EW-only India rows are removed by the stale-index sweep).

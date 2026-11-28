@@ -14,11 +14,12 @@
 // and are reported by the data-health page rather than guessed.
 
 /**
- * Countries whose market caps are not reliable enough to publish (owner, 2026-11-19: India, no dependable source;
- * the heatmap hides them for the same reason). Their stocks keep charts, screens and scans, but carry NO cap, so they
- * join no CW, EW or Weight Watcher index and no "top N by cap" list. Remove a country here to bring it back.
+ * Countries whose market caps are not reliable enough to publish. Their stocks keep charts, screens and scans, but carry
+ * NO cap, so they join no CW, EW or Weight Watcher index and no "top N by cap" list. EMPTY since 2026-11-28: India's
+ * caps are now Prowess share counts x the latest close (heatmap `refresh_india_market_caps()`), so India is a normal
+ * capped country again. Add a country here to withdraw its caps (the whole capless path stays in the engine).
  */
-export const CAP_UNRELIABLE_COUNTRIES = new Set(["India"]);
+export const CAP_UNRELIABLE_COUNTRIES = new Set([]);
 
 export const REGIONS = ["US", "Asia", "Europe", "Africa", "LATAM", "Other Americas"];
 export const CLASSIFICATIONS = ["US", "Emerging Markets", "European Developed Markets", "Other Developed Markets"];

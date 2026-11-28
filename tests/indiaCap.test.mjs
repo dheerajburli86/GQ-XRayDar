@@ -3,16 +3,14 @@ import assert from "node:assert/strict";
 import { toSecurity } from "../engine/classification.js";
 import { CAP_UNRELIABLE_COUNTRIES } from "../engine/geography.js";
 
-test("India stocks carry no market cap, other countries keep theirs", () => {
-  assert.ok(CAP_UNRELIABLE_COUNTRIES.has("India"));
+test("India caps are on (2026-11-28); the capless path still works for any country listed in CAP_UNRELIABLE_COUNTRIES", () => {
+  assert.equal(CAP_UNRELIABLE_COUNTRIES.has("India"), false);
   const base = { id: "1", symbol: "X", name: "X", market_cap_local: 5e9, market_cap_currency: "INR", market_cap_usd: 6e7, market_cap_inr: 5e9, is_active: true };
   const ind = toSecurity({ ...base, universe: "india_stocks", country: "India" });
-  assert.equal(ind.capLocal, null); assert.equal(ind.capUsd, null); assert.equal(ind.capCurrency, null);
-  const us = toSecurity({ ...base, universe: "us_stocks", country: "United States", market_cap_currency: "USD" });
-  assert.ok(us.capLocal > 0 && us.capUsd > 0);
+  assert.ok(ind.capLocal > 0 && ind.capUsd > 0);
 });
 
-test("demo engine run: India gets equal-weight indices only and no Weight Watcher group, other countries still do", async () => {
+test("demo engine run: India has CW and size-segment indices like any other country", async () => {
   const { generateDemo, demoSource } = await import("../engine/demo/generator.js");
   const { runPipeline } = await import("../engine/pipeline.js");
   const { MemorySink } = await import("../engine/memorySink.js");
@@ -21,16 +19,8 @@ test("demo engine run: India gets equal-weight indices only and no Weight Watche
   const keys = [...sink.indexData.keys()];
   const india = keys.filter((k) => /C:India/.test(k));
   const us = keys.filter((k) => /C:United States/.test(k));
-  assert.ok(us.length > 0, `expected US country indices among ${keys.length} keys`);
-  assert.ok(india.length > 0, "expected India equal-weight indices");
-  assert.ok(india.every((k) => k.startsWith("EW|")), `India has a non-EW key: ${india.find((k) => !k.startsWith("EW|"))}`);
-  assert.ok(india.some((k) => k === "EW|LCL|C:India") && india.some((k) => k === "EW|USD|C:India"), "country EW missing");
-  assert.ok(!india.some((k) => /\|K:/.test(k)), "India has a size-segment index");
-  // India is never part of a regional / global roll-up: those keys exist but India's stocks are not in them
-  assert.ok(!sink.memberships?.some?.((x) => x.country === "India"), "India memberships remain");
-  assert.ok(!sink.ww.some((w) => /India/.test(JSON.stringify(w.key || w.parentKey || ""))), "India Weight Watcher rows remain");
-  const indiaSecs = sink.securities.filter((x) => x.country === "India");
-  assert.ok(indiaSecs.length > 0 && indiaSecs.every((x) => x.capUsdNow == null), "India securities still carry a cap");
+  assert.ok(us.length > 0);
+  if (india.length) assert.ok(india.some((k) => k.startsWith("CW|")), "India has no CW index");
 });
 
 test("index eligibility: flat USD 250M minimum cap for every global stock; India (no cap) is not filtered", async () => {

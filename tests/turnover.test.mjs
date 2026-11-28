@@ -19,8 +19,8 @@ test("ranking: capped stocks by cap first, uncapped by turnover; a pure uncapped
   assert.equal(rankedByTurnover([a, d]), false);
 });
 
-test("India benchmark family is equal-weight, others cap-weighted; Nifty 500 proxy is searchable and labelled", () => {
-  assert.equal(countryFamily("India"), "EW");
+test("India benchmark family is cap-weighted again (2026-11-28); Nifty 500 proxy is searchable and labelled", () => {
+  assert.equal(countryFamily("India"), "CW");
   assert.equal(countryFamily("Japan"), "CW");
   const d = { secs: [{ id: "n5", symbol: "NIFTY 500", name: "Nifty 500", country: "India", assetClass: "Index" }], indices: [] };
   const hit = searchInstruments(d, [], "india cw", "Indices").find((x) => x.label === INDIA_PROXY_LABEL);
