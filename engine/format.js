@@ -18,13 +18,11 @@ export function fmtField(type, v) {
 export const signClass = (v) => (v == null ? "" : v > 0 ? "pos" : v < 0 ? "neg" : "");
 export const titleCase = (s) => String(s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
-/** Rupees in Indian units: "₹1,23,456 cr" / "₹18.61 lakh cr" (1 crore = 1e7, 1 lakh crore = 1e12). */
+/** Rupees in full, never rounded (owner 2026-11-28): Indian digit grouping, paise when present: "₹1,86,05,88,74,88,877.80". */
 export function fmtInr(v) {
   if (v == null || !Number.isFinite(+v)) return "—";
-  const a = Math.abs(+v);
-  if (a >= 1e12) return `₹${(v / 1e12).toFixed(2)} lakh cr`;
-  if (a >= 1e7) return `₹${Math.round(v / 1e7).toLocaleString("en-IN")} cr`;
-  return `₹${(v / 1e5).toFixed(1)} lakh`;
+  const n = +v;
+  return `₹${n.toLocaleString("en-IN", { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`;
 }
 /** A security's market cap for display: rupees only for India (owner 2026-11-28), dollars elsewhere. */
 export function fmtCapOf(sec) {
