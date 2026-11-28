@@ -23,12 +23,34 @@ test("every exchange-sheet member is a set, an alias, or a known leaf; ETF membe
   assert.equal(ALIAS.NGASS, "NGAS");
 });
 
-test("equal-weight composite: the average of daily returns, base 100", () => {
+test("daily option: the average of daily returns, base 100", () => {
   const a = mk("2026-01-01", 5, (i) => 100 * 1.01 ** i), b = mk("2026-01-01", 5, (i) => 50 * 0.99 ** i);
-  const r = composeEqualWeight([a, b], { startShare: 1 });
+  const r = composeEqualWeight([a, b], { startShare: 1, rebalance: "daily" });
   assert.equal(r.close[0], 100);
   assert.ok(Math.abs(r.close[1] - 100) < 1e-9);          // +1% and -1% average to 0
   assert.ok(Math.abs(r.close.at(-1) - 100) < 1e-6);
+});
+
+test("monthly rebalance: weights drift inside a month and reset on the first session of the next", () => {
+  const a = mk("2026-01-01", 62, (i) => 100 * 1.01 ** i), b = mk("2026-01-01", 62, (i) => 50 * 0.99 ** i);
+  const r = composeEqualWeight([a, b], { startShare: 1 });
+  const at = (d) => r.close[r.dates.indexOf(d)];
+  assert.equal(r.close[0], 100);
+  // the set starts on 2 Jan (first day with returns); inside January it is buy-and-hold of 50 / 50, 29 days later on 31 Jan
+  assert.ok(Math.abs(at("2026-01-31") - (50 * 1.01 ** 29 + 50 * 0.99 ** 29)) < 1e-9);
+  // 1 Feb (i = 31): reset to equal weights at the 31 Jan level, then both move one day
+  const jan = at("2026-01-31"), feb1 = jan / 2 * 1.01 + jan / 2 * 0.99;
+  assert.ok(Math.abs(at("2026-02-01") - feb1) < 1e-9);
+  // differs from a daily-rebalanced set (which stays flat here)
+  const d = composeEqualWeight([a, b], { startShare: 1, rebalance: "daily" });
+  assert.ok(Math.abs(d.close.at(-1) - 100) < 1e-6 && Math.abs(r.close.at(-1) - 100) > 0.01);
+});
+
+test("monthly rebalance: a member that appears mid-month joins at the next month, a stale one drops out", () => {
+  const a = mk("2026-01-01", 70, () => 100), b = mk("2026-01-11", 60, (i) => 10 * 1.02 ** i);
+  const r = composeEqualWeight([a, b], { startShare: 0.5 });
+  assert.ok(Math.abs(r.close[r.dates.indexOf("2026-01-31")] - 100) < 1e-9, "b has zero weight in January");
+  assert.ok(r.close.at(-1) > 100.5, "b carries weight from 1 Feb");
 });
 
 test("a late-starting member joins without a jump; a stale one drops out", () => {

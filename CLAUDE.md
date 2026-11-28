@@ -467,10 +467,10 @@ The 2026-11-26 15:30 UTC run died on "Connection terminated unexpectedly" (the p
   prefix is NOT guessed; the sentence goes to the agent. A link to the Stocks page in an agent answer is never followed for a chart request.
 - **Item 21 (two index sets)**: workbook `New_Index_Creation.xlsx` -> `scripts/gen_index_sets.py` -> `engine/reference/indexSetsData.js` (16 FG
   sets + 9 ETF sets, generated, do not edit). How each workbook ticker resolves is `engine/reference/indexSets.js` (`LEAF`, `ALIAS`); the
-  maths is `engine/indexSets.js` (equal-weighted, daily-rebalanced composite in USD, base 100, starts when half the resolvable members have a return).
+  maths is `engine/indexSets.js` (equal-weighted composite in USD, base 100, **rebalanced monthly** (Alok Sir 2026-11-28; first session of each month, weights drift in between; `rebalance: "daily"` still available), starts when half the resolvable members have a return).
   `cli/indexSetsJob.mjs` (run at the end of `runExtra`) writes the series into `tas_extra_series` (symbol `GQSET:<code>`) and the member-by-member
   resolution into `tas_index_set`; page "Index sets" shows both. **Missing members are listed, never invented**: no live series exists for Nickel,
   Steel, HRC, Lead, Cotton, most Gulf / African exchanges, Egypt and Abu Dhabi / Dubai. MSCI levels are licensed, so the MSCI country ETFs stand in
   and are labelled proxy; `FGREIT` / `USTBOND` (named in FGALLASSET$ but never defined in the workbook) use VNQ / IEF, also labelled proxy;
-  `AGG` is not held. The weighting is an assumption (the workbook gives none): equal weight. US tech / non-tech members come from the house
+  `AGG` is not held. Equal weight and monthly rebalance in USD, confirmed by Alok Sir 2026-11-28; the MSCI ETF / VNQ / IEF / EZA / EPHE / KSA stand-ins were confirmed too. US tech / non-tech members come from the house
   `T:` indices, so they appear after the engine run that builds them.

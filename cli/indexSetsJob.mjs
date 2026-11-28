@@ -3,7 +3,7 @@
 // Reads: tas_extra_series, price_history + instruments (ETFs), tas_index_series (house indices). Writes only tas_* tables.
 import { buildIndexSets } from "../engine/indexSets.js";
 
-export const METHOD = "Equal-weighted, daily-rebalanced composite of the members' daily returns (USD), base 100. A member joins on the day it has a return; the set starts when half its resolvable members do. Price returns only. Missing members are listed on the Index sets page, never filled in.";
+export const METHOD = "Equal-weighted composite in USD, base 100, rebalanced to equal weights on the first session of each month (weights drift in between). A member joins at the next rebalance after it has a return; the set starts when half its resolvable members do. Price returns only. Missing members are listed on the Index sets page, never filled in.";
 
 export async function runIndexSets(pool, { log = console.log } = {}) {
   const num = (a) => (a || []).map(Number);

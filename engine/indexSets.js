@@ -1,5 +1,5 @@
 // Builds the workbook index sets (engine/reference/indexSets.js) from series the app holds. Pure: callers pass a loader.
-// Method (stated on every set): equal-weighted, daily-rebalanced composite of the members' daily returns, base 100.
+// Method (stated on every set): equal-weighted composite, rebalanced to equal weights each month, in USD, base 100.
 // A member joins on the day it has a return; the set starts on the first day at least half of its resolvable members
 // have one. A member's close is carried over a holiday for up to 7 days, longer means that member is out that day.
 // Nested sets (a member that is another set) use that set's own level.
@@ -9,29 +9,41 @@ export const MIN_BARS = 20;
 export const CARRY_DAYS = 7;
 export const START_SHARE = 0.5;
 
-/** Equal-weight composite of several {dates, close} series. Returns {dates, close, count: members used per day} or null. */
-export function composeEqualWeight(series, { startShare = START_SHARE, carry = CARRY_DAYS } = {}) {
+/**
+ * Equal-weight composite of several {dates, close} series. Returns {dates, close, count: members used per day} or null.
+ * rebalance "monthly" (Alok Sir, 2026-11-28): weights are set equal on the first session of each calendar month across the
+ * members with a close in the last `carry` days, then drift with the members' own returns until the next month ("daily" resets every session).
+ * A member that first appears mid-month joins at the next rebalance; one that goes stale is held flat and drops out at the next.
+ */
+export function composeEqualWeight(series, { startShare = START_SHARE, carry = CARRY_DAYS, rebalance = "monthly" } = {}) {
   const live = series.filter((s) => s && s.dates?.length >= 2);
   if (!live.length) return null;
   const all = [...new Set(live.flatMap((s) => s.dates))].sort();
   const maps = live.map((s) => { const m = new Map(); for (let i = 0; i < s.dates.length; i++) if (s.close[i] > 0) m.set(s.dates[i], s.close[i]); return m; });
-  const last = live.map(() => null), lastAt = live.map(() => 0);
+  const last = live.map(() => null), lastAt = live.map(() => 0), val = live.map(() => 0);
   const need = Math.max(1, Math.ceil(startShare * live.length));
   const dates = [], close = [], count = [];
-  let level = 100, started = false;
+  let level = 100, started = false, month = null;
+  const reweigh = (t) => {
+    const act = []; for (let k = 0; k < live.length; k++) if (last[k] != null && (t - lastAt[k]) / 864e5 <= carry) act.push(k);
+    val.fill(0); if (act.length) for (const k of act) val[k] = level / act.length;
+  };
   for (const d of all) {
     const t = Date.parse(d);
-    let sum = 0, n = 0;
+    const m = d.slice(0, 7);
+    const rebal = started && (rebalance === "daily" || m !== month);
+    if (rebal) reweigh(t);
+    let n = 0;
     for (let k = 0; k < live.length; k++) {
       const v = maps[k].get(d);
-      const fresh = last[k] != null && (t - lastAt[k]) / 864e5 <= carry;
       if (v > 0) {
-        if (fresh) { sum += v / last[k] - 1; n++; }
+        if (last[k] != null && (t - lastAt[k]) / 864e5 <= carry) { val[k] *= v / last[k]; n++; }
         last[k] = v; lastAt[k] = t;
       }
     }
-    if (!started) { if (n >= need) { started = true; dates.push(d); close.push(level); count.push(n); } continue; }
-    if (n > 0) level *= 1 + sum / n;
+    if (!started) { if (n >= need) { started = true; reweigh(t); dates.push(d); close.push(level); count.push(n); month = m; } continue; }
+    month = m;
+    level = val.reduce((a, b) => a + b, 0);
     dates.push(d); close.push(level); count.push(n);
   }
   return dates.length >= 2 ? { dates, close, count } : null;
