@@ -24,7 +24,7 @@ import { parseTilesCommand, selectTiles, pickBenchmark } from "../../engine/tile
 import { rankedByTurnover } from "../../engine/turnover.js";
 import { buildAnalystColumn, analystDate } from "../../engine/analyst.js";
 import { tfLabel } from "../../engine/calendar.js";
-import { fmtMoney } from "../lib/format.js";
+import { fmtCapOf } from "../lib/format.js";
 import { useIndSettings } from "../lib/indSettings.js";
 
 const TFS = ["D", "W", "M", "Q", "H", "Y"];
@@ -177,8 +177,8 @@ function Tile({ r, i, bench, mode, tf, v, rsiPane, full, height, sync, maximised
   const name = sec ? sec.symbol : (r.label || "").split(" · ")[0];
   return (
     <div className="anl-col tile" style={{ height }}>
-      <div className={`anl-head ${marked ? "on" : ""}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", height: 20, minHeight: 20, flex: "0 0 20px" }} title={sec ? `${sec.symbol} · ${sec.name} · ${sec.country}${sec.capUsdNow ? ` · cap ${fmtMoney(sec.capUsdNow)}` : ""}` : r.label}>
-        <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{i + 1}. {name}{head ? `  ${head.close.toFixed(2)}  [${head.chg == null ? "—" : `${head.chg >= 0 ? "+" : ""}${(head.chg * 100).toFixed(2)}%`}]  ${analystDate(head.date)}` : ""}{sec?.capUsdNow ? `  · ${fmtMoney(sec.capUsdNow)}` : ""}</span>
+      <div className={`anl-head ${marked ? "on" : ""}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", height: 20, minHeight: 20, flex: "0 0 20px" }} title={sec ? `${sec.symbol} · ${sec.name} · ${sec.country}${sec.capUsdNow ? ` · cap ${fmtCapOf(sec)}` : ""}` : r.label}>
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{i + 1}. {name}{head ? `  ${head.close.toFixed(2)}  [${head.chg == null ? "—" : `${head.chg >= 0 ? "+" : ""}${(head.chg * 100).toFixed(2)}%`}]  ${analystDate(head.date)}` : ""}{sec?.capUsdNow ? `  · ${fmtCapOf(sec)}` : ""}</span>
         <span className="tile-tools" data-html2canvas-ignore>
           {sec && <a title="Open in the Analyst screens" onClick={() => navigate(`screens/${mode}/${encodeURIComponent(`s:${sec.id}`)}`, bench ? { bench: bench.kind === "index" ? `idx:${bench.key}` : bench.kind === "x" ? `x:${bench.key}` : bench.id } : undefined)}>↗</a>}
           <a title="Change instrument" onClick={onChange}>✎</a>

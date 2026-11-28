@@ -7,7 +7,7 @@ import { useAsync } from "../lib/useAsync.js";
 import { PageHead, Tabs, Badge, Select, Loading } from "../components/ui.jsx";
 import { DataTable } from "../components/DataTable.jsx";
 import { TvChart, lineData } from "../components/TvChart.jsx";
-import { fmtMoney } from "../lib/format.js";
+import { fmtCapOf } from "../lib/format.js";
 import { REQUIREMENTS, STATUS_LABEL } from "../requirements.js";
 import { Capabilities, Access, AuditLog, Operations } from "./DataCentreOps.jsx";
 
@@ -64,7 +64,7 @@ function Master() {
   const rows = useMemo(() => d.secs.filter((s) => !country || s.country === country), [d.secs, country]);
   return <DataTable exportName="security_master" rows={rows} toolbar={<Select label="Country" value={country} options={d.countries} onChange={setCountry} allowEmpty />}
     columns={[["symbol", "Symbol"], ["name", "Name"], ["universe", "Universe"], ["exchange", "Exchange"], ["isin", "ISIN"], ["country", "Country"], ["region", "Region"], ["classification", "Class"], ["currency", "Quote ccy"], ["sector", "GICS sector"], ["industryGroup", "Industry group"], ["industry", "Raw industry"], ["classSource", "Class. evidence"], ["capSegment", "Cap segment"]].map(([k, l]) => ({ key: k, label: l, value: (s) => s[k] }))
-      .concat([{ key: "cap", label: "Cap USD (est.)", num: true, value: (s) => s.capUsdNow, render: (s) => fmtMoney(s.capUsdNow) }, { key: "active", label: "Active", value: (s) => s.active }])} />;
+      .concat([{ key: "cap", label: "Market cap (est.)", num: true, value: (s) => s.capUsdNow, render: (s) => fmtCapOf(s) }, { key: "active", label: "Active", value: (s) => s.active }])} />;
 }
 
 function Health() {

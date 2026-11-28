@@ -10,7 +10,7 @@ import { TvChart, lineData } from "../components/TvChart.jsx";
 import { LEVEL_LABEL, parseIndexKey } from "../../engine/indexEngine.js";
 import { changeOver, HBARS, changeYtd } from "../lib/indexMath.js";
 import { exportXlsx } from "../lib/exporters.js";
-import { fmtMoney } from "../lib/format.js";
+import { fmtInr, fmtMoney } from "../lib/format.js";
 
 const LEVELS = ["1", "1s", "2", "3", "4", "4s", "5", "5s", "6", "6s"];
 
@@ -102,7 +102,7 @@ export default function Indices({ route }) {
                 <div className="small muted" style={{ padding: 6 }}>Green: this index · blue: its {p.family === "CW" ? "EW" : "CW"} pair · amber dashed: the same index in {p.ccy === "USD" ? "local currency" : "USD"}. The USD series is the local series' daily price relatives times the FX relatives from the same base date — never a level divided by spot FX.</div></div>}
               {tab === "const" && (meta.country ? <DataTable exportName="constituents" pageSize={40} rows={members} initialSort={{ key: "cw", dir: "desc" }}
                 columns={[{ key: "sym", label: "Symbol", value: (m) => m.sec?.symbol, render: (m) => <StockLink sec={m.sec} /> }, { key: "name", label: "Name", value: (m) => m.sec?.name }, { key: "sector", label: "Sector", value: (m) => m.sector },
-                  { key: "seg", label: "Cap", value: (m) => m.seg }, { key: "cap", label: "Cap USD at rebalance", num: true, value: (m) => m.capUsd, render: (m) => fmtMoney(m.capUsd) },
+                  { key: "seg", label: "Cap", value: (m) => m.seg }, { key: "cap", label: "Cap at rebalance", num: true, value: (m) => m.capUsd, render: (m) => (m.sec?.country === "India" && m.sec.capLocal && m.sec.capUsdNow ? fmtInr(m.capUsd * m.sec.capLocal / m.sec.capUsdNow) : fmtMoney(m.capUsd)) },
                   { key: "cw", label: "CW weight %", num: true, value: (m) => m.cw, render: (m) => m.cw?.toFixed(3) }, { key: "ew", label: "EW weight %", num: true, value: (m) => m.ew, render: (m) => m.ew?.toFixed(3) }]}
                 toolbar={<span className="small muted">Point-in-time members at the {data.mem?.date} rebalance.</span>} />
                 : <div className="note">Cross-country indices are aggregated from their country cells; open a country index to see stock constituents.</div>)}

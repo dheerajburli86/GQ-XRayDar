@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useData } from "../data/store.jsx";
 import { FIELD, fieldValue } from "../../engine/fields.js";
-import { fmtField, signClass } from "../lib/format.js";
+import { fmtField, fmtCapOf, signClass } from "../lib/format.js";
 import { Select, StockLink } from "./ui.jsx";
 import { CAPS } from "../../engine/indexEngine.js";
 import { ANALYST_TFS, normaliseTf, tfLabel } from "../../engine/calendar.js";
@@ -15,6 +15,8 @@ export function fieldColumn(key, opts = {}) {
   const f = FIELD[key];
   if (!f) return { key, label: key, value: (r) => fieldValue(key, r) };
   const num = ["num", "pct", "money"].includes(f.type);
+  // Market cap: the value (for sorting) stays USD so mixed-market tables order correctly; India shows rupees only.
+  if (key === "capUsd") return { key, label: opts.label || "Market cap", num, title: f.label, value: (r) => f.get(r), render: (r) => <span>{fmtCapOf(r.sec)}</span>, ...opts };
   return {
     key, label: opts.label || f.label, num, title: f.label, value: (r) => f.get(r),
     render: (r) => { const v = f.get(r); return <span className={f.type === "pct" ? signClass(v) : ""}>{fmtField(f.type, v)}</span>; },

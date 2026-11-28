@@ -9,7 +9,7 @@ import { PageHead, Seg, Select, Loading } from "../components/ui.jsx";
 import { Treemap, divergingColor, categoricalColor } from "../components/Treemap.jsx";
 import { applyScope } from "../components/pickers.jsx";
 import { changeOver, HBARS } from "../lib/indexMath.js";
-import { fmtPct, fmtMoney, fmtNum } from "../lib/format.js";
+import { fmtPct, fmtMoney, fmtNum, fmtCapOf } from "../lib/format.js";
 import { CAPS } from "../../engine/indexEngine.js";
 import { glocomBand } from "../../engine/glocom.js";
 import { rowRankCmp } from "../../engine/turnover.js";
@@ -88,7 +88,7 @@ export default function Heatmap({ route }) {
         return {
           key: r.id, label: r.sec.symbol, title: `${r.sec.symbol} · ${r.sec.name}`, size: sizeBy === "equal" ? 1 : Math.max(cap, 1), color, sub, fg: colorBy === "glocom" ? GLOCOM_FG(color) : undefined,
           onClick: () => navigate(`stock/${r.id}`),
-          tip: [["Price", `${fmtNum(f.close)} ${r.sec.currency}`], byTurn ? ["Traded value / day (60-session median) · sized by turnover, not market cap", cap ? fmtMoney(cap) : "—"] : ["Market cap", cap ? fmtMoney(cap) : "not published"], [byTurn ? "Share of traded value in view" : "Weight in view", tot ? `${((cap / tot) * 100).toFixed(2)}%` : "—"],
+          tip: [["Price", `${fmtNum(f.close)} ${r.sec.currency}`], byTurn ? ["Traded value / day (60-session median) · sized by turnover, not market cap", cap ? fmtMoney(cap) : "—"] : ["Market cap", cap ? fmtCapOf(r.sec) : "not published"], [byTurn ? "Share of traded value in view" : "Weight in view", tot ? `${((cap / tot) * 100).toFixed(2)}%` : "—"],
             [`Return ${h} (${ccy === "USD" ? "USD" : "local"})`, fmtPct(ret)], [`RSC vs country ${h === "1W" ? "1M" : h}`, fmtPct(f[`rscChg_country_${h === "1W" ? "1M" : h}`])],
             ["RSI (W)", fmtNum(f.rsiW, 1)], ["MMA (W)", f.mmaW || "—"], ["Sector", r.sec.sector], ["Cap segment", r.sec.capSegment || "—"]],
         };

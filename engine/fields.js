@@ -31,7 +31,7 @@ add("industryGroup", "Industry group", "Identity", "cat", (r) => r.sec.industryG
 add("industry", "Industry", "Identity", "cat", (r) => r.sec.industry);
 add("subIndustry", "Sub-industry (US stocks and ADRs)", "Identity", "cat", (r) => r.sec.subIndustry);
 add("cap", "Cap segment", "Identity", "cat", (r) => r.sec.capSegment);
-add("capUsd", "Market cap (USD)", "Identity", "money", (r) => r.sec.capUsdNow ?? r.sec.capUsd);
+add("capUsd", "Market cap (₹ for India, USD elsewhere)", "Identity", "money", (r) => r.sec.capUsdNow ?? r.sec.capUsd);
 add("currency", "Currency", "Identity", "cat", (r) => r.sec.currency);
 add("assetClass", "Asset class", "Identity", "cat", (r) => r.sec.assetClass || "Stock", { values: ["Stock", "ETF", "Index", "Commodity", "Crypto", "Currency"] });
 // ETF type (Equity / Fixed income / Commodity / Currency / Real estate / Alternative / Multi-asset), carried in the industry-group slot

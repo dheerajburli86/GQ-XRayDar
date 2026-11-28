@@ -19,7 +19,7 @@ import { Explain } from "./Scores.jsx";
 import { NoteBox } from "./Notes.jsx";
 import { usePersistent } from "../lib/storage.js";
 import { setAgentContext } from "../components/AgentPanel.jsx";
-import { fmtMoney, fmtNum } from "../lib/format.js";
+import { fmtInr, fmtMoney, fmtNum } from "../lib/format.js";
 import { GBadge, Jump } from "../components/glocomUi.jsx";
 import { ETI_CHARACTERISTICS, groupEti } from "../../engine/eti.js";
 
@@ -141,10 +141,11 @@ export default function Stock({ route }) {
   );
 }
 
-/** Market cap in the local currency and in USD (owner, Nov 2026). Both are estimates: latest share count x close. */
+/** Market cap in the local currency and in USD (owner, Nov 2026); India in rupees only (owner, 2026-11-28). Both are estimates: latest share count x close. */
 function CapLine({ sec }) {
   if (sec.assetClass !== "Stock") return <span className="muted">{sec.assetClass === "ETF" ? "fund size: see AUM below" : ""}</span>;
-  if (sec.capUsdNow == null && sec.capLocal == null) return <span className="muted">market cap not available{sec.country === "India" ? " (no reliable India source)" : ""}</span>;
+  if (sec.capUsdNow == null && sec.capLocal == null) return <span className="muted">market cap not available</span>;
+  if (sec.country === "India") return sec.capLocal != null ? <span>Market cap {fmtInr(sec.capLocal)} <span className="muted">(shares × last close, est.)</span></span> : <span className="muted">market cap not available</span>;
   const local = sec.capLocal != null && sec.capCurrency && sec.capCurrency !== "USD" ? `${sec.capCurrency} ${fmtBig(sec.capLocal)}` : null;
   return <span>Market cap {local ? <>{local} · </> : null}USD {fmtBig(sec.capUsdNow ?? sec.capUsd)} <span className="muted">(est.)</span></span>;
 }
